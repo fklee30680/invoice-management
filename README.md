@@ -46,9 +46,10 @@ NEXT_PUBLIC_APP_URL=
 SMTP_HOST=
 EMAIL_FROM=
 DATABASE_URL=
+BLOB_READ_WRITE_TOKEN=
 ```
 
-When `DATABASE_URL` is configured, the MVP stores application data in Postgres. Without `DATABASE_URL`, it falls back to local `data/` for development. Uploaded invoice files still use local/Vercel temporary storage until Blob storage is added. The data access layer is isolated in `src/lib/store.ts`; the current MVP table plus the target normalized schema are documented in `database/schema.sql`.
+When `DATABASE_URL` is configured, the MVP stores application data in Postgres. Without `DATABASE_URL`, it falls back to local `data/` for development. When `BLOB_READ_WRITE_TOKEN` is configured, uploaded invoice files are stored as private Vercel Blob objects and streamed through the authenticated `/files/[id]` route. Without Blob configuration, file uploads fall back to local `uploads/` for development. The current MVP table plus the target normalized schema are documented in `database/schema.sql`.
 
 ## Verification
 

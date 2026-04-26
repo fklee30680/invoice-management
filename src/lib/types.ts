@@ -54,6 +54,10 @@ export type InvoiceFile = {
   invoiceId: string;
   originalName: string;
   storedName: string;
+  storageProvider?: "local" | "blob";
+  blobUrl?: string;
+  blobPathname?: string;
+  blobAccess?: "private" | "public";
   mimeType: string;
   size: number;
   uploadedAt: string;
@@ -102,4 +106,3 @@ export type InvoiceFilter = {
   department?: string;
   search?: string;
 };
-

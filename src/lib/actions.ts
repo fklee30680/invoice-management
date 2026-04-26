@@ -1,11 +1,12 @@
 "use server";
 
-import { copyFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { AP_USER_ID, DEPARTMENT_DECISIONS } from "./constants";
 import { sendDepartmentNotification } from "./email";
+import { saveInvoiceFile, stageFileForProcessing } from "./file-storage";
 import { extractInvoiceMetadata } from "./ocr";
 import { parsePoUpload } from "./po-parser";
 import {
@@ -13,10 +14,8 @@ import {
   addInvoice,
   addInvoiceFile,
   createId,
-  ensureRuntimeDirs,
   findPurchaseOrder,
   getInvoice,
-  getUploadPath,
   mutateData,
   upsertDepartment,
   upsertPurchaseOrder,
@@ -86,34 +85,34 @@ export async function uploadInvoices(formData: FormData) {
     .filter((file): file is File => file instanceof File && file.size > 0);
 
   for (const file of files) {
-    await ensureRuntimeDirs();
     const invoiceId = createId("invoice");
     const fileId = createId("file");
     const extension = path.extname(file.name) || ".bin";
     const storedName = `${invoiceId}${extension}`;
-    const filePath = getUploadPath(storedName);
     const bytes = Buffer.from(await file.arrayBuffer());
-    await writeFile(filePath, bytes);
+    const filePath = await stageFileForProcessing(bytes, storedName);
 
     const extracted = await extractInvoiceMetadata(filePath, file.name, file.type);
+    const now = new Date().toISOString();
+    const invoiceFile = await saveInvoiceFile({
+      id: fileId,
+      invoiceId,
+      originalName: file.name,
+      storedName,
+      mimeType: file.type || "application/octet-stream",
+      size: file.size,
+      uploadedAt: now,
+      bytes,
+    });
 
     await mutateData((data) => {
       const purchaseOrder = findPurchaseOrder(data, extracted.poNumber);
-      const now = new Date().toISOString();
       const departmentId = purchaseOrder?.departmentId || "";
       const department = data.departments.find((item) => item.id === departmentId);
       const canNotify = Boolean(purchaseOrder && department?.email);
       const status = canNotify ? "Routed" : "Needs AP Review";
 
-      addInvoiceFile(data, {
-        id: fileId,
-        invoiceId,
-        originalName: file.name,
-        storedName,
-        mimeType: file.type || "application/octet-stream",
-        size: file.size,
-        uploadedAt: now,
-      });
+      addInvoiceFile(data, invoiceFile);
 
       const invoice: Invoice = {
         id: invoiceId,
@@ -367,20 +366,22 @@ export async function cloneSampleInvoice() {
   const invoiceId = createId("invoice");
   const fileId = createId("file");
   const storedName = `${invoiceId}.svg`;
-  await copyFile(source, getUploadPath(storedName));
+  const bytes = await readFile(source);
+  const now = new Date().toISOString();
+  const invoiceFile = await saveInvoiceFile({
+    id: fileId,
+    invoiceId,
+    originalName: "Northstar-Invoice-PO-10045.svg",
+    storedName,
+    mimeType: "image/svg+xml",
+    size: bytes.length,
+    uploadedAt: now,
+    bytes,
+  });
 
   await mutateData((data) => {
     const po = data.purchaseOrders[0];
-    const now = new Date().toISOString();
-    addInvoiceFile(data, {
-      id: fileId,
-      invoiceId,
-      originalName: "Northstar-Invoice-PO-10045.svg",
-      storedName,
-      mimeType: "image/svg+xml",
-      size: 0,
-      uploadedAt: now,
-    });
+    addInvoiceFile(data, invoiceFile);
     addInvoice(data, {
       id: invoiceId,
       vendorName: po?.vendorName || "Northstar Supply",

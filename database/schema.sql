@@ -35,6 +35,10 @@ create table invoice_files (
   invoice_id text not null,
   original_name text not null,
   stored_name text not null,
+  storage_provider text not null default 'local',
+  blob_url text,
+  blob_pathname text,
+  blob_access text,
   mime_type text not null,
   size_bytes integer not null,
   uploaded_at timestamptz not null default now()
