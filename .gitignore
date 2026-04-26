@@ -1,0 +1,33 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# local runtime data
+/data/
+/uploads/
+*.log
+*.tsbuildinfo
+next-env.d.ts
+
+# env files
+.env*
+!.env.example
+
+# local setup/cache artifacts
+/.npm-cache*/
+/.appdata/
+/.localappdata/
+/.config/
+/invoice-management/
+
+# misc
+.DS_Store
+*.pem

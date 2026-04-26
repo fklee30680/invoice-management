@@ -1,0 +1,12 @@
+.git/
+.next/
+node_modules/
+data/
+uploads/
+invoice-management/
+.npm-cache*/
+.appdata/
+.localappdata/
+.config/
+*.log
+*.tsbuildinfo
