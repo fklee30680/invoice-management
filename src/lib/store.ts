@@ -10,6 +10,7 @@ import type {
   PurchaseOrder,
   User,
 } from "./types";
+import { getDatabaseConfig } from "./runtime-config";
 import { normalizePoNumber, slugify } from "./utils";
 
 const RUNTIME_ROOT = process.env.VERCEL
@@ -29,15 +30,16 @@ let db: NeonQueryFunction<false, false> | null = null;
 let schemaReady = false;
 
 function hasDatabase() {
-  return Boolean(process.env.DATABASE_URL);
+  return Boolean(getDatabaseConfig().value);
 }
 
 function getDb() {
-  if (!process.env.DATABASE_URL) {
-    throw new Error("DATABASE_URL is not configured.");
+  const database = getDatabaseConfig();
+  if (!database.value) {
+    throw new Error("No Postgres connection string is configured.");
   }
   if (!db) {
-    db = neon(process.env.DATABASE_URL);
+    db = neon(database.value);
   }
   return db;
 }

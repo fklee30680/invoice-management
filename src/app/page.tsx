@@ -9,6 +9,7 @@ import {
   uploadPoList,
 } from "@/lib/actions";
 import { WORKFLOW_STATUSES } from "@/lib/constants";
+import { getPersistenceStatus, type PersistenceStatus } from "@/lib/runtime-config";
 import { requireApUser } from "@/lib/session";
 import { readData } from "@/lib/store";
 import type { AppData, Invoice, WorkflowStatus } from "@/lib/types";
@@ -80,6 +81,44 @@ function Metric({
       <div className="text-sm text-[var(--muted)]">{label}</div>
       <div className="mt-2 text-2xl font-semibold tracking-normal">{value}</div>
     </div>
+  );
+}
+
+function StorageStatus({ status }: { status: PersistenceStatus }) {
+  const itemClass = "border border-[var(--line)] bg-white px-3 py-2";
+  const goodClass = "text-emerald-700";
+  const warnClass = "text-amber-700";
+
+  return (
+    <section className="grid gap-3 text-sm md:grid-cols-2">
+      <div className={itemClass}>
+        <div className="text-xs font-semibold uppercase text-[var(--muted)]">
+          Database
+        </div>
+        <div className={`mt-1 font-semibold ${status.records.configured ? goodClass : warnClass}`}>
+          {status.records.configured ? "Postgres active" : "Temporary storage"}
+        </div>
+        <div className="mt-1 text-xs text-[var(--muted)]">
+          Env: {status.records.variableName}
+        </div>
+      </div>
+      <div className={itemClass}>
+        <div className="text-xs font-semibold uppercase text-[var(--muted)]">
+          File Storage
+        </div>
+        <div className={`mt-1 font-semibold ${status.files.configured ? goodClass : warnClass}`}>
+          {status.files.configured ? "Vercel Blob active" : "Temporary storage"}
+        </div>
+        <div className="mt-1 text-xs text-[var(--muted)]">
+          Env: {status.files.variableName}
+        </div>
+      </div>
+      {status.warning ? (
+        <div className="border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900 md:col-span-2">
+          {status.warning}
+        </div>
+      ) : null}
+    </section>
   );
 }
 
@@ -451,6 +490,7 @@ export default async function Home({ searchParams }: PageProps) {
     search: one(params.search),
   };
   const data = await readData();
+  const persistenceStatus = getPersistenceStatus();
   const invoices = filterInvoices(data.invoices, data, filters);
   const needsAp = data.invoices.filter((invoice) =>
     ["Needs AP Review", "Needs AP Rework"].includes(invoice.status),
@@ -504,6 +544,7 @@ export default async function Home({ searchParams }: PageProps) {
           <Metric label="Completed" value={done} />
         </section>
 
+        <StorageStatus status={persistenceStatus} />
         <UploadPanel />
         <FilterBar data={data} filters={filters} />
         <InvoiceTable data={data} invoices={invoices} />

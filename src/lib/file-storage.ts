@@ -1,12 +1,9 @@
 import { readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { del, get as getBlob, put } from "@vercel/blob";
+import { getBlobConfig } from "./runtime-config";
 import { ensureRuntimeDirs, getUploadPath } from "./store";
 import type { InvoiceFile } from "./types";
-
-function hasBlobStorage() {
-  return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
-}
 
 function safeFileName(fileName: string) {
   const parsed = path.parse(fileName);
@@ -38,12 +35,14 @@ export async function saveInvoiceFile(input: {
   uploadedAt: string;
   bytes: Buffer;
 }): Promise<InvoiceFile> {
-  if (hasBlobStorage()) {
+  const blobConfig = getBlobConfig();
+  if (blobConfig.value) {
     const pathname = `invoices/${input.invoiceId}/${safeFileName(input.originalName)}`;
     const blob = await put(pathname, input.bytes, {
       access: "private",
       allowOverwrite: true,
       contentType: input.mimeType || "application/octet-stream",
+      token: blobConfig.value,
     });
 
     return {
@@ -77,8 +76,10 @@ export async function saveInvoiceFile(input: {
 
 export async function readStoredInvoiceFile(file: InvoiceFile) {
   if (file.storageProvider === "blob") {
+    const blobConfig = getBlobConfig();
     const blob = await getBlob(file.blobPathname || file.storedName, {
       access: file.blobAccess || "private",
+      token: blobConfig.value || undefined,
     });
     if (!blob || blob.statusCode !== 200) return null;
 
@@ -99,7 +100,10 @@ export async function readStoredInvoiceFile(file: InvoiceFile) {
 
 export async function deleteStoredInvoiceFile(file: InvoiceFile) {
   if (file.storageProvider === "blob") {
-    await del(file.blobPathname || file.blobUrl || file.storedName);
+    const blobConfig = getBlobConfig();
+    await del(file.blobPathname || file.blobUrl || file.storedName, {
+      token: blobConfig.value || undefined,
+    });
     return;
   }
 
