@@ -11,6 +11,7 @@ Cloud-ready AP invoice workflow prototype built with Next.js.
 - Match PO numbers case-insensitively and route matched invoices to departments.
 - Send mock department notifications until SMTP settings are added.
 - Sign in with seeded app-only demo accounts.
+- Maintain department names and notification emails in AP setup.
 - Let departments submit decisions:
   - Receiving Record
   - P-Card

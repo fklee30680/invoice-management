@@ -474,11 +474,19 @@ export default async function Home({ searchParams }: PageProps) {
             <div className="mt-1 text-[var(--muted)]">
               OCR/email use local mock behavior until Azure and SMTP variables are set.
             </div>
-            <form action={signOut}>
-              <button className="focus-ring mt-3 border border-[var(--line)] px-3 py-1.5 text-xs font-semibold hover:bg-slate-100">
-                Sign Out
-              </button>
-            </form>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Link
+                className="focus-ring border border-[var(--line)] px-3 py-1.5 text-xs font-semibold hover:bg-slate-100"
+                href="/settings"
+              >
+                Setup
+              </Link>
+              <form action={signOut}>
+                <button className="focus-ring border border-[var(--line)] px-3 py-1.5 text-xs font-semibold hover:bg-slate-100">
+                  Sign Out
+                </button>
+              </form>
+            </div>
           </div>
         </header>
 

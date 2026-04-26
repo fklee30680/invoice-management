@@ -17,6 +17,7 @@ import {
   getInvoice,
   getUploadPath,
   mutateData,
+  upsertDepartment,
   upsertPurchaseOrder,
 } from "./store";
 import type { DepartmentDecision, Invoice } from "./types";
@@ -75,6 +76,7 @@ export async function uploadPoList(formData: FormData) {
   });
 
   revalidatePath("/");
+  revalidatePath("/settings");
 }
 
 export async function uploadInvoices(formData: FormData) {
@@ -97,7 +99,9 @@ export async function uploadInvoices(formData: FormData) {
       const purchaseOrder = findPurchaseOrder(data, extracted.poNumber);
       const now = new Date().toISOString();
       const departmentId = purchaseOrder?.departmentId || "";
-      const status = purchaseOrder ? "Routed" : "Needs AP Review";
+      const department = data.departments.find((item) => item.id === departmentId);
+      const canNotify = Boolean(purchaseOrder && department?.email);
+      const status = canNotify ? "Routed" : "Needs AP Review";
 
       addInvoiceFile(data, {
         id: fileId,
@@ -140,8 +144,10 @@ export async function uploadInvoices(formData: FormData) {
         invoiceId,
         actor: "System",
         type: purchaseOrder ? "po_matched" : "po_missing",
-        message: purchaseOrder
+        message: purchaseOrder && department?.email
           ? `Matched ${purchaseOrder.poNumber}; routed to department.`
+          : purchaseOrder
+            ? `Matched ${purchaseOrder.poNumber}, but ${department?.name || "the department"} has no email configured. AP review required.`
           : "No matching PO found; AP review required.",
       });
     });
@@ -192,6 +198,77 @@ export async function updateAndRouteInvoice(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath(`/review/${invoiceId}`);
+}
+
+export async function addDepartment(formData: FormData) {
+  const name = value(formData, "name");
+  const email = value(formData, "email").toLowerCase();
+  if (!name || !email) return;
+
+  await mutateData((data) => {
+    const department = upsertDepartment(data, name, email);
+    addAudit(data, {
+      actor: "AP",
+      type: "department_saved",
+      message: `Saved department email for ${department.name}.`,
+    });
+  });
+
+  revalidatePath("/");
+  revalidatePath("/settings");
+}
+
+export async function updateDepartment(formData: FormData) {
+  const departmentId = value(formData, "departmentId");
+  const name = value(formData, "name");
+  const email = value(formData, "email").toLowerCase();
+  if (!departmentId || !name || !email) return;
+
+  await mutateData((data) => {
+    const department = data.departments.find((item) => item.id === departmentId);
+    if (!department) return;
+    department.name = name;
+    department.email = email;
+    addAudit(data, {
+      actor: "AP",
+      type: "department_updated",
+      message: `Updated department setup for ${department.name}.`,
+    });
+  });
+
+  revalidatePath("/");
+  revalidatePath("/settings");
+}
+
+export async function deleteDepartment(formData: FormData) {
+  const departmentId = value(formData, "departmentId");
+  if (!departmentId) return;
+
+  await mutateData((data) => {
+    const inUse =
+      data.invoices.some((invoice) => invoice.departmentId === departmentId) ||
+      data.purchaseOrders.some((po) => po.departmentId === departmentId) ||
+      data.users.some((user) => user.departmentId === departmentId);
+    const department = data.departments.find((item) => item.id === departmentId);
+    if (!department) return;
+    if (inUse) {
+      addAudit(data, {
+        actor: "AP",
+        type: "department_delete_blocked",
+        message: `Could not delete ${department.name}; it is used by invoices, POs, or users.`,
+      });
+      return;
+    }
+    data.departments = data.departments.filter((item) => item.id !== departmentId);
+    addAudit(data, {
+      actor: "AP",
+      type: "department_deleted",
+      message: `Deleted department setup for ${department.name}.`,
+    });
+  });
+
+  revalidatePath("/");
+  revalidatePath("/settings");
 }
 
 export async function completeInvoice(formData: FormData) {

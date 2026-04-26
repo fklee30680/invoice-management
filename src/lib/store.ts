@@ -141,14 +141,17 @@ export function findDepartmentByName(data: AppData, name: string) {
   );
 }
 
-export function upsertDepartment(data: AppData, name: string) {
+export function upsertDepartment(data: AppData, name: string, email = "") {
   const existing = findDepartmentByName(data, name);
+  if (existing && email) {
+    existing.email = email.trim().toLowerCase();
+  }
   if (existing) return existing;
 
   const department: Department = {
     id: `dept-${slugify(name) || createId("department")}`,
     name: name.trim(),
-    email: `${slugify(name) || "department"}@example.com`,
+    email: email.trim().toLowerCase(),
   };
   data.departments.push(department);
   return department;
