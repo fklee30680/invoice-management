@@ -1,3 +1,12 @@
+-- Current MVP persistence table.
+-- The application stores structured state in this JSONB row when DATABASE_URL is set.
+-- The relational tables below document the target normalized production schema.
+create table if not exists app_state (
+  id text primary key,
+  data jsonb not null,
+  updated_at timestamptz not null default now()
+);
+
 create table departments (
   id text primary key,
   name text not null unique,

@@ -48,7 +48,7 @@ EMAIL_FROM=
 DATABASE_URL=
 ```
 
-This MVP currently persists demo data to local `data/` and invoice files to local `uploads/`. Those folders are ignored by Git. The data access layer is isolated in `src/lib/store.ts` so it can be replaced with Postgres when the database is provisioned. The starting Postgres schema is in `database/schema.sql`.
+When `DATABASE_URL` is configured, the MVP stores application data in Postgres. Without `DATABASE_URL`, it falls back to local `data/` for development. Uploaded invoice files still use local/Vercel temporary storage until Blob storage is added. The data access layer is isolated in `src/lib/store.ts`; the current MVP table plus the target normalized schema are documented in `database/schema.sql`.
 
 ## Verification
 

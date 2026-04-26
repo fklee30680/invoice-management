@@ -13,6 +13,7 @@ import {
   addInvoice,
   addInvoiceFile,
   createId,
+  ensureRuntimeDirs,
   findPurchaseOrder,
   getInvoice,
   getUploadPath,
@@ -85,6 +86,7 @@ export async function uploadInvoices(formData: FormData) {
     .filter((file): file is File => file instanceof File && file.size > 0);
 
   for (const file of files) {
+    await ensureRuntimeDirs();
     const invoiceId = createId("invoice");
     const fileId = createId("file");
     const extension = path.extname(file.name) || ".bin";

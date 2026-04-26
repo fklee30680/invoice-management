@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import type {
   AppData,
   AuditEvent,
@@ -18,6 +19,41 @@ const RUNTIME_ROOT = process.env.VERCEL
 const DATA_DIR = path.join(RUNTIME_ROOT, "data");
 const DATA_FILE = path.join(DATA_DIR, "app-data.json");
 const UPLOAD_DIR = path.join(RUNTIME_ROOT, "uploads");
+const APP_STATE_ID = "main";
+
+type AppStateRow = {
+  data: AppData;
+};
+
+let db: NeonQueryFunction<false, false> | null = null;
+let schemaReady = false;
+
+function hasDatabase() {
+  return Boolean(process.env.DATABASE_URL);
+}
+
+function getDb() {
+  if (!process.env.DATABASE_URL) {
+    throw new Error("DATABASE_URL is not configured.");
+  }
+  if (!db) {
+    db = neon(process.env.DATABASE_URL);
+  }
+  return db;
+}
+
+async function ensureDatabaseSchema() {
+  if (schemaReady) return;
+  const sql = getDb();
+  await sql`
+    create table if not exists app_state (
+      id text primary key,
+      data jsonb not null,
+      updated_at timestamptz not null default now()
+    )
+  `;
+  schemaReady = true;
+}
 
 export function createId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -101,6 +137,10 @@ function seedData(): AppData {
 }
 
 export async function readData(): Promise<AppData> {
+  if (hasDatabase()) {
+    return readDatabaseData();
+  }
+
   await ensureRuntimeDirs();
   try {
     const raw = await readFile(DATA_FILE, "utf8");
@@ -113,6 +153,11 @@ export async function readData(): Promise<AppData> {
 }
 
 export async function writeData(data: AppData) {
+  if (hasDatabase()) {
+    await writeDatabaseData(data);
+    return;
+  }
+
   await ensureRuntimeDirs();
   await writeFile(DATA_FILE, JSON.stringify(data, null, 2));
 }
@@ -208,4 +253,34 @@ export function addInvoiceFile(data: AppData, file: InvoiceFile) {
 
 export function addInvoice(data: AppData, invoice: Invoice) {
   data.invoices.unshift(invoice);
+}
+
+async function readDatabaseData(): Promise<AppData> {
+  await ensureDatabaseSchema();
+  const sql = getDb();
+  const rows = (await sql`
+    select data
+    from app_state
+    where id = ${APP_STATE_ID}
+    limit 1
+  `) as AppStateRow[];
+
+  if (rows[0]?.data) {
+    return rows[0].data;
+  }
+
+  const data = seedData();
+  await writeDatabaseData(data);
+  return data;
+}
+
+async function writeDatabaseData(data: AppData) {
+  await ensureDatabaseSchema();
+  const sql = getDb();
+  await sql`
+    insert into app_state (id, data, updated_at)
+    values (${APP_STATE_ID}, ${JSON.stringify(data)}::jsonb, now())
+    on conflict (id)
+    do update set data = excluded.data, updated_at = now()
+  `;
 }
