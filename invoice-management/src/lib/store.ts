@@ -1,0 +1,204 @@
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+import type {
+  AppData,
+  AuditEvent,
+  Department,
+  Invoice,
+  InvoiceFile,
+  PurchaseOrder,
+  User,
+} from "./types";
+import { normalizePoNumber, slugify } from "./utils";
+
+const DATA_DIR = path.join(process.cwd(), "data");
+const DATA_FILE = path.join(DATA_DIR, "app-data.json");
+const UPLOAD_DIR = path.join(process.cwd(), "uploads");
+
+export function createId(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+export async function ensureRuntimeDirs() {
+  await mkdir(DATA_DIR, { recursive: true });
+  await mkdir(UPLOAD_DIR, { recursive: true });
+}
+
+export function getUploadPath(storedName: string) {
+  return path.join(UPLOAD_DIR, storedName);
+}
+
+function seedData(): AppData {
+  const departments: Department[] = [
+    { id: "dept-facilities", name: "Facilities", email: "facilities@example.com" },
+    { id: "dept-operations", name: "Operations", email: "operations@example.com" },
+    { id: "dept-it", name: "Information Technology", email: "it@example.com" },
+    { id: "dept-finance", name: "Finance", email: "finance@example.com" },
+  ];
+
+  const users: User[] = [
+    {
+      id: "user-ap-admin",
+      name: "AP Specialist",
+      email: "ap@example.com",
+      role: "AP",
+    },
+    {
+      id: "user-facilities",
+      name: "Facilities Reviewer",
+      email: "facilities.reviewer@example.com",
+      role: "DEPARTMENT",
+      departmentId: "dept-facilities",
+    },
+    {
+      id: "user-operations",
+      name: "Operations Reviewer",
+      email: "operations.reviewer@example.com",
+      role: "DEPARTMENT",
+      departmentId: "dept-operations",
+    },
+  ];
+
+  const purchaseOrders: PurchaseOrder[] = [
+    {
+      id: "po-10045",
+      poNumber: "PO-10045",
+      normalizedPoNumber: normalizePoNumber("PO-10045"),
+      vendorName: "Northstar Supply",
+      departmentId: "dept-facilities",
+      uploadedAt: new Date().toISOString(),
+    },
+    {
+      id: "po-20810",
+      poNumber: "PO-20810",
+      normalizedPoNumber: normalizePoNumber("PO-20810"),
+      vendorName: "Brightline Services",
+      departmentId: "dept-operations",
+      uploadedAt: new Date().toISOString(),
+    },
+  ];
+
+  return {
+    departments,
+    users,
+    purchaseOrders,
+    invoices: [],
+    invoiceFiles: [],
+    auditEvents: [
+      {
+        id: createId("audit"),
+        actor: "System",
+        type: "seeded",
+        message: "Seeded departments, users, and starter PO records.",
+        createdAt: new Date().toISOString(),
+      },
+    ],
+  };
+}
+
+export async function readData(): Promise<AppData> {
+  await ensureRuntimeDirs();
+  try {
+    const raw = await readFile(DATA_FILE, "utf8");
+    return JSON.parse(raw) as AppData;
+  } catch {
+    const data = seedData();
+    await writeData(data);
+    return data;
+  }
+}
+
+export async function writeData(data: AppData) {
+  await ensureRuntimeDirs();
+  await writeFile(DATA_FILE, JSON.stringify(data, null, 2));
+}
+
+export async function mutateData<T>(mutator: (data: AppData) => T | Promise<T>) {
+  const data = await readData();
+  const result = await mutator(data);
+  await writeData(data);
+  return result;
+}
+
+export function addAudit(
+  data: AppData,
+  input: Omit<AuditEvent, "id" | "createdAt">,
+) {
+  data.auditEvents.unshift({
+    ...input,
+    id: createId("audit"),
+    createdAt: new Date().toISOString(),
+  });
+}
+
+export function findDepartmentByName(data: AppData, name: string) {
+  return data.departments.find(
+    (department) => department.name.toLowerCase() === name.trim().toLowerCase(),
+  );
+}
+
+export function upsertDepartment(data: AppData, name: string) {
+  const existing = findDepartmentByName(data, name);
+  if (existing) return existing;
+
+  const department: Department = {
+    id: `dept-${slugify(name) || createId("department")}`,
+    name: name.trim(),
+    email: `${slugify(name) || "department"}@example.com`,
+  };
+  data.departments.push(department);
+  return department;
+}
+
+export function upsertPurchaseOrder(
+  data: AppData,
+  poNumber: string,
+  vendorName: string,
+  departmentName: string,
+) {
+  const department = upsertDepartment(data, departmentName);
+  const normalizedPoNumber = normalizePoNumber(poNumber);
+  const existing = data.purchaseOrders.find(
+    (po) => po.normalizedPoNumber === normalizedPoNumber,
+  );
+
+  if (existing) {
+    existing.vendorName = vendorName.trim();
+    existing.departmentId = department.id;
+    existing.uploadedAt = new Date().toISOString();
+    return existing;
+  }
+
+  const purchaseOrder: PurchaseOrder = {
+    id: createId("po"),
+    poNumber: poNumber.trim(),
+    normalizedPoNumber,
+    vendorName: vendorName.trim(),
+    departmentId: department.id,
+    uploadedAt: new Date().toISOString(),
+  };
+  data.purchaseOrders.push(purchaseOrder);
+  return purchaseOrder;
+}
+
+export function findPurchaseOrder(data: AppData, poNumber: string) {
+  const normalized = normalizePoNumber(poNumber);
+  if (!normalized) return undefined;
+  return data.purchaseOrders.find((po) => po.normalizedPoNumber === normalized);
+}
+
+export function getInvoiceFile(data: AppData, fileId: string) {
+  return data.invoiceFiles.find((file) => file.id === fileId);
+}
+
+export function getInvoice(data: AppData, invoiceId: string) {
+  return data.invoices.find((invoice) => invoice.id === invoiceId);
+}
+
+export function addInvoiceFile(data: AppData, file: InvoiceFile) {
+  data.invoiceFiles.push(file);
+}
+
+export function addInvoice(data: AppData, invoice: Invoice) {
+  data.invoices.unshift(invoice);
+}
