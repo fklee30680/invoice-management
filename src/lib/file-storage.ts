@@ -1,6 +1,6 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { get as getBlob, put } from "@vercel/blob";
+import { del, get as getBlob, put } from "@vercel/blob";
 import { ensureRuntimeDirs, getUploadPath } from "./store";
 import type { InvoiceFile } from "./types";
 
@@ -95,4 +95,13 @@ export async function readStoredInvoiceFile(file: InvoiceFile) {
     mimeType: file.mimeType,
     size: body.length,
   };
+}
+
+export async function deleteStoredInvoiceFile(file: InvoiceFile) {
+  if (file.storageProvider === "blob") {
+    await del(file.blobPathname || file.blobUrl || file.storedName);
+    return;
+  }
+
+  await rm(getUploadPath(file.storedName), { force: true });
 }

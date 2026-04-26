@@ -6,7 +6,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { AP_USER_ID, DEPARTMENT_DECISIONS } from "./constants";
 import { sendDepartmentNotification } from "./email";
-import { saveInvoiceFile, stageFileForProcessing } from "./file-storage";
+import {
+  deleteStoredInvoiceFile,
+  saveInvoiceFile,
+  stageFileForProcessing,
+} from "./file-storage";
 import { extractInvoiceMetadata } from "./ocr";
 import { parsePoUpload } from "./po-parser";
 import {
@@ -16,6 +20,7 @@ import {
   createId,
   findPurchaseOrder,
   getInvoice,
+  getInvoiceFile,
   mutateData,
   upsertDepartment,
   upsertPurchaseOrder,
@@ -287,6 +292,40 @@ export async function completeInvoice(formData: FormData) {
       message: "AP marked the invoice approved/completed.",
     });
   });
+
+  revalidatePath("/");
+  revalidatePath(`/review/${invoiceId}`);
+}
+
+export async function deleteInvoice(formData: FormData) {
+  const invoiceId = value(formData, "invoiceId");
+  if (!invoiceId) return;
+
+  let fileToDelete = null as ReturnType<typeof getInvoiceFile> | null;
+
+  await mutateData((data) => {
+    const invoice = getInvoice(data, invoiceId);
+    if (!invoice) return;
+    fileToDelete = getInvoiceFile(data, invoice.fileId) || null;
+
+    data.invoices = data.invoices.filter((item) => item.id !== invoiceId);
+    data.invoiceFiles = data.invoiceFiles.filter(
+      (file) => file.invoiceId !== invoiceId && file.id !== invoice.fileId,
+    );
+    data.auditEvents = data.auditEvents.filter(
+      (event) => event.invoiceId !== invoiceId,
+    );
+
+    addAudit(data, {
+      actor: "AP",
+      type: "invoice_deleted",
+      message: `Deleted invoice ${invoice.invoiceNumber || invoice.id} and related database records.`,
+    });
+  });
+
+  if (fileToDelete) {
+    await deleteStoredInvoiceFile(fileToDelete);
+  }
 
   revalidatePath("/");
   revalidatePath(`/review/${invoiceId}`);

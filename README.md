@@ -12,6 +12,7 @@ Cloud-ready AP invoice workflow prototype built with Next.js.
 - Send mock department notifications until SMTP settings are added.
 - Sign in with seeded app-only demo accounts.
 - Maintain department names and notification emails in AP setup.
+- Let AP delete invoices, related records, and stored invoice files.
 - Let departments submit decisions:
   - Receiving Record
   - P-Card

@@ -3,6 +3,7 @@ import { signOut } from "@/lib/auth-actions";
 import {
   cloneSampleInvoice,
   completeInvoice,
+  deleteInvoice,
   updateAndRouteInvoice,
   uploadInvoices,
   uploadPoList,
@@ -268,6 +269,12 @@ function InvoiceTable({ data, invoices }: { data: AppData; invoices: Invoice[] }
                       </button>
                     </form>
                   ) : null}
+                  <form action={deleteInvoice}>
+                    <input type="hidden" name="invoiceId" value={invoice.id} />
+                    <button className="focus-ring border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50">
+                      Delete
+                    </button>
+                  </form>
                 </div>
               </td>
             </tr>
