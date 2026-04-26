@@ -21,7 +21,7 @@ export async function requireUser() {
 
 export async function requireApUser() {
   const user = await requireUser();
-  if (user.role !== "AP") redirect("/login");
+  if (user.role !== "AP") redirect("/department");
   return user;
 }
 
@@ -31,4 +31,3 @@ export function canAccessInvoice(user: User, invoice: Invoice) {
 }
 
 export { SESSION_COOKIE };
-

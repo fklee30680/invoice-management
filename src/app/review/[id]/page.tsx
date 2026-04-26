@@ -44,9 +44,9 @@ export default async function ReviewPage({
           <div>
             <Link
               className="focus-ring inline-flex border border-[var(--line)] bg-white px-3 py-1.5 text-sm font-semibold hover:bg-slate-100"
-              href="/"
+              href={user.role === "AP" ? "/" : "/department"}
             >
-              Back to AP Dashboard
+              Back to Dashboard
             </Link>
             <h1 className="mt-4 text-3xl font-semibold tracking-normal">
               Department Invoice Review
