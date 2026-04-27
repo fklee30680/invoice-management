@@ -67,6 +67,9 @@ export async function saveInvoiceFile(input: {
     } catch (error) {
       reportFileStorageIssue(error);
       console.error("[storage:blob] upload failed", error);
+      if (process.env.VERCEL) {
+        throw new Error("Blob upload failed.");
+      }
     }
   }
 

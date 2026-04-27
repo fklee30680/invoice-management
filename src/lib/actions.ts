@@ -89,80 +89,84 @@ export async function uploadInvoices(formData: FormData) {
     .getAll("invoiceFiles")
     .filter((file): file is File => file instanceof File && file.size > 0);
 
-  for (const file of files) {
-    const invoiceId = createId("invoice");
-    const fileId = createId("file");
-    const extension = path.extname(file.name) || ".bin";
-    const storedName = `${invoiceId}${extension}`;
-    const bytes = Buffer.from(await file.arrayBuffer());
-    const filePath = await stageFileForProcessing(bytes, storedName);
+  try {
+    for (const file of files) {
+      const invoiceId = createId("invoice");
+      const fileId = createId("file");
+      const extension = path.extname(file.name) || ".bin";
+      const storedName = `${invoiceId}${extension}`;
+      const bytes = Buffer.from(await file.arrayBuffer());
+      const filePath = await stageFileForProcessing(bytes, storedName);
 
-    const extracted = await extractInvoiceMetadata(filePath, file.name, file.type);
-    const now = new Date().toISOString();
-    const invoiceFile = await saveInvoiceFile({
-      id: fileId,
-      invoiceId,
-      originalName: file.name,
-      storedName,
-      mimeType: file.type || "application/octet-stream",
-      size: file.size,
-      uploadedAt: now,
-      bytes,
-    });
-
-    await mutateData((data) => {
-      const purchaseOrder = findPurchaseOrder(data, extracted.poNumber);
-      const departmentId = purchaseOrder?.departmentId || "";
-      const department = data.departments.find((item) => item.id === departmentId);
-      const canNotify = Boolean(purchaseOrder && department?.email);
-      const status = canNotify ? "Routed" : "Needs AP Review";
-
-      addInvoiceFile(data, invoiceFile);
-
-      const invoice: Invoice = {
-        id: invoiceId,
-        vendorName: extracted.vendorName || purchaseOrder?.vendorName || "",
-        invoiceNumber: extracted.invoiceNumber,
-        invoiceDate: extracted.invoiceDate,
-        amount: extracted.amount,
-        poNumber: extracted.poNumber,
-        dateReceived: now.slice(0, 10),
-        dateApproved: "",
-        status,
-        departmentId,
-        departmentDecision: "",
-        comments: [],
-        fileId,
-        notificationSentAt: "",
-        ocrSummary: extracted.summary,
-        createdAt: now,
-        updatedAt: now,
-      };
-
-      addInvoice(data, invoice);
-      addAudit(data, {
+      const extracted = await extractInvoiceMetadata(filePath, file.name, file.type);
+      const now = new Date().toISOString();
+      const invoiceFile = await saveInvoiceFile({
+        id: fileId,
         invoiceId,
-        actor: "AP",
-        type: "invoice_uploaded",
-        message: `Uploaded ${file.name}.`,
+        originalName: file.name,
+        storedName,
+        mimeType: file.type || "application/octet-stream",
+        size: file.size,
+        uploadedAt: now,
+        bytes,
       });
-      addAudit(data, {
-        invoiceId,
-        actor: "System",
-        type: purchaseOrder ? "po_matched" : "po_missing",
-        message: purchaseOrder && department?.email
-          ? `Matched ${purchaseOrder.poNumber}; routed to department.`
-          : purchaseOrder
-            ? `Matched ${purchaseOrder.poNumber}, but ${department?.name || "the department"} has no email configured. AP review required.`
-          : "No matching PO found; AP review required.",
-      });
-    });
 
-    const data = await mutateData((current) => current);
-    const invoice = getInvoice(data, invoiceId);
-    if (invoice?.status === "Routed") {
-      await notifyDepartment(invoice);
+      await mutateData((data) => {
+        const purchaseOrder = findPurchaseOrder(data, extracted.poNumber);
+        const departmentId = purchaseOrder?.departmentId || "";
+        const department = data.departments.find((item) => item.id === departmentId);
+        const canNotify = Boolean(purchaseOrder && department?.email);
+        const status = canNotify ? "Routed" : "Needs AP Review";
+
+        addInvoiceFile(data, invoiceFile);
+
+        const invoice: Invoice = {
+          id: invoiceId,
+          vendorName: extracted.vendorName || purchaseOrder?.vendorName || "",
+          invoiceNumber: extracted.invoiceNumber,
+          invoiceDate: extracted.invoiceDate,
+          amount: extracted.amount,
+          poNumber: extracted.poNumber,
+          dateReceived: now.slice(0, 10),
+          dateApproved: "",
+          status,
+          departmentId,
+          departmentDecision: "",
+          comments: [],
+          fileId,
+          notificationSentAt: "",
+          ocrSummary: extracted.summary,
+          createdAt: now,
+          updatedAt: now,
+        };
+
+        addInvoice(data, invoice);
+        addAudit(data, {
+          invoiceId,
+          actor: "AP",
+          type: "invoice_uploaded",
+          message: `Uploaded ${file.name}.`,
+        });
+        addAudit(data, {
+          invoiceId,
+          actor: "System",
+          type: purchaseOrder ? "po_matched" : "po_missing",
+          message: purchaseOrder && department?.email
+            ? `Matched ${purchaseOrder.poNumber}; routed to department.`
+            : purchaseOrder
+              ? `Matched ${purchaseOrder.poNumber}, but ${department?.name || "the department"} has no email configured. AP review required.`
+              : "No matching PO found; AP review required.",
+        });
+      });
+
+      const data = await mutateData((current) => current);
+      const invoice = getInvoice(data, invoiceId);
+      if (invoice?.status === "Routed") {
+        await notifyDepartment(invoice);
+      }
     }
+  } catch {
+    redirect("/?error=file-storage");
   }
 
   revalidatePath("/");

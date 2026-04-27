@@ -504,6 +504,7 @@ function AuditLog({ data }: { data: AppData }) {
 export default async function Home({ searchParams }: PageProps) {
   const user = await requireApUser();
   const params = (await searchParams) || {};
+  const pageError = one(params.error);
   const filters = {
     status: one(params.status),
     department: one(params.department),
@@ -564,6 +565,12 @@ export default async function Home({ searchParams }: PageProps) {
           <Metric label="Completed" value={done} />
         </section>
 
+        {pageError === "file-storage" ? (
+          <section className="border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
+            Invoice upload failed because persistent file storage is not working. Check the
+            File Storage panel before retrying.
+          </section>
+        ) : null}
         <StorageStatus status={persistenceStatus} />
         <UploadPanel />
         <FilterBar data={data} filters={filters} />
