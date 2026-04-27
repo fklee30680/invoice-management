@@ -25,6 +25,11 @@ export type Department = {
   email: string;
 };
 
+export type NotificationTemplate = {
+  departmentSubject: string;
+  departmentBody: string;
+};
+
 export type User = {
   id: string;
   name: string;
@@ -99,6 +104,7 @@ export type AppData = {
   invoices: Invoice[];
   invoiceFiles: InvoiceFile[];
   auditEvents: AuditEvent[];
+  notificationTemplate: NotificationTemplate;
 };
 
 export type InvoiceFilter = {

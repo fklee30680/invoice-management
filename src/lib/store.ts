@@ -7,6 +7,7 @@ import type {
   Department,
   Invoice,
   InvoiceFile,
+  NotificationTemplate,
   PurchaseOrder,
   User,
 } from "./types";
@@ -32,6 +33,21 @@ type AppStateRow = {
 
 let db: NeonQueryFunction<false, false> | null = null;
 let schemaReady = false;
+
+function defaultNotificationTemplate(): NotificationTemplate {
+  return {
+    departmentSubject: "Invoice review needed: {{vendor_name}}",
+    departmentBody:
+      "A new invoice requires your review.\n\nVendor: {{vendor_name}}\nInvoice Number: {{invoice_number}}\nPO Number: {{po_number}}\nAmount: {{amount}}\nDepartment: {{department_name}}\n\nOpen invoice: {{review_link}}",
+  };
+}
+
+function normalizeData(data: AppData): AppData {
+  return {
+    ...data,
+    notificationTemplate: data.notificationTemplate || defaultNotificationTemplate(),
+  };
+}
 
 function hasDatabase() {
   return Boolean(getDatabaseConfig().value);
@@ -139,6 +155,7 @@ function seedData(): AppData {
         createdAt: new Date().toISOString(),
       },
     ],
+    notificationTemplate: defaultNotificationTemplate(),
   };
 }
 
@@ -160,13 +177,13 @@ export async function readData(): Promise<AppData> {
 
 async function readLocalData(): Promise<AppData> {
   await ensureRuntimeDirs();
-  try {
-    const raw = await readFile(DATA_FILE, "utf8");
-    return JSON.parse(raw) as AppData;
-  } catch {
-    const data = seedData();
-    await writeData(data);
-    return data;
+    try {
+      const raw = await readFile(DATA_FILE, "utf8");
+      return normalizeData(JSON.parse(raw) as AppData);
+    } catch {
+      const data = seedData();
+      await writeData(data);
+      return data;
   }
 }
 
@@ -290,7 +307,7 @@ async function readDatabaseData(): Promise<AppData> {
   `) as AppStateRow[];
 
   if (rows[0]?.data) {
-    return rows[0].data;
+    return normalizeData(rows[0].data);
   }
 
   const data = seedData();

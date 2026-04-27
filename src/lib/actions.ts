@@ -35,6 +35,12 @@ function baseUrl() {
   return process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 }
 
+function fillTemplate(template: string, values: Record<string, string>) {
+  return template.replace(/\{\{\s*([a-z_]+)\s*\}\}/gi, (_match, key: string) => {
+    return values[key] || "";
+  });
+}
+
 async function notifyDepartment(invoice: Invoice) {
   await mutateData(async (data) => {
     const storedInvoice = getInvoice(data, invoice.id);
@@ -43,14 +49,29 @@ async function notifyDepartment(invoice: Invoice) {
       (item) => item.id === storedInvoice.departmentId,
     );
     if (!department) return;
+    const templateValues = {
+      vendor_name: storedInvoice.vendorName || "Unknown Vendor",
+      invoice_number: storedInvoice.invoiceNumber || "Not set",
+      po_number: storedInvoice.poNumber || "Not set",
+      amount: storedInvoice.amount || "Not set",
+      department_name: department.name,
+      review_link: `${baseUrl()}/review/${storedInvoice.id}`,
+    };
+    const subject = fillTemplate(
+      data.notificationTemplate.departmentSubject,
+      templateValues,
+    ).trim();
+    const body = fillTemplate(
+      data.notificationTemplate.departmentBody,
+      templateValues,
+    ).trim();
     await sendDepartmentNotification({
       invoiceId: storedInvoice.id,
       departmentName: department.name,
       departmentEmail: department.email,
-      subject: `Invoice review needed: ${
-        storedInvoice.vendorName || storedInvoice.invoiceNumber || storedInvoice.id
-      }`,
-      link: `${baseUrl()}/review/${storedInvoice.id}`,
+      subject: subject || `Invoice review needed: ${templateValues.vendor_name}`,
+      body,
+      link: templateValues.review_link,
     });
     storedInvoice.notificationSentAt = new Date().toISOString();
     addAudit(data, {
@@ -243,6 +264,25 @@ export async function updateDepartment(formData: FormData) {
       actor: "AP",
       type: "department_updated",
       message: `Updated department setup for ${department.name}.`,
+    });
+  });
+
+  revalidatePath("/");
+  revalidatePath("/settings");
+}
+
+export async function updateNotificationTemplate(formData: FormData) {
+  const departmentSubject = value(formData, "departmentSubject");
+  const departmentBody = value(formData, "departmentBody");
+  if (!departmentSubject || !departmentBody) return;
+
+  await mutateData((data) => {
+    data.notificationTemplate.departmentSubject = departmentSubject;
+    data.notificationTemplate.departmentBody = departmentBody;
+    addAudit(data, {
+      actor: "AP",
+      type: "notification_template_updated",
+      message: "Updated department notification subject and body template.",
     });
   });
 

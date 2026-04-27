@@ -3,6 +3,7 @@ type NotificationInput = {
   departmentName: string;
   departmentEmail: string;
   subject: string;
+  body: string;
   link: string;
 };
 
@@ -15,6 +16,7 @@ export async function sendDepartmentNotification(input: NotificationInput) {
       from,
       to: input.departmentEmail,
       subject: input.subject,
+      body: input.body,
       link: input.link,
       invoiceId: input.invoiceId,
       departmentName: input.departmentName,
@@ -30,6 +32,7 @@ export async function sendDepartmentNotification(input: NotificationInput) {
     from,
     to: input.departmentEmail,
     subject: input.subject,
+    body: input.body,
   });
 
   return {
@@ -37,4 +40,3 @@ export async function sendDepartmentNotification(input: NotificationInput) {
     message: `Notification prepared for ${input.departmentName}.`,
   };
 }
-
