@@ -1,4 +1,5 @@
 type PersistenceProvider = "postgres" | "blob" | "temporary";
+type BlobAccessMode = "public" | "private";
 
 export type PersistenceStatus = {
   records: {
@@ -44,6 +45,10 @@ export function getDatabaseConfig() {
 
 export function getBlobConfig() {
   return firstConfiguredEnv(BLOB_ENV_NAMES);
+}
+
+export function getBlobAccessMode(): BlobAccessMode {
+  return process.env.BLOB_ACCESS === "private" ? "private" : "public";
 }
 
 export function reportDatabaseIssue(error: unknown) {

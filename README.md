@@ -50,9 +50,11 @@ EMAIL_FROM=
 DATABASE_URL=
 # POSTGRES_URL= can be used instead when Vercel/Neon provides that name.
 BLOB_READ_WRITE_TOKEN=
+# Optional. Defaults to public for Vercel Blob public stores. Set to private only if your Blob store is configured for private access.
+BLOB_ACCESS=public
 ```
 
-When `DATABASE_URL` or a common Vercel Postgres URL variable is configured, the MVP stores application data in Postgres. Without Postgres configuration, it falls back to local `data/` for development. When `BLOB_READ_WRITE_TOKEN` is configured, uploaded invoice files are stored as private Vercel Blob objects and streamed through the authenticated `/files/[id]` route. Without Blob configuration, file uploads fall back to local `uploads/` for development. The AP dashboard shows which storage mode is active so production fallback is visible. The current MVP table plus the target normalized schema are documented in `database/schema.sql`.
+When `DATABASE_URL` or a common Vercel Postgres URL variable is configured, the MVP stores application data in Postgres. Without Postgres configuration, it falls back to local `data/` for development. When `BLOB_READ_WRITE_TOKEN` is configured, uploaded invoice files are stored in Vercel Blob. Public Blob stores work with the default `BLOB_ACCESS=public`; private stores require `BLOB_ACCESS=private`. Without Blob configuration, file uploads fall back to local `uploads/` for development. The AP dashboard shows which storage mode is active so production fallback is visible. The current MVP table plus the target normalized schema are documented in `database/schema.sql`.
 
 ## Verification
 

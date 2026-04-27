@@ -3,6 +3,7 @@ import path from "node:path";
 import { del, get as getBlob, put } from "@vercel/blob";
 import {
   clearFileStorageIssue,
+  getBlobAccessMode,
   getBlobConfig,
   reportFileStorageIssue,
 } from "./runtime-config";
@@ -40,11 +41,12 @@ export async function saveInvoiceFile(input: {
   bytes: Buffer;
 }): Promise<InvoiceFile> {
   const blobConfig = getBlobConfig();
+  const blobAccess = getBlobAccessMode();
   if (blobConfig.value) {
     try {
       const pathname = `invoices/${input.invoiceId}/${safeFileName(input.originalName)}`;
       const blob = await put(pathname, input.bytes, {
-        access: "private",
+        access: blobAccess,
         allowOverwrite: true,
         contentType: input.mimeType || "application/octet-stream",
         token: blobConfig.value,
@@ -59,7 +61,7 @@ export async function saveInvoiceFile(input: {
         storageProvider: "blob",
         blobUrl: blob.url,
         blobPathname: blob.pathname,
-        blobAccess: "private",
+        blobAccess,
         mimeType: blob.contentType || input.mimeType || "application/octet-stream",
         size: input.size,
         uploadedAt: input.uploadedAt,
