@@ -10,7 +10,11 @@ import type {
   PurchaseOrder,
   User,
 } from "./types";
-import { getDatabaseConfig } from "./runtime-config";
+import {
+  clearDatabaseIssue,
+  getDatabaseConfig,
+  reportDatabaseIssue,
+} from "./runtime-config";
 import { normalizePoNumber, slugify } from "./utils";
 
 const RUNTIME_ROOT = process.env.VERCEL
@@ -140,9 +144,21 @@ function seedData(): AppData {
 
 export async function readData(): Promise<AppData> {
   if (hasDatabase()) {
-    return readDatabaseData();
+    try {
+      const data = await readDatabaseData();
+      clearDatabaseIssue();
+      return data;
+    } catch (error) {
+      reportDatabaseIssue(error);
+      console.error("[storage:database] read failed", error);
+      return readLocalData();
+    }
   }
 
+  return readLocalData();
+}
+
+async function readLocalData(): Promise<AppData> {
   await ensureRuntimeDirs();
   try {
     const raw = await readFile(DATA_FILE, "utf8");
@@ -156,8 +172,14 @@ export async function readData(): Promise<AppData> {
 
 export async function writeData(data: AppData) {
   if (hasDatabase()) {
-    await writeDatabaseData(data);
-    return;
+    try {
+      await writeDatabaseData(data);
+      clearDatabaseIssue();
+      return;
+    } catch (error) {
+      reportDatabaseIssue(error);
+      console.error("[storage:database] write failed", error);
+    }
   }
 
   await ensureRuntimeDirs();

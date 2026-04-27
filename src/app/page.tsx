@@ -88,6 +88,16 @@ function StorageStatus({ status }: { status: PersistenceStatus }) {
   const itemClass = "border border-[var(--line)] bg-white px-3 py-2";
   const goodClass = "text-emerald-700";
   const warnClass = "text-amber-700";
+  const databaseLabel = status.records.issue
+    ? "Postgres configured but unavailable"
+    : status.records.configured
+      ? "Postgres active"
+      : "Temporary storage";
+  const fileStorageLabel = status.files.issue
+    ? "Blob configured but unavailable"
+    : status.files.configured
+      ? "Vercel Blob active"
+      : "Temporary storage";
 
   return (
     <section className="grid gap-3 text-sm md:grid-cols-2">
@@ -95,8 +105,8 @@ function StorageStatus({ status }: { status: PersistenceStatus }) {
         <div className="text-xs font-semibold uppercase text-[var(--muted)]">
           Database
         </div>
-        <div className={`mt-1 font-semibold ${status.records.configured ? goodClass : warnClass}`}>
-          {status.records.configured ? "Postgres active" : "Temporary storage"}
+        <div className={`mt-1 font-semibold ${status.records.configured && !status.records.issue ? goodClass : warnClass}`}>
+          {databaseLabel}
         </div>
         <div className="mt-1 text-xs text-[var(--muted)]">
           Env: {status.records.variableName}
@@ -106,8 +116,8 @@ function StorageStatus({ status }: { status: PersistenceStatus }) {
         <div className="text-xs font-semibold uppercase text-[var(--muted)]">
           File Storage
         </div>
-        <div className={`mt-1 font-semibold ${status.files.configured ? goodClass : warnClass}`}>
-          {status.files.configured ? "Vercel Blob active" : "Temporary storage"}
+        <div className={`mt-1 font-semibold ${status.files.configured && !status.files.issue ? goodClass : warnClass}`}>
+          {fileStorageLabel}
         </div>
         <div className="mt-1 text-xs text-[var(--muted)]">
           Env: {status.files.variableName}

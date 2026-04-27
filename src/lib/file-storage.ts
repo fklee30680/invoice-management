@@ -1,7 +1,11 @@
 import { readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { del, get as getBlob, put } from "@vercel/blob";
-import { getBlobConfig } from "./runtime-config";
+import {
+  clearFileStorageIssue,
+  getBlobConfig,
+  reportFileStorageIssue,
+} from "./runtime-config";
 import { ensureRuntimeDirs, getUploadPath } from "./store";
 import type { InvoiceFile } from "./types";
 
@@ -37,27 +41,33 @@ export async function saveInvoiceFile(input: {
 }): Promise<InvoiceFile> {
   const blobConfig = getBlobConfig();
   if (blobConfig.value) {
-    const pathname = `invoices/${input.invoiceId}/${safeFileName(input.originalName)}`;
-    const blob = await put(pathname, input.bytes, {
-      access: "private",
-      allowOverwrite: true,
-      contentType: input.mimeType || "application/octet-stream",
-      token: blobConfig.value,
-    });
+    try {
+      const pathname = `invoices/${input.invoiceId}/${safeFileName(input.originalName)}`;
+      const blob = await put(pathname, input.bytes, {
+        access: "private",
+        allowOverwrite: true,
+        contentType: input.mimeType || "application/octet-stream",
+        token: blobConfig.value,
+      });
+      clearFileStorageIssue();
 
-    return {
-      id: input.id,
-      invoiceId: input.invoiceId,
-      originalName: input.originalName,
-      storedName: blob.pathname,
-      storageProvider: "blob",
-      blobUrl: blob.url,
-      blobPathname: blob.pathname,
-      blobAccess: "private",
-      mimeType: blob.contentType || input.mimeType || "application/octet-stream",
-      size: input.size,
-      uploadedAt: input.uploadedAt,
-    };
+      return {
+        id: input.id,
+        invoiceId: input.invoiceId,
+        originalName: input.originalName,
+        storedName: blob.pathname,
+        storageProvider: "blob",
+        blobUrl: blob.url,
+        blobPathname: blob.pathname,
+        blobAccess: "private",
+        mimeType: blob.contentType || input.mimeType || "application/octet-stream",
+        size: input.size,
+        uploadedAt: input.uploadedAt,
+      };
+    } catch (error) {
+      reportFileStorageIssue(error);
+      console.error("[storage:blob] upload failed", error);
+    }
   }
 
   await stageFileForProcessing(input.bytes, input.storedName);
