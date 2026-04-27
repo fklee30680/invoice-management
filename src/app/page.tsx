@@ -111,6 +111,11 @@ function StorageStatus({ status }: { status: PersistenceStatus }) {
         <div className="mt-1 text-xs text-[var(--muted)]">
           Env: {status.records.variableName}
         </div>
+        {status.records.issue ? (
+          <div className="mt-2 text-xs text-amber-800">
+            Last error: {status.records.issue}
+          </div>
+        ) : null}
       </div>
       <div className={itemClass}>
         <div className="text-xs font-semibold uppercase text-[var(--muted)]">
@@ -122,6 +127,11 @@ function StorageStatus({ status }: { status: PersistenceStatus }) {
         <div className="mt-1 text-xs text-[var(--muted)]">
           Env: {status.files.variableName}
         </div>
+        {status.files.issue ? (
+          <div className="mt-2 text-xs text-amber-800">
+            Last error: {status.files.issue}
+          </div>
+        ) : null}
       </div>
       {status.warning ? (
         <div className="border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900 md:col-span-2">

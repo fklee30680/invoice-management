@@ -86,26 +86,37 @@ export async function saveInvoiceFile(input: {
 
 export async function readStoredInvoiceFile(file: InvoiceFile) {
   if (file.storageProvider === "blob") {
-    const blobConfig = getBlobConfig();
-    const blob = await getBlob(file.blobPathname || file.storedName, {
-      access: file.blobAccess || "private",
-      token: blobConfig.value || undefined,
-    });
-    if (!blob || blob.statusCode !== 200) return null;
+    try {
+      const blobConfig = getBlobConfig();
+      const blob = await getBlob(file.blobPathname || file.blobUrl || file.storedName, {
+        access: file.blobAccess || "private",
+        token: blobConfig.value || undefined,
+      });
+      if (!blob || blob.statusCode !== 200) return null;
 
-    return {
-      stream: blob.stream,
-      mimeType: blob.blob.contentType || file.mimeType,
-      size: blob.blob.size || file.size,
-    };
+      clearFileStorageIssue();
+      return {
+        stream: blob.stream,
+        mimeType: blob.blob.contentType || file.mimeType,
+        size: blob.blob.size || file.size,
+      };
+    } catch (error) {
+      reportFileStorageIssue(error);
+      console.error("[storage:blob] read failed", error);
+      return null;
+    }
   }
 
-  const body = await readFile(getUploadPath(file.storedName));
-  return {
-    body,
-    mimeType: file.mimeType,
-    size: body.length,
-  };
+  try {
+    const body = await readFile(getUploadPath(file.storedName));
+    return {
+      body,
+      mimeType: file.mimeType,
+      size: body.length,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export async function deleteStoredInvoiceFile(file: InvoiceFile) {
