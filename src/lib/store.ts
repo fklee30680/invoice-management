@@ -4,6 +4,7 @@ import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import type {
   AppData,
   AuditEvent,
+  BrandingSettings,
   Department,
   Invoice,
   InvoiceFile,
@@ -42,10 +43,33 @@ function defaultNotificationTemplate(): NotificationTemplate {
   };
 }
 
+function defaultBranding(): BrandingSettings {
+  return {
+    appTitle: "Invoice Management",
+    divisionLabel: "AP Division",
+    fontFamily: "Arial, Helvetica, ui-sans-serif, system-ui, sans-serif",
+    accentColor: "#0f766e",
+    accentStrongColor: "#115e59",
+    backgroundColor: "#f6f7f9",
+    panelColor: "#ffffff",
+    panelStrongColor: "#eef2f6",
+    textColor: "#17202a",
+    mutedColor: "#657386",
+    lineColor: "#d8dee7",
+    logo: null,
+  };
+}
+
 function normalizeData(data: AppData): AppData {
+  const defaultBrand = defaultBranding();
   return {
     ...data,
     notificationTemplate: data.notificationTemplate || defaultNotificationTemplate(),
+    branding: {
+      ...defaultBrand,
+      ...(data.branding || {}),
+      logo: data.branding?.logo || null,
+    },
   };
 }
 
@@ -156,6 +180,7 @@ function seedData(): AppData {
       },
     ],
     notificationTemplate: defaultNotificationTemplate(),
+    branding: defaultBranding(),
   };
 }
 

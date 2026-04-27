@@ -7,7 +7,9 @@ import { redirect } from "next/navigation";
 import { AP_USER_ID, DEPARTMENT_DECISIONS } from "./constants";
 import { sendDepartmentNotification } from "./email";
 import {
+  deleteStoredBrandingLogo,
   deleteStoredInvoiceFile,
+  saveBrandingLogo,
   saveInvoiceFile,
   stageFileForProcessing,
 } from "./file-storage";
@@ -25,10 +27,29 @@ import {
   upsertDepartment,
   upsertPurchaseOrder,
 } from "./store";
-import type { DepartmentDecision, Invoice } from "./types";
+import type { BrandingLogo, DepartmentDecision, Invoice } from "./types";
 
 function value(formData: FormData, key: string) {
   return String(formData.get(key) || "").trim();
+}
+
+function colorValue(formData: FormData, key: string, fallback: string) {
+  const candidate = value(formData, key);
+  return /^#[0-9a-f]{6}$/i.test(candidate) ? candidate : fallback;
+}
+
+function fontValue(formData: FormData) {
+  const allowed = new Set([
+    "Arial, Helvetica, ui-sans-serif, system-ui, sans-serif",
+    "'Segoe UI', Arial, ui-sans-serif, system-ui, sans-serif",
+    "Verdana, Geneva, ui-sans-serif, system-ui, sans-serif",
+    "Tahoma, Geneva, ui-sans-serif, system-ui, sans-serif",
+    "Georgia, 'Times New Roman', serif",
+  ]);
+  const selected = value(formData, "fontFamily");
+  return allowed.has(selected)
+    ? selected
+    : "Arial, Helvetica, ui-sans-serif, system-ui, sans-serif";
 }
 
 function baseUrl() {
@@ -297,6 +318,119 @@ export async function updateNotificationTemplate(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/settings");
+}
+
+export async function updateBrandingSettings(formData: FormData) {
+  await mutateData((data) => {
+    data.branding.appTitle = value(formData, "appTitle") || "Invoice Management";
+    data.branding.divisionLabel = value(formData, "divisionLabel") || "AP Division";
+    data.branding.fontFamily = fontValue(formData);
+    data.branding.accentColor = colorValue(
+      formData,
+      "accentColor",
+      data.branding.accentColor,
+    );
+    data.branding.accentStrongColor = colorValue(
+      formData,
+      "accentStrongColor",
+      data.branding.accentStrongColor,
+    );
+    data.branding.backgroundColor = colorValue(
+      formData,
+      "backgroundColor",
+      data.branding.backgroundColor,
+    );
+    data.branding.panelColor = colorValue(
+      formData,
+      "panelColor",
+      data.branding.panelColor,
+    );
+    data.branding.panelStrongColor = colorValue(
+      formData,
+      "panelStrongColor",
+      data.branding.panelStrongColor,
+    );
+    data.branding.textColor = colorValue(formData, "textColor", data.branding.textColor);
+    data.branding.mutedColor = colorValue(
+      formData,
+      "mutedColor",
+      data.branding.mutedColor,
+    );
+    data.branding.lineColor = colorValue(formData, "lineColor", data.branding.lineColor);
+    addAudit(data, {
+      actor: "AP",
+      type: "branding_updated",
+      message: "Updated app branding, colors, and font.",
+    });
+  });
+
+  revalidatePath("/");
+  revalidatePath("/department");
+  revalidatePath("/login");
+  revalidatePath("/review", "layout");
+  revalidatePath("/settings", "layout");
+}
+
+export async function uploadBrandingLogo(formData: FormData) {
+  const file = formData.get("logoFile");
+  if (!(file instanceof File) || file.size === 0) return;
+  if (!file.type.startsWith("image/")) return;
+
+  const extension = path.extname(file.name) || ".bin";
+  const storedName = `brand-logo-${Date.now()}${extension}`;
+  const bytes = Buffer.from(await file.arrayBuffer());
+  const logo = await saveBrandingLogo({
+    originalName: file.name,
+    storedName,
+    mimeType: file.type || "application/octet-stream",
+    size: file.size,
+    uploadedAt: new Date().toISOString(),
+    bytes,
+  });
+
+  let oldLogo: BrandingLogo | null = null;
+  await mutateData((data) => {
+    oldLogo = data.branding.logo;
+    data.branding.logo = logo;
+    addAudit(data, {
+      actor: "AP",
+      type: "branding_logo_uploaded",
+      message: `Uploaded branding logo ${file.name}.`,
+    });
+  });
+
+  if (oldLogo) {
+    await deleteStoredBrandingLogo(oldLogo);
+  }
+
+  revalidatePath("/");
+  revalidatePath("/department");
+  revalidatePath("/login");
+  revalidatePath("/review", "layout");
+  revalidatePath("/settings", "layout");
+}
+
+export async function removeBrandingLogo() {
+  let oldLogo: BrandingLogo | null = null;
+  await mutateData((data) => {
+    oldLogo = data.branding.logo;
+    data.branding.logo = null;
+    addAudit(data, {
+      actor: "AP",
+      type: "branding_logo_removed",
+      message: "Removed branding logo.",
+    });
+  });
+
+  if (oldLogo) {
+    await deleteStoredBrandingLogo(oldLogo);
+  }
+
+  revalidatePath("/");
+  revalidatePath("/department");
+  revalidatePath("/login");
+  revalidatePath("/review", "layout");
+  revalidatePath("/settings", "layout");
 }
 
 export async function deleteDepartment(formData: FormData) {

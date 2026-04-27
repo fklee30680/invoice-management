@@ -30,6 +30,33 @@ export type NotificationTemplate = {
   departmentBody: string;
 };
 
+export type BrandingLogo = {
+  originalName: string;
+  storedName: string;
+  storageProvider?: "local" | "blob";
+  blobUrl?: string;
+  blobPathname?: string;
+  blobAccess?: "private" | "public";
+  mimeType: string;
+  size: number;
+  uploadedAt: string;
+};
+
+export type BrandingSettings = {
+  appTitle: string;
+  divisionLabel: string;
+  fontFamily: string;
+  accentColor: string;
+  accentStrongColor: string;
+  backgroundColor: string;
+  panelColor: string;
+  panelStrongColor: string;
+  textColor: string;
+  mutedColor: string;
+  lineColor: string;
+  logo: BrandingLogo | null;
+};
+
 export type User = {
   id: string;
   name: string;
@@ -105,6 +132,7 @@ export type AppData = {
   invoiceFiles: InvoiceFile[];
   auditEvents: AuditEvent[];
   notificationTemplate: NotificationTemplate;
+  branding: BrandingSettings;
 };
 
 export type InvoiceFilter = {

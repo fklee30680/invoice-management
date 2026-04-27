@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { notFound, redirect } from "next/navigation";
 import { submitDepartmentDecision } from "@/lib/actions";
 import { DEPARTMENT_DECISIONS } from "@/lib/constants";
@@ -29,6 +30,7 @@ export default async function ReviewPage({
   const { id } = await params;
   const query = (await searchParams) || {};
   const data = await readData();
+  const branding = data.branding;
   const user = await requireUser();
   const invoice = data.invoices.find((item) => item.id === id);
   if (!invoice) notFound();
@@ -48,9 +50,21 @@ export default async function ReviewPage({
             >
               Back to Dashboard
             </Link>
-            <h1 className="mt-4 text-3xl font-semibold tracking-normal">
-              Department Invoice Review
-            </h1>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              {branding.logo ? (
+                <Image
+                  alt={`${branding.appTitle} logo`}
+                  className="max-h-12 max-w-40 object-contain"
+                  height={48}
+                  src="/branding/logo"
+                  unoptimized
+                  width={160}
+                />
+              ) : null}
+              <h1 className="text-3xl font-semibold tracking-normal">
+                Department Invoice Review
+              </h1>
+            </div>
             <p className="mt-2 text-sm text-[var(--muted)]">
               Signed in as {user.name}. Review the invoice file, add comments, and
               send the decision back to AP.

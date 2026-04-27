@@ -12,6 +12,7 @@
   --danger: #b42318;
   --warning: #a15c07;
   --success: #067647;
+  --brand-font: Arial, Helvetica, ui-sans-serif, system-ui, sans-serif;
 }
 
 @theme inline {
@@ -24,7 +25,7 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--brand-font);
 }
 
 button,

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { signOut } from "@/lib/auth-actions";
 import { requireUser } from "@/lib/session";
 import { readData } from "@/lib/store";
@@ -147,6 +148,7 @@ export default async function DepartmentDashboard() {
   }
 
   const data = await readData();
+  const branding = data.branding;
   const department = data.departments.find(
     (item) => item.id === user.departmentId,
   );
@@ -161,12 +163,26 @@ export default async function DepartmentDashboard() {
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-4 border-b border-[var(--line)] pb-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-normal text-[var(--accent)]">
-              Department Review
-            </p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-normal">
-              {department?.name || "Department"} Invoices
-            </h1>
+            <div className="flex flex-wrap items-center gap-3">
+              {branding.logo ? (
+                <Image
+                  alt={`${branding.appTitle} logo`}
+                  className="max-h-14 max-w-44 object-contain"
+                  height={56}
+                  src="/branding/logo"
+                  unoptimized
+                  width={176}
+                />
+              ) : null}
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-normal text-[var(--accent)]">
+                  Department Review
+                </p>
+                <h1 className="mt-2 text-3xl font-semibold tracking-normal">
+                  {department?.name || "Department"} Invoices
+                </h1>
+              </div>
+            </div>
             <p className="mt-2 max-w-3xl text-sm text-[var(--muted)]">
               Signed in as {user.name}. This view only includes invoices assigned
               to your department.

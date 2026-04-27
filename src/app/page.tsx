@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { signOut } from "@/lib/auth-actions";
 import {
   cloneSampleInvoice,
@@ -523,6 +524,7 @@ export default async function Home({ searchParams }: PageProps) {
     search: one(params.search),
   };
   const data = await readData();
+  const branding = data.branding;
   const persistenceStatus = getPersistenceStatus();
   const invoices = filterInvoices(data.invoices, data, filters);
   const needsAp = data.invoices.filter((invoice) =>
@@ -538,12 +540,26 @@ export default async function Home({ searchParams }: PageProps) {
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-4 border-b border-[var(--line)] pb-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-normal text-[var(--accent)]">
-              AP Division
-            </p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-normal">
-              Invoice Management
-            </h1>
+            <div className="flex flex-wrap items-center gap-3">
+              {branding.logo ? (
+                <Image
+                  alt={`${branding.appTitle} logo`}
+                  className="max-h-14 max-w-44 object-contain"
+                  height={56}
+                  src="/branding/logo"
+                  unoptimized
+                  width={176}
+                />
+              ) : null}
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-normal text-[var(--accent)]">
+                  {branding.divisionLabel}
+                </p>
+                <h1 className="mt-2 text-3xl font-semibold tracking-normal">
+                  {branding.appTitle}
+                </h1>
+              </div>
+            </div>
             <p className="mt-2 max-w-3xl text-sm text-[var(--muted)]">
               Upload invoices, validate against PO data, route department review,
               and track every invoice through AP completion.
