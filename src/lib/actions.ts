@@ -65,21 +65,30 @@ async function notifyDepartment(invoice: Invoice) {
       data.notificationTemplate.departmentBody,
       templateValues,
     ).trim();
-    await sendDepartmentNotification({
-      invoiceId: storedInvoice.id,
-      departmentName: department.name,
-      departmentEmail: department.email,
-      subject: subject || `Invoice review needed: ${templateValues.vendor_name}`,
-      body,
-      link: templateValues.review_link,
-    });
-    storedInvoice.notificationSentAt = new Date().toISOString();
-    addAudit(data, {
-      invoiceId: storedInvoice.id,
-      actor: "AP",
-      type: "notification_sent",
-      message: `Department notification sent to ${department.name}.`,
-    });
+    try {
+      await sendDepartmentNotification({
+        invoiceId: storedInvoice.id,
+        departmentName: department.name,
+        departmentEmail: department.email,
+        subject: subject || `Invoice review needed: ${templateValues.vendor_name}`,
+        body,
+        link: templateValues.review_link,
+      });
+      storedInvoice.notificationSentAt = new Date().toISOString();
+      addAudit(data, {
+        invoiceId: storedInvoice.id,
+        actor: "AP",
+        type: "notification_sent",
+        message: `Department notification sent to ${department.name}.`,
+      });
+    } catch (error) {
+      addAudit(data, {
+        invoiceId: storedInvoice.id,
+        actor: "System",
+        type: "notification_failed",
+        message: error instanceof Error ? error.message : "Department notification failed.",
+      });
+    }
   });
 }
 
