@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { inflateSync } from "node:zlib";
 
 type ExtractedInvoiceMetadata = {
   vendorName: string;
@@ -25,6 +26,142 @@ function fromFileName(fileName: string): ExtractedInvoiceMetadata {
     poNumber: poMatch ? `PO-${poMatch[1]}` : "",
     summary:
       "Local OCR placeholder used. Add Azure Document Intelligence environment variables to enable live extraction.",
+  };
+}
+
+type PdfTextRun = {
+  x: number;
+  y: number;
+  text: string;
+};
+
+function unescapePdfString(value: string) {
+  return value
+    .replace(/\\([\\()])/g, "$1")
+    .replace(/\\r/g, "\r")
+    .replace(/\\n/g, "\n")
+    .replace(/\\t/g, "\t")
+    .replace(/\\b/g, "\b")
+    .replace(/\\f/g, "\f")
+    .replace(/\\\d{1,3}/g, " ");
+}
+
+function decodePdfTextOperand(operand: string) {
+  const parts = operand.match(/\((?:\\.|[^\\()])*\)/g) || [];
+  return parts
+    .map((part) => unescapePdfString(part.slice(1, -1)))
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractPdfTextRuns(streamText: string) {
+  const runs: PdfTextRun[] = [];
+  const blocks = streamText.match(/BT[\s\S]*?ET/g) || [];
+
+  for (const block of blocks) {
+    const textMatches = [...block.matchAll(/(?:\[([\s\S]*?)\]|(\((?:\\.|[^\\()])*\)))\s*TJ?/g)];
+    if (textMatches.length === 0) continue;
+
+    const tmMatch = block.match(/1\s+0\s+0\s+1\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+Tm/);
+    const x = tmMatch ? Number(tmMatch[1]) : 0;
+    const y = tmMatch ? Number(tmMatch[2]) : 0;
+
+    for (const match of textMatches) {
+      const operand = match[1] ? `[${match[1]}]` : match[2] || "";
+      const text = decodePdfTextOperand(operand);
+      if (!text) continue;
+      runs.push({ x, y, text });
+    }
+  }
+
+  return runs;
+}
+
+function extractPdfText(content: Buffer) {
+  const binary = content.toString("latin1");
+  const streamRegex = /stream\r?\n/g;
+  const runs: PdfTextRun[] = [];
+  let match: RegExpExecArray | null;
+
+  while ((match = streamRegex.exec(binary))) {
+    const start = match.index + match[0].length;
+    const end = binary.indexOf("endstream", start);
+    if (end < 0) continue;
+
+    const chunk = content.subarray(start, end).toString("latin1").replace(/[\r\n]+$/, "");
+    try {
+      const inflated = inflateSync(Buffer.from(chunk, "latin1")).toString("latin1");
+      runs.push(...extractPdfTextRuns(inflated));
+    } catch {
+      continue;
+    }
+  }
+
+  const sorted = runs
+    .sort((a, b) => (Math.abs(b.y - a.y) > 2 ? b.y - a.y : a.x - b.x));
+  const lines: { y: number; parts: string[] }[] = [];
+
+  for (const run of sorted) {
+    const line = lines.find((item) => Math.abs(item.y - run.y) <= 2);
+    if (line) {
+      line.parts.push(run.text);
+    } else {
+      lines.push({ y: run.y, parts: [run.text] });
+    }
+  }
+
+  return lines
+    .map((line) => line.parts.join(" ").replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .join("\n");
+}
+
+function cleanCapturedValue(value: string) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function extractFromText(text: string): ExtractedInvoiceMetadata | null {
+  const normalized = text.replace(/\u00a0/g, " ").replace(/[ \t]+/g, " ");
+  const lines = normalized
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length === 0) return null;
+
+  const vendorName = lines[0] || "";
+  const invoiceNumber = cleanCapturedValue(
+    normalized.match(/\bINVOICE\s*#?\s*[:\-]?\s*([A-Z0-9-]+)/i)?.[1] || "",
+  );
+  const poNumberRaw = cleanCapturedValue(
+    normalized.match(/\bPO\b\s*[:#-]?\s*([A-Z0-9][A-Z0-9 \-]{1,20})/i)?.[1] || "",
+  )
+    .replace(/\s+(DATE|PURCHASED|SHIP|COMMENTS)\b.*$/i, "")
+    .trim();
+  const invoiceDate = cleanCapturedValue(
+    normalized.match(/\bDATE\b\s*[:\-]?\s*((?:0?[1-9]|1[0-2])\/(?:0?[1-9]|[12]\d|3[01])\/\d{4})/i)?.[1] || "",
+  );
+  const amount =
+    cleanCapturedValue(
+      normalized.match(/\bTOTAL DUE\b\s*[:\-]?\s*\$?\s*([0-9][0-9,]*\.\d{2})/i)?.[1] || "",
+    ) ||
+    cleanCapturedValue(
+      normalized.match(/\bINVOICE TOTAL\b\s*[:\-]?\s*\$?\s*([0-9][0-9,]*\.\d{2})/i)?.[1] || "",
+    ) ||
+    cleanCapturedValue(
+      normalized.match(/\bTOTAL\b\s*[:\-]?\s*\$?\s*([0-9][0-9,]*\.\d{2})/i)?.[1] || "",
+    );
+
+  if (!vendorName && !invoiceNumber && !poNumberRaw && !amount) return null;
+
+  return {
+    vendorName,
+    invoiceNumber,
+    invoiceDate,
+    amount,
+    poNumber: poNumberRaw,
+    summary: "Extracted from embedded PDF text using the local fallback parser.",
   };
 }
 
@@ -118,6 +255,15 @@ export async function extractInvoiceMetadata(
     };
   }
 
+  if (mimeType === "application/pdf" || /\.pdf$/i.test(originalName)) {
+    try {
+      const file = await readFile(filePath);
+      const extracted = extractFromText(extractPdfText(file));
+      if (extracted) return extracted;
+    } catch {
+      // Fall through to the filename fallback.
+    }
+  }
+
   return fromFileName(originalName);
 }
-
