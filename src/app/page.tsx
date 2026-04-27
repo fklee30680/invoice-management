@@ -26,6 +26,10 @@ function one(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value || "";
 }
 
+function many(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value.filter(Boolean) : value ? [value] : [];
+}
+
 function statusClass(status: WorkflowStatus) {
   const map: Record<WorkflowStatus, string> = {
     Uploaded: "border-slate-300 bg-slate-50 text-slate-700",
@@ -48,10 +52,11 @@ function departmentName(data: AppData, id: string) {
 function filterInvoices(
   invoices: Invoice[],
   data: AppData,
-  filters: { status: string; department: string; search: string },
+  filters: { statuses: string[]; department: string; search: string },
 ) {
   return invoices.filter((invoice) => {
-    const matchesStatus = !filters.status || invoice.status === filters.status;
+    const matchesStatus =
+      filters.statuses.length === 0 || filters.statuses.includes(invoice.status);
     const matchesDepartment =
       !filters.department || invoice.departmentId === filters.department;
     const haystack = [
@@ -211,28 +216,35 @@ function FilterBar({
   filters,
 }: {
   data: AppData;
-  filters: { status: string; department: string; search: string };
+  filters: { statuses: string[]; department: string; search: string };
 }) {
   return (
-    <form className="grid gap-3 border border-[var(--line)] bg-[var(--panel)] p-4 md:grid-cols-[1fr_220px_220px_auto]">
+    <form className="grid gap-4 border border-[var(--line)] bg-[var(--panel)] p-4 xl:grid-cols-[1fr_2fr_220px_auto]">
       <input
         className="focus-ring min-h-10 border border-[var(--line)] bg-white px-3 text-sm"
         name="search"
         placeholder="Search vendor, PO, invoice, status"
         defaultValue={filters.search}
       />
-      <select
-        className="focus-ring min-h-10 border border-[var(--line)] bg-white px-3 text-sm"
-        name="status"
-        defaultValue={filters.status}
-      >
-        <option value="">All statuses</option>
-        {WORKFLOW_STATUSES.map((status) => (
-          <option key={status} value={status}>
-            {status}
-          </option>
-        ))}
-      </select>
+      <fieldset className="border border-[var(--line)] bg-white px-3 py-2">
+        <legend className="px-1 text-xs font-semibold uppercase text-[var(--muted)]">
+          Status
+        </legend>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {WORKFLOW_STATUSES.map((status) => (
+            <label className="flex items-center gap-2 text-xs font-medium" key={status}>
+              <input
+                className="h-4 w-4 accent-[var(--accent)]"
+                defaultChecked={filters.statuses.includes(status)}
+                name="status"
+                type="checkbox"
+                value={status}
+              />
+              {status}
+            </label>
+          ))}
+        </div>
+      </fieldset>
       <select
         className="focus-ring min-h-10 border border-[var(--line)] bg-white px-3 text-sm"
         name="department"
@@ -506,7 +518,7 @@ export default async function Home({ searchParams }: PageProps) {
   const params = (await searchParams) || {};
   const pageError = one(params.error);
   const filters = {
-    status: one(params.status),
+    statuses: many(params.status),
     department: one(params.department),
     search: one(params.search),
   };
