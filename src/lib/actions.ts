@@ -86,6 +86,13 @@ function fillTemplate(template: string, values: Record<string, string>) {
   });
 }
 
+function setInvoiceStatus(invoice: Invoice, status: string, now = new Date()) {
+  if (invoice.status !== status) {
+    invoice.status = status;
+    invoice.statusDate = now.toISOString().slice(0, 10);
+  }
+}
+
 async function notifyDepartment(invoice: Invoice) {
   await mutateData(async (data) => {
     const storedInvoice = getInvoice(data, invoice.id);
@@ -120,6 +127,8 @@ async function notifyDepartment(invoice: Invoice) {
         link: templateValues.review_link,
       });
       storedInvoice.notificationSentAt = new Date().toISOString();
+      storedInvoice.dateSubmittedToDepartment =
+        storedInvoice.notificationSentAt.slice(0, 10);
       addAudit(data, {
         invoiceId: storedInvoice.id,
         actor: "AP",
@@ -356,6 +365,9 @@ export async function uploadInvoices(formData: FormData) {
           poNumber: extracted.poNumber,
           dateReceived: now.slice(0, 10),
           dateApproved: "",
+          dateUploaded: now.slice(0, 10),
+          dateSubmittedToDepartment: canNotify ? now.slice(0, 10) : "",
+          statusDate: now.slice(0, 10),
           status,
           departmentId,
           departmentDecision: "",
@@ -437,10 +449,15 @@ export async function updateAndRouteInvoice(formData: FormData) {
       : vendorRecord
         ? "Matched"
         : "Not Found";
-    invoice.status = invoice.departmentId
+    const now = new Date();
+    const nextStatus = invoice.departmentId
       ? statusLabelForRole(data, "routed")
       : statusLabelForRole(data, "apReview");
-    invoice.updatedAt = new Date().toISOString();
+    setInvoiceStatus(invoice, nextStatus, now);
+    if (invoice.departmentId) {
+      invoice.dateSubmittedToDepartment = now.toISOString().slice(0, 10);
+    }
+    invoice.updatedAt = now.toISOString();
     updatedInvoice = invoice;
 
     addAudit(data, {
@@ -470,10 +487,6 @@ export async function addDepartment(formData: FormData) {
 
   await mutateData((data) => {
     const department = upsertDepartment(data, name, email);
-    department.departmentHeadName = value(formData, "departmentHeadName");
-    department.departmentHeadEmail = value(formData, "departmentHeadEmail").toLowerCase();
-    department.escalationName = value(formData, "escalationName");
-    department.escalationEmail = value(formData, "escalationEmail").toLowerCase();
     addAudit(data, {
       actor: "AP",
       type: "department_saved",
@@ -496,10 +509,6 @@ export async function updateDepartment(formData: FormData) {
     if (!department) return;
     department.name = name;
     department.email = email;
-    department.departmentHeadName = value(formData, "departmentHeadName");
-    department.departmentHeadEmail = value(formData, "departmentHeadEmail").toLowerCase();
-    department.escalationName = value(formData, "escalationName");
-    department.escalationEmail = value(formData, "escalationEmail").toLowerCase();
     addAudit(data, {
       actor: "AP",
       type: "department_updated",
@@ -511,46 +520,99 @@ export async function updateDepartment(formData: FormData) {
   revalidatePath("/settings");
 }
 
-export async function updateEscalationContacts(formData: FormData) {
+export async function addEscalationContact(formData: FormData) {
+  await requireApUser();
+  const name = value(formData, "name");
+  const email = value(formData, "email").toLowerCase();
+  if (!name || !email) return;
+
   await mutateData((data) => {
-    data.escalationContacts.apSupervisor = {
-      title: value(formData, "apSupervisorTitle") || "AP Supervisor",
-      name: value(formData, "apSupervisorName"),
-      email: value(formData, "apSupervisorEmail").toLowerCase(),
-    };
-    data.escalationContacts.cfo = {
-      title: value(formData, "cfoTitle") || "CFO",
-      name: value(formData, "cfoName"),
-      email: value(formData, "cfoEmail").toLowerCase(),
-    };
-    data.escalationContacts.executive = {
-      title: value(formData, "executiveTitle") || "Organization CEO or Manager",
-      name: value(formData, "executiveName"),
-      email: value(formData, "executiveEmail").toLowerCase(),
-    };
+    const selectedDepartments = formData.getAll("departmentIds").map(String);
+    const allDepartments = selectedDepartments.includes("all");
+    data.escalationContacts.push({
+      id: createId("escalation"),
+      name,
+      email,
+      allDepartments,
+      departmentIds: allDepartments ? [] : selectedDepartments.filter(Boolean),
+      daysToNotify: Math.max(Number(value(formData, "daysToNotify")) || 1, 1),
+    });
     addAudit(data, {
       actor: "AP",
-      type: "escalation_contacts_updated",
-      message: "Updated organization escalation contact setup.",
+      type: "escalation_contact_added",
+      message: `Added escalation contact ${name}.`,
     });
   });
 
-  revalidatePath("/settings/departments");
-  revalidatePath("/settings");
+  revalidatePath("/settings/escalation");
+}
+
+export async function updateEscalationContact(formData: FormData) {
+  await requireApUser();
+  const contactId = value(formData, "contactId");
+  const name = value(formData, "name");
+  const email = value(formData, "email").toLowerCase();
+  if (!contactId || !name || !email) return;
+
+  await mutateData((data) => {
+    const contact = data.escalationContacts.find((item) => item.id === contactId);
+    if (!contact) return;
+    const selectedDepartments = formData.getAll("departmentIds").map(String);
+    const allDepartments = selectedDepartments.includes("all");
+    contact.name = name;
+    contact.email = email;
+    contact.allDepartments = allDepartments;
+    contact.departmentIds = allDepartments
+      ? []
+      : selectedDepartments.filter(Boolean);
+    contact.daysToNotify = Math.max(Number(value(formData, "daysToNotify")) || 1, 1);
+    addAudit(data, {
+      actor: "AP",
+      type: "escalation_contact_updated",
+      message: `Updated escalation contact ${contact.name}.`,
+    });
+  });
+
+  revalidatePath("/settings/escalation");
+}
+
+export async function deleteEscalationContact(formData: FormData) {
+  await requireApUser();
+  const contactId = value(formData, "contactId");
+  if (!contactId) return;
+
+  await mutateData((data) => {
+    data.escalationContacts = data.escalationContacts.filter(
+      (contact) => contact.id !== contactId,
+    );
+    addAudit(data, {
+      actor: "AP",
+      type: "escalation_contact_deleted",
+      message: "Deleted escalation contact.",
+    });
+  });
+
+  revalidatePath("/settings/escalation");
 }
 
 export async function updateNotificationTemplate(formData: FormData) {
   const departmentSubject = value(formData, "departmentSubject");
   const departmentBody = value(formData, "departmentBody");
-  if (!departmentSubject || !departmentBody) return;
+  const escalationSubject = value(formData, "escalationSubject");
+  const escalationBody = value(formData, "escalationBody");
+  if (!departmentSubject || !departmentBody || !escalationSubject || !escalationBody) {
+    return;
+  }
 
   await mutateData((data) => {
     data.notificationTemplate.departmentSubject = departmentSubject;
     data.notificationTemplate.departmentBody = departmentBody;
+    data.notificationTemplate.escalationSubject = escalationSubject;
+    data.notificationTemplate.escalationBody = escalationBody;
     addAudit(data, {
       actor: "AP",
       type: "notification_template_updated",
-      message: "Updated department notification subject and body template.",
+      message: "Updated notification email templates.",
     });
   });
 
@@ -615,6 +677,7 @@ export async function updateInvoiceStatus(formData: FormData) {
       for (const invoice of data.invoices) {
         if (invoice.status === oldLabel) {
           invoice.status = label;
+          invoice.statusDate = new Date().toISOString().slice(0, 10);
           invoice.updatedAt = new Date().toISOString();
         }
       }
@@ -663,6 +726,7 @@ export async function deleteInvoiceStatus(formData: FormData) {
       for (const invoice of data.invoices) {
         if (invoice.status === status.label) {
           invoice.status = replacement.label;
+          invoice.statusDate = new Date().toISOString().slice(0, 10);
           invoice.updatedAt = new Date().toISOString();
         }
       }
@@ -839,7 +903,7 @@ export async function completeInvoice(formData: FormData) {
   await mutateData((data) => {
     const invoice = getInvoice(data, invoiceId);
     if (!invoice) return;
-    invoice.status = statusLabelForRole(data, "completed");
+    setInvoiceStatus(invoice, statusLabelForRole(data, "completed"));
     invoice.dateApproved = invoice.dateApproved || new Date().toISOString().slice(0, 10);
     invoice.paymentProcessed = false;
     invoice.updatedAt = new Date().toISOString();
@@ -952,7 +1016,7 @@ export async function submitDepartmentDecision(formData: FormData) {
     }
 
     if (decision === "Not our Department Invoice") {
-      invoice.status = statusLabelForRole(data, "apRework");
+      setInvoiceStatus(invoice, statusLabelForRole(data, "apRework"), new Date(now));
       invoice.dateApproved = "";
       addAudit(data, {
         invoiceId,
@@ -964,11 +1028,11 @@ export async function submitDepartmentDecision(formData: FormData) {
     }
 
     if (decision === "Reject") {
-      invoice.status = statusLabelForRole(data, "rejected");
+      setInvoiceStatus(invoice, statusLabelForRole(data, "rejected"), new Date(now));
     } else if (decision === "Hold") {
-      invoice.status = statusLabelForRole(data, "hold");
+      setInvoiceStatus(invoice, statusLabelForRole(data, "hold"), new Date(now));
     } else {
-      invoice.status = statusLabelForRole(data, "completed");
+      setInvoiceStatus(invoice, statusLabelForRole(data, "completed"), new Date(now));
       invoice.paymentProcessed = false;
       invoice.dateApproved = now.slice(0, 10);
     }

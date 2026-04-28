@@ -60,8 +60,6 @@ export default async function DepartmentSettingsPage() {
         <h2 className="text-xl font-semibold">Department Emails</h2>
         <p className="mt-1 max-w-3xl text-sm text-[var(--muted)]">
           Maintain department routing contacts used for invoice notifications.
-          Department-specific escalation contacts are stored here for later
-          overdue invoice reminders.
         </p>
       </div>
 
@@ -70,7 +68,7 @@ export default async function DepartmentSettingsPage() {
         className="space-y-4 border border-[var(--line)] bg-[var(--panel)] p-4"
       >
         <h3 className="font-semibold">Add Department</h3>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-2">
           <TextInput label="Department" name="name" placeholder="Facilities" required />
           <TextInput
             label="Department Email"
@@ -79,14 +77,6 @@ export default async function DepartmentSettingsPage() {
             required
             type="email"
           />
-          <TextInput label="Department Head Name" name="departmentHeadName" />
-          <TextInput
-            label="Department Head Email"
-            name="departmentHeadEmail"
-            type="email"
-          />
-          <TextInput label="Escalation Name" name="escalationName" />
-          <TextInput label="Escalation Email" name="escalationEmail" type="email" />
         </div>
         <div className="flex justify-end">
           <button className="focus-ring bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--accent-strong)]">
@@ -99,7 +89,7 @@ export default async function DepartmentSettingsPage() {
         <div>
           <h3 className="font-semibold">Departments</h3>
           <p className="mt-1 text-sm text-[var(--muted)]">
-            Edit routing, department head, and escalation contacts.
+            Edit department names and routing email addresses.
           </p>
         </div>
         <div className="grid gap-4 xl:grid-cols-2">
@@ -129,28 +119,6 @@ export default async function DepartmentSettingsPage() {
                       name="email"
                       placeholder="required before auto-send"
                       required
-                      type="email"
-                    />
-                    <TextInput
-                      defaultValue={department.departmentHeadName}
-                      label="Department Head Name"
-                      name="departmentHeadName"
-                    />
-                    <TextInput
-                      defaultValue={department.departmentHeadEmail}
-                      label="Department Head Email"
-                      name="departmentHeadEmail"
-                      type="email"
-                    />
-                    <TextInput
-                      defaultValue={department.escalationName}
-                      label="Escalation Name"
-                      name="escalationName"
-                    />
-                    <TextInput
-                      defaultValue={department.escalationEmail}
-                      label="Escalation Email"
-                      name="escalationEmail"
                       type="email"
                     />
                   </div>

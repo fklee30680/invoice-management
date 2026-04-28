@@ -45,27 +45,22 @@ export type Department = {
   id: string;
   name: string;
   email: string;
-  departmentHeadName?: string;
-  departmentHeadEmail?: string;
-  escalationName?: string;
-  escalationEmail?: string;
 };
 
 export type EscalationContact = {
-  title: string;
+  id: string;
   name: string;
   email: string;
-};
-
-export type OrganizationEscalationSettings = {
-  apSupervisor: EscalationContact;
-  cfo: EscalationContact;
-  executive: EscalationContact;
+  allDepartments: boolean;
+  departmentIds: string[];
+  daysToNotify: number;
 };
 
 export type NotificationTemplate = {
   departmentSubject: string;
   departmentBody: string;
+  escalationSubject: string;
+  escalationBody: string;
 };
 
 export type PaymentFileFieldSource =
@@ -78,6 +73,9 @@ export type PaymentFileFieldSource =
   | "departmentDecision"
   | "dateReceived"
   | "dateApproved"
+  | "dateUploaded"
+  | "dateSubmittedToDepartment"
+  | "statusDate"
   | "paymentProcessed";
 
 export type PaymentFileColumn = {
@@ -186,6 +184,9 @@ export type Invoice = {
   poNumber: string;
   dateReceived: string;
   dateApproved: string;
+  dateUploaded: string;
+  dateSubmittedToDepartment: string;
+  statusDate: string;
   status: WorkflowStatus;
   departmentId: string;
   departmentDecision: DepartmentDecision | "";
@@ -210,7 +211,7 @@ export type AppData = {
   paymentFile: PaymentFileSettings;
   branding: BrandingSettings;
   statuses: InvoiceStatusDefinition[];
-  escalationContacts: OrganizationEscalationSettings;
+  escalationContacts: EscalationContact[];
 };
 
 export type InvoiceFilter = {

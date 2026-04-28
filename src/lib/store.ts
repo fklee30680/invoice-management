@@ -9,7 +9,6 @@ import type {
   Invoice,
   InvoiceFile,
   NotificationTemplate,
-  OrganizationEscalationSettings,
   PaymentFileSettings,
   PurchaseOrder,
   User,
@@ -48,6 +47,9 @@ function defaultNotificationTemplate(): NotificationTemplate {
     departmentSubject: "Invoice review needed: {{vendor_name}}",
     departmentBody:
       "A new invoice requires your review.\n\nVendor: {{vendor_name}}\nInvoice Number: {{invoice_number}}\nPO Number: {{po_number}}\nAmount: {{amount}}\nDepartment: {{department_name}}\n\nOpen invoice: {{review_link}}",
+    escalationSubject: "Invoice overdue for review: {{vendor_name}}",
+    escalationBody:
+      "An invoice is still waiting for review.\n\nVendor: {{vendor_name}}\nInvoice Number: {{invoice_number}}\nPO Number: {{po_number}}\nAmount: {{amount}}\nDepartment: {{department_name}}\nDays Waiting: {{days_waiting}}\n\nOpen invoice: {{review_link}}",
   };
 }
 
@@ -68,24 +70,8 @@ function defaultBranding(): BrandingSettings {
   };
 }
 
-function defaultEscalationContacts(): OrganizationEscalationSettings {
-  return {
-    apSupervisor: {
-      title: "AP Supervisor",
-      name: "",
-      email: "",
-    },
-    cfo: {
-      title: "CFO",
-      name: "",
-      email: "",
-    },
-    executive: {
-      title: "Organization CEO or Manager",
-      name: "",
-      email: "",
-    },
-  };
+function defaultEscalationContacts(): AppData["escalationContacts"] {
+  return [];
 }
 
 function defaultPaymentFile(): PaymentFileSettings {
@@ -94,7 +80,6 @@ function defaultPaymentFile(): PaymentFileSettings {
 
 function normalizeData(data: AppData): AppData {
   const defaultBrand = defaultBranding();
-  const defaultEscalations = defaultEscalationContacts();
   const defaultStatusList = defaultStatuses();
   const invoices = (data.invoices || []).map((invoice) => {
     const legacyStatus = String(invoice.status);
@@ -102,6 +87,11 @@ function normalizeData(data: AppData): AppData {
       ...invoice,
       vendorValidationStatus: invoice.vendorValidationStatus || "Not Checked",
       paymentProcessed: invoice.paymentProcessed === true,
+      dateUploaded:
+        invoice.dateUploaded || invoice.createdAt?.slice(0, 10) || invoice.dateReceived || "",
+      dateSubmittedToDepartment:
+        invoice.dateSubmittedToDepartment || invoice.notificationSentAt?.slice(0, 10) || "",
+      statusDate: invoice.statusDate || invoice.updatedAt?.slice(0, 10) || "",
     };
     if (legacyStatus === "OCR Processing") {
       return { ...normalizedInvoice, status: "Needs AP Review" as const };
@@ -116,13 +106,7 @@ function normalizeData(data: AppData): AppData {
   return {
     ...data,
     invoices,
-    departments: (data.departments || []).map((department) => ({
-      ...department,
-      departmentHeadName: department.departmentHeadName || "",
-      departmentHeadEmail: department.departmentHeadEmail || "",
-      escalationName: department.escalationName || "",
-      escalationEmail: department.escalationEmail || "",
-    })),
+    departments: data.departments || [],
     vendors: (data.vendors || []).map((vendor) => ({
       ...vendor,
       vendorName: vendor.vendorName || "",
@@ -133,7 +117,10 @@ function normalizeData(data: AppData): AppData {
       active: vendor.active !== false,
       uploadedAt: vendor.uploadedAt || new Date().toISOString(),
     })),
-    notificationTemplate: data.notificationTemplate || defaultNotificationTemplate(),
+    notificationTemplate: {
+      ...defaultNotificationTemplate(),
+      ...(data.notificationTemplate || {}),
+    },
     paymentFile: normalizePaymentFileSettings(data.paymentFile || defaultPaymentFile()),
     branding: {
       ...defaultBrand,
@@ -141,21 +128,39 @@ function normalizeData(data: AppData): AppData {
       logo: data.branding?.logo || null,
     },
     statuses,
-    escalationContacts: {
-      apSupervisor: {
-        ...defaultEscalations.apSupervisor,
-        ...(data.escalationContacts?.apSupervisor || {}),
-      },
-      cfo: {
-        ...defaultEscalations.cfo,
-        ...(data.escalationContacts?.cfo || {}),
-      },
-      executive: {
-        ...defaultEscalations.executive,
-        ...(data.escalationContacts?.executive || {}),
-      },
-    },
+    escalationContacts: normalizeEscalationContacts(data.escalationContacts),
   };
+}
+
+function normalizeEscalationContacts(
+  contacts: AppData["escalationContacts"] | Record<string, unknown> | undefined,
+): AppData["escalationContacts"] {
+  if (Array.isArray(contacts)) {
+    return contacts.map((contact) => ({
+      id: contact.id || createId("escalation"),
+      name: contact.name || "",
+      email: contact.email || "",
+      allDepartments: contact.allDepartments !== false,
+      departmentIds: contact.allDepartments === false ? contact.departmentIds || [] : [],
+      daysToNotify: Number(contact.daysToNotify) || 1,
+    }));
+  }
+
+  if (contacts && typeof contacts === "object") {
+    return Object.values(contacts)
+      .map((contact) => contact as { name?: string; email?: string; title?: string })
+      .filter((contact) => contact.name || contact.email)
+      .map((contact) => ({
+        id: createId("escalation"),
+        name: contact.name || contact.title || "",
+        email: contact.email || "",
+        allDepartments: true,
+        departmentIds: [],
+        daysToNotify: 1,
+      }));
+  }
+
+  return defaultEscalationContacts();
 }
 
 function mergeStatuses(
@@ -411,10 +416,6 @@ export function upsertDepartment(data: AppData, name: string, email = "") {
     id: `dept-${slugify(name) || createId("department")}`,
     name: name.trim(),
     email: email.trim().toLowerCase(),
-    departmentHeadName: "",
-    departmentHeadEmail: "",
-    escalationName: "",
-    escalationEmail: "",
   };
   data.departments.push(department);
   return department;

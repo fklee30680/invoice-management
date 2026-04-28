@@ -20,6 +20,9 @@ export const PAYMENT_FILE_FIELD_OPTIONS: {
   { source: "departmentDecision", label: "Department Decision" },
   { source: "dateReceived", label: "Date Received" },
   { source: "dateApproved", label: "Date Approved" },
+  { source: "dateUploaded", label: "Date Uploaded" },
+  { source: "dateSubmittedToDepartment", label: "Date Submitted To Department" },
+  { source: "statusDate", label: "Status Date" },
   { source: "paymentProcessed", label: "Payment Processed" },
 ];
 
@@ -124,6 +127,12 @@ function valueForColumn(invoice: Invoice, column: PaymentFileColumn, data: AppDa
       return formatDate(invoice.dateReceived);
     case "dateApproved":
       return formatDate(invoice.dateApproved);
+    case "dateUploaded":
+      return formatDate(invoice.dateUploaded);
+    case "dateSubmittedToDepartment":
+      return formatDate(invoice.dateSubmittedToDepartment);
+    case "statusDate":
+      return formatDate(invoice.statusDate);
     case "paymentProcessed":
       return invoice.paymentProcessed ? "Processed" : "Not processed";
   }

@@ -156,6 +156,9 @@ export function InvoiceTable({ data, invoices }: { data: AppData; invoices: Invo
                 >
                   {invoice.status}
                 </span>
+                <div className="mt-1 text-xs text-[var(--muted)]">
+                  {formatDate(invoice.statusDate)}
+                </div>
               </td>
               <td className="border-b border-[var(--line)] px-3 py-3 font-medium">
                 {invoice.vendorName || "Unknown Vendor"}

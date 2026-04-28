@@ -6,7 +6,7 @@ import type { BrandingSettings, User } from "@/lib/types";
 import { TopMenuDropdown } from "./top-menu-dropdown";
 
 const setupLinks = [
-  { href: "/settings/email", label: "Email Template" },
+  { href: "/settings/email", label: "Email Templates" },
   { href: "/settings/departments", label: "Department Emails" },
   { href: "/settings/escalation", label: "Escalation Emails" },
   { href: "/settings/statuses", label: "Statuses" },

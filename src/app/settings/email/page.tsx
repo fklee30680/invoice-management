@@ -10,10 +10,9 @@ export default async function EmailSettingsPage() {
   return (
     <section className="space-y-4">
       <div>
-        <h2 className="text-xl font-semibold">Email Template</h2>
+        <h2 className="text-xl font-semibold">Email Templates</h2>
         <p className="mt-1 max-w-3xl text-sm text-[var(--muted)]">
-          Configure the department notification that is sent when an invoice is
-          routed for review.
+          Configure department and escalation notification emails.
         </p>
       </div>
 
@@ -23,10 +22,12 @@ export default async function EmailSettingsPage() {
       >
         <div className="border border-[var(--line)] bg-white px-3 py-2 text-sm text-[var(--muted)]">
           Available placeholders: {"{{vendor_name}}"}, {"{{invoice_number}}"},
-          {"{{po_number}}"}, {"{{amount}}"}, {"{{department_name}}"}, {"{{review_link}}"}
+          {"{{po_number}}"}, {"{{amount}}"}, {"{{department_name}}"},{" "}
+          {"{{review_link}}"}, {"{{days_waiting}}"}
         </div>
+        <h3 className="font-semibold">Department Review Email</h3>
         <label className="text-xs font-semibold uppercase text-[var(--muted)]">
-          Subject
+          Department Subject
           <input
             className="focus-ring mt-1 min-h-10 w-full border border-[var(--line)] bg-white px-3 text-sm font-normal normal-case text-[var(--foreground)]"
             name="departmentSubject"
@@ -35,7 +36,7 @@ export default async function EmailSettingsPage() {
           />
         </label>
         <label className="text-xs font-semibold uppercase text-[var(--muted)]">
-          Body
+          Department Body
           <textarea
             className="focus-ring mt-1 min-h-56 w-full border border-[var(--line)] bg-white px-3 py-2 text-sm font-normal normal-case text-[var(--foreground)]"
             name="departmentBody"
@@ -43,9 +44,30 @@ export default async function EmailSettingsPage() {
             required
           />
         </label>
+        <h3 className="border-t border-[var(--line)] pt-4 font-semibold">
+          Escalation Email
+        </h3>
+        <label className="text-xs font-semibold uppercase text-[var(--muted)]">
+          Escalation Subject
+          <input
+            className="focus-ring mt-1 min-h-10 w-full border border-[var(--line)] bg-white px-3 text-sm font-normal normal-case text-[var(--foreground)]"
+            name="escalationSubject"
+            defaultValue={data.notificationTemplate.escalationSubject}
+            required
+          />
+        </label>
+        <label className="text-xs font-semibold uppercase text-[var(--muted)]">
+          Escalation Body
+          <textarea
+            className="focus-ring mt-1 min-h-56 w-full border border-[var(--line)] bg-white px-3 py-2 text-sm font-normal normal-case text-[var(--foreground)]"
+            name="escalationBody"
+            defaultValue={data.notificationTemplate.escalationBody}
+            required
+          />
+        </label>
         <div className="flex justify-end">
           <button className="focus-ring bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--accent-strong)]">
-            Save Email Template
+            Save Email Templates
           </button>
         </div>
       </form>

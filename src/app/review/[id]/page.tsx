@@ -89,6 +89,12 @@ export default async function ReviewPage({
                 ["Department", department?.name || "Unassigned"],
                 ["Date Received", formatDate(invoice.dateReceived)],
                 ["Date Approved", formatDate(invoice.dateApproved)],
+                ["Date Uploaded", formatDate(invoice.dateUploaded)],
+                [
+                  "Date Submitted To Department",
+                  formatDate(invoice.dateSubmittedToDepartment),
+                ],
+                ["Status Date", formatDate(invoice.statusDate)],
                 ["Payment Processed", invoice.paymentProcessed ? "Yes" : "No"],
               ].map(([label, content]) => (
                 <div className="bg-white p-4" key={label}>
