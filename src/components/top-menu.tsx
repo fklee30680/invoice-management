@@ -3,6 +3,7 @@ import Link from "next/link";
 import { signOut } from "@/lib/auth-actions";
 import { INVOICE_SUMMARY_VIEWS, summaryViewPath } from "@/lib/invoice-views";
 import type { BrandingSettings, User } from "@/lib/types";
+import { TopMenuDropdown } from "./top-menu-dropdown";
 
 const setupLinks = [
   { href: "/settings/email", label: "Email Template" },
@@ -19,28 +20,6 @@ function MenuLink({ href, label }: { href: string; label: string }) {
     >
       {label}
     </Link>
-  );
-}
-
-function MenuGroup({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <details className="relative">
-      <summary className="focus-ring flex min-h-10 cursor-pointer list-none items-center gap-2 border border-transparent px-3 text-sm font-semibold hover:border-[var(--line)] hover:bg-white">
-        {label}
-        <span aria-hidden="true" className="text-[var(--muted)]">
-          v
-        </span>
-      </summary>
-      <div className="absolute left-0 z-20 mt-1 min-w-56 border border-[var(--line)] bg-white py-1 shadow-lg">
-        {children}
-      </div>
-    </details>
   );
 }
 
@@ -77,16 +56,8 @@ export function TopMenu({
           {user?.role === "AP" ? (
             <>
               <MenuLink href="/" label="Dashboard" />
-              <MenuGroup label="Invoices">
-                {invoiceLinks.map((link) => (
-                  <MenuLink href={link.href} key={link.href} label={link.label} />
-                ))}
-              </MenuGroup>
-              <MenuGroup label="Setup">
-                {setupLinks.map((link) => (
-                  <MenuLink href={link.href} key={link.href} label={link.label} />
-                ))}
-              </MenuGroup>
+              <TopMenuDropdown label="Invoices" links={invoiceLinks} />
+              <TopMenuDropdown label="Setup" links={setupLinks} />
               <MenuLink href="/audit" label="Audit Log" />
             </>
           ) : null}
