@@ -30,6 +30,7 @@ export type InvoiceStatusDefinition = {
   showInDepartmentWork: boolean;
   showInCompleted: boolean;
   systemRole?: StatusSystemRole;
+  systemRoles?: StatusSystemRole[];
 };
 
 export type DepartmentDecision =

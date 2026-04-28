@@ -27,7 +27,7 @@ import {
   upsertDepartment,
   upsertPurchaseOrder,
 } from "./store";
-import { STATUS_TONES, statusLabelForRole } from "./status-config";
+import { STATUS_TONES, statusLabelForRole, statusRoles } from "./status-config";
 import type { BrandingLogo, DepartmentDecision, Invoice, StatusTone } from "./types";
 
 function value(formData: FormData, key: string) {
@@ -424,22 +424,14 @@ export async function deleteInvoiceStatus(formData: FormData) {
     const inUseCount = data.invoices.filter(
       (invoice) => invoice.status === status.label,
     ).length;
-    const needsReplacement = Boolean(status.systemRole || inUseCount > 0);
+    const rolesToMove = statusRoles(status);
+    const needsReplacement = Boolean(rolesToMove.length > 0 || inUseCount > 0);
 
     if (needsReplacement && !replacement) {
       addAudit(data, {
         actor: "AP",
         type: "status_delete_blocked",
         message: `Could not delete ${status.label}; choose a replacement status first.`,
-      });
-      return;
-    }
-
-    if (status.systemRole && replacement?.systemRole) {
-      addAudit(data, {
-        actor: "AP",
-        type: "status_delete_blocked",
-        message: `Could not delete ${status.label}; workflow roles can only move to a non-workflow replacement status.`,
       });
       return;
     }
@@ -452,8 +444,11 @@ export async function deleteInvoiceStatus(formData: FormData) {
         }
       }
 
-      if (status.systemRole) {
-        replacement.systemRole = status.systemRole;
+      if (rolesToMove.length > 0) {
+        replacement.systemRoles = Array.from(
+          new Set([...statusRoles(replacement), ...rolesToMove]),
+        );
+        replacement.systemRole = replacement.systemRoles[0];
       }
     }
 

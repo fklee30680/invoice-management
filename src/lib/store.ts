@@ -17,7 +17,7 @@ import {
   getDatabaseConfig,
   reportDatabaseIssue,
 } from "./runtime-config";
-import { defaultStatuses } from "./status-config";
+import { defaultStatuses, statusRoles } from "./status-config";
 import { normalizePoNumber, slugify } from "./utils";
 
 const RUNTIME_ROOT = process.env.VERCEL
@@ -95,18 +95,31 @@ function mergeStatuses(
   invoices: AppData["invoices"],
 ) {
   const byRole = new Map(
-    configuredStatuses
-      .filter((status) => status.systemRole)
-      .map((status) => [status.systemRole, status]),
+    configuredStatuses.flatMap((status) =>
+      statusRoles(status).map((role) => [role, status] as const),
+    ),
   );
   const byLabel = new Map(configuredStatuses.map((status) => [status.label, status]));
-  const statuses = defaultStatusList.map((defaultStatus) => ({
-    ...defaultStatus,
-    ...(defaultStatus.systemRole ? byRole.get(defaultStatus.systemRole) : undefined),
-  }));
+  const statuses: AppData["statuses"] = [];
+
+  for (const defaultStatus of defaultStatusList) {
+    const configured = defaultStatus.systemRole
+      ? byRole.get(defaultStatus.systemRole)
+      : undefined;
+    const candidate = { ...defaultStatus, ...configured };
+    if (!statuses.some((status) => status.id === candidate.id)) {
+      statuses.push(candidate);
+    }
+  }
 
   for (const status of configuredStatuses) {
-    if (status.systemRole && statuses.some((item) => item.systemRole === status.systemRole)) {
+    const roles = statusRoles(status);
+    if (
+      roles.length > 0 &&
+      statuses.some((item) =>
+        statusRoles(item).some((role) => roles.includes(role)),
+      )
+    ) {
       continue;
     }
     if (!statuses.some((item) => item.id === status.id || item.label === status.label)) {

@@ -3,7 +3,11 @@ import {
   deleteInvoiceStatus,
   updateInvoiceStatus,
 } from "@/lib/actions";
-import { STATUS_TONES, STATUS_TONE_CLASSES } from "@/lib/status-config";
+import {
+  STATUS_TONES,
+  STATUS_TONE_CLASSES,
+  statusRoleLabel,
+} from "@/lib/status-config";
 import { readData } from "@/lib/store";
 
 export const runtime = "nodejs";
@@ -51,8 +55,8 @@ export default async function StatusSettingsPage() {
         </p>
         <p className="mt-2 max-w-3xl text-sm text-[var(--muted)]">
           Statuses used by invoices or workflow routing can be deleted after you
-          choose a replacement status. Workflow roles can move only to a custom
-          status that is not already assigned to another workflow role.
+          choose a replacement status. Any workflow behavior assigned to the
+          deleted status will move to the replacement.
         </p>
       </div>
 
@@ -98,7 +102,14 @@ export default async function StatusSettingsPage() {
       </form>
 
       <section className="overflow-x-auto border border-[var(--line)] bg-[var(--panel)]">
-        <table className="w-full min-w-[1200px] border-collapse text-left text-sm">
+        <table className="w-full min-w-[980px] table-fixed border-collapse text-left text-sm">
+          <colgroup>
+            <col className="w-[24%]" />
+            <col className="w-[18%]" />
+            <col className="w-[30%]" />
+            <col className="w-[8%]" />
+            <col className="w-[20%]" />
+          </colgroup>
           <thead className="bg-[var(--panel-strong)] text-xs uppercase text-[var(--muted)]">
             <tr>
               <th className="border-b border-[var(--line)] px-3 py-3">Status</th>
@@ -115,12 +126,11 @@ export default async function StatusSettingsPage() {
               const formId = `status-${status.id}`;
               const deleteFormId = `delete-${status.id}`;
               const count = usageCount(status.label, data);
-              const replacementOptions = data.statuses.filter((candidate) => {
-                if (candidate.id === status.id) return false;
-                if (status.systemRole && candidate.systemRole) return false;
-                return true;
-              });
-              const needsReplacement = Boolean(status.systemRole || count > 0);
+              const roleLabel = statusRoleLabel(status);
+              const replacementOptions = data.statuses.filter(
+                (candidate) => candidate.id !== status.id,
+              );
+              const needsReplacement = Boolean(roleLabel || count > 0);
               const canDelete = !needsReplacement || replacementOptions.length > 0;
 
               return (
@@ -134,9 +144,9 @@ export default async function StatusSettingsPage() {
                         defaultValue={status.label}
                         required
                       />
-                      {status.systemRole ? (
-                        <div className="mt-1 text-xs text-[var(--muted)]">
-                          Workflow status: {status.systemRole}
+                      {roleLabel ? (
+                        <div className="mt-1 break-words text-xs text-[var(--muted)]">
+                          Workflow: {roleLabel}
                         </div>
                       ) : null}
                     </form>
@@ -155,7 +165,7 @@ export default async function StatusSettingsPage() {
                       ))}
                     </select>
                     <span
-                      className={`mt-2 inline-flex border px-2 py-1 text-xs font-semibold ${STATUS_TONE_CLASSES[status.tone]}`}
+                      className={`mt-2 inline-flex max-w-full break-words border px-2 py-1 text-xs font-semibold ${STATUS_TONE_CLASSES[status.tone]}`}
                     >
                       {status.label}
                     </span>
@@ -232,7 +242,7 @@ export default async function StatusSettingsPage() {
                     </div>
                     {!canDelete ? (
                       <div className="mt-2 text-xs text-[var(--muted)]">
-                        Add a custom replacement status before deleting this workflow status.
+                        Add another status before deleting this one.
                       </div>
                     ) : needsReplacement ? (
                       <div className="mt-2 text-xs text-[var(--muted)]">

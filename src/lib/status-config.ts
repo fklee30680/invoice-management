@@ -104,7 +104,7 @@ export function defaultStatuses(): InvoiceStatusDefinition[] {
 }
 
 export function getStatusByRole(data: AppData, role: StatusSystemRole) {
-  return data.statuses.find((status) => status.systemRole === role);
+  return data.statuses.find((status) => statusRoles(status).includes(role));
 }
 
 export function statusLabelForRole(data: AppData, role: StatusSystemRole) {
@@ -137,4 +137,18 @@ export function statusesForCompleted(data: AppData) {
   return data.statuses
     .filter((status) => status.showInCompleted)
     .map((status) => status.label);
+}
+
+export function statusRoles(status: InvoiceStatusDefinition) {
+  return Array.from(
+    new Set([
+      ...(status.systemRoles || []),
+      ...(status.systemRole ? [status.systemRole] : []),
+    ]),
+  );
+}
+
+export function statusRoleLabel(status: InvoiceStatusDefinition) {
+  const roles = statusRoles(status);
+  return roles.length ? roles.join(", ") : "";
 }
