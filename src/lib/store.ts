@@ -92,6 +92,7 @@ function normalizeData(data: AppData): AppData {
     const normalizedInvoice = {
       ...invoice,
       vendorValidationStatus: invoice.vendorValidationStatus || "Not Checked",
+      paymentProcessed: invoice.paymentProcessed === true,
     };
     if (legacyStatus === "OCR Processing") {
       return { ...normalizedInvoice, status: "Needs AP Review" as const };

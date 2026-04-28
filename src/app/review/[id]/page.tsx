@@ -1,7 +1,10 @@
 import Link from "next/link";
 import Image from "next/image";
 import { notFound, redirect } from "next/navigation";
-import { submitDepartmentDecision } from "@/lib/actions";
+import {
+  submitDepartmentDecision,
+  updateInvoicePaymentProcessed,
+} from "@/lib/actions";
 import { DEPARTMENT_DECISIONS } from "@/lib/constants";
 import { canAccessInvoice, requireUser } from "@/lib/session";
 import { statusBadgeClass } from "@/lib/status-config";
@@ -86,6 +89,7 @@ export default async function ReviewPage({
                 ["Department", department?.name || "Unassigned"],
                 ["Date Received", formatDate(invoice.dateReceived)],
                 ["Date Approved", formatDate(invoice.dateApproved)],
+                ["Payment Processed", invoice.paymentProcessed ? "Yes" : "No"],
               ].map(([label, content]) => (
                 <div className="bg-white p-4" key={label}>
                   <dt className="text-xs font-semibold uppercase text-[var(--muted)]">
@@ -113,6 +117,33 @@ export default async function ReviewPage({
                 Download Invoice
               </Link>
             </div>
+
+            {user.role === "AP" ? (
+              <form
+                action={updateInvoicePaymentProcessed}
+                className="border border-[var(--line)] bg-[var(--panel)] p-4"
+              >
+                <input name="invoiceId" type="hidden" value={invoice.id} />
+                <h2 className="font-semibold">Payment Processing</h2>
+                <label className="mt-4 flex items-start gap-3 text-sm">
+                  <input
+                    className="mt-1 h-4 w-4 accent-[var(--accent)]"
+                    defaultChecked={invoice.paymentProcessed}
+                    name="paymentProcessed"
+                    type="checkbox"
+                  />
+                  <span>
+                    <span className="block font-semibold">Payment processed</span>
+                    <span className="text-[var(--muted)]">
+                      Checked invoices are removed from the manual payment queue.
+                    </span>
+                  </span>
+                </label>
+                <button className="focus-ring mt-4 w-full border border-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent)] hover:bg-teal-50">
+                  Save Payment Status
+                </button>
+              </form>
+            ) : null}
 
             <form
               action={submitDepartmentDecision}

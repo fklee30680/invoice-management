@@ -14,6 +14,7 @@ import {
 } from "./file-storage";
 import { extractInvoiceMetadata } from "./ocr";
 import { parsePoUpload } from "./po-parser";
+import { requireApUser } from "./session";
 import { parseVendorUpload } from "./vendor-parser";
 import {
   addAudit,
@@ -242,6 +243,7 @@ export async function uploadInvoices(formData: FormData) {
           status,
           departmentId,
           departmentDecision: "",
+          paymentProcessed: false,
           comments: [],
           fileId,
           notificationSentAt: "",
@@ -723,6 +725,7 @@ export async function completeInvoice(formData: FormData) {
     if (!invoice) return;
     invoice.status = statusLabelForRole(data, "completed");
     invoice.dateApproved = invoice.dateApproved || new Date().toISOString().slice(0, 10);
+    invoice.paymentProcessed = false;
     invoice.updatedAt = new Date().toISOString();
     addAudit(data, {
       invoiceId,
@@ -733,6 +736,32 @@ export async function completeInvoice(formData: FormData) {
   });
 
   revalidatePath("/");
+  revalidatePath(`/review/${invoiceId}`);
+}
+
+export async function updateInvoicePaymentProcessed(formData: FormData) {
+  await requireApUser();
+  const invoiceId = value(formData, "invoiceId");
+  const paymentProcessed = checkbox(formData, "paymentProcessed");
+  if (!invoiceId) return;
+
+  await mutateData((data) => {
+    const invoice = getInvoice(data, invoiceId);
+    if (!invoice) return;
+    invoice.paymentProcessed = paymentProcessed;
+    invoice.updatedAt = new Date().toISOString();
+    addAudit(data, {
+      invoiceId,
+      actor: "AP",
+      type: "payment_processed_updated",
+      message: paymentProcessed
+        ? "AP marked payment processed."
+        : "AP marked payment not processed.",
+    });
+  });
+
+  revalidatePath("/");
+  revalidatePath("/invoices", "layout");
   revalidatePath(`/review/${invoiceId}`);
 }
 
@@ -824,6 +853,7 @@ export async function submitDepartmentDecision(formData: FormData) {
       invoice.status = statusLabelForRole(data, "hold");
     } else {
       invoice.status = statusLabelForRole(data, "completed");
+      invoice.paymentProcessed = false;
       invoice.dateApproved = now.slice(0, 10);
     }
 

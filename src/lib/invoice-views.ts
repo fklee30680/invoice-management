@@ -5,7 +5,8 @@ export type InvoiceSummaryView =
   | "total"
   | "needs-ap-work"
   | "with-departments"
-  | "completed";
+  | "completed"
+  | "manual-payment";
 
 export const INVOICE_SUMMARY_VIEWS: Record<
   InvoiceSummaryView,
@@ -26,6 +27,10 @@ export const INVOICE_SUMMARY_VIEWS: Record<
   completed: {
     label: "Completed",
     description: "Invoices marked approved and completed.",
+  },
+  "manual-payment": {
+    label: "Invoices to be paid manually",
+    description: "Completed invoices that have not been marked payment processed.",
   },
 };
 
@@ -50,6 +55,13 @@ export function invoicesForSummaryView(
   if (view === "completed") {
     const statuses = data ? statusesForCompleted(data) : ["Approved/Completed"];
     return invoices.filter((invoice) => statuses.includes(invoice.status));
+  }
+
+  if (view === "manual-payment") {
+    const statuses = data ? statusesForCompleted(data) : ["Approved/Completed"];
+    return invoices.filter(
+      (invoice) => statuses.includes(invoice.status) && !invoice.paymentProcessed,
+    );
   }
 
   return invoices;

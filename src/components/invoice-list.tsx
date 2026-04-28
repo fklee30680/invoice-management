@@ -39,6 +39,7 @@ export function filterInvoices(
       invoice.amount,
       departmentName(data, invoice.departmentId),
       invoice.departmentDecision,
+      invoice.paymentProcessed ? "payment processed" : "payment not processed",
       invoice.status,
     ]
       .join(" ")
@@ -141,6 +142,7 @@ export function InvoiceTable({ data, invoices }: { data: AppData; invoices: Invo
             <th className="border-b border-[var(--line)] px-3 py-3">Amount</th>
             <th className="border-b border-[var(--line)] px-3 py-3">Department</th>
             <th className="border-b border-[var(--line)] px-3 py-3">Decision</th>
+            <th className="border-b border-[var(--line)] px-3 py-3">Payment</th>
             <th className="border-b border-[var(--line)] px-3 py-3">Received</th>
             <th className="border-b border-[var(--line)] px-3 py-3">Actions</th>
           </tr>
@@ -183,6 +185,9 @@ export function InvoiceTable({ data, invoices }: { data: AppData; invoices: Invo
                 {invoice.departmentDecision || "Waiting"}
               </td>
               <td className="border-b border-[var(--line)] px-3 py-3">
+                {invoice.paymentProcessed ? "Processed" : "Not processed"}
+              </td>
+              <td className="border-b border-[var(--line)] px-3 py-3">
                 {formatDate(invoice.dateReceived)}
               </td>
               <td className="border-b border-[var(--line)] px-3 py-3">
@@ -211,7 +216,7 @@ export function InvoiceTable({ data, invoices }: { data: AppData; invoices: Invo
           ))}
           {invoices.length === 0 ? (
             <tr>
-              <td className="px-3 py-8 text-center text-[var(--muted)]" colSpan={9}>
+              <td className="px-3 py-8 text-center text-[var(--muted)]" colSpan={10}>
                 No invoices match the current view.
               </td>
             </tr>

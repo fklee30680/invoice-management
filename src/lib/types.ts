@@ -166,6 +166,7 @@ export type Invoice = {
   status: WorkflowStatus;
   departmentId: string;
   departmentDecision: DepartmentDecision | "";
+  paymentProcessed: boolean;
   comments: InvoiceComment[];
   fileId: string;
   notificationSentAt: string;

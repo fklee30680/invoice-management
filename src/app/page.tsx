@@ -218,6 +218,7 @@ export default async function Home({ searchParams }: PageProps) {
     "needs-ap-work",
     "with-departments",
     "completed",
+    "manual-payment",
   ];
 
   return (
@@ -252,7 +253,7 @@ export default async function Home({ searchParams }: PageProps) {
           </div>
         </header>
 
-        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           {metricViews.map((view) => (
             <Metric
               href={summaryViewPath(view)}
@@ -264,7 +265,9 @@ export default async function Home({ searchParams }: PageProps) {
                     ? "Needs AP work"
                     : view === "with-departments"
                       ? "With departments"
-                      : "Completed"
+                      : view === "completed"
+                        ? "Completed"
+                        : "Invoices to be paid manually"
               }
               value={invoicesForSummaryView(data.invoices, view, data).length}
             />
