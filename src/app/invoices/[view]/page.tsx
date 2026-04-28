@@ -7,6 +7,8 @@ import {
   filterInvoices,
   many,
   one,
+  sortDirection,
+  sortKey,
 } from "@/components/invoice-list";
 import {
   INVOICE_SUMMARY_VIEWS,
@@ -38,6 +40,8 @@ export default async function InvoiceViewPage({
     statuses: many(query.status),
     department: one(query.department),
     search: one(query.search),
+    sort: sortKey(query.sort),
+    direction: sortDirection(query.direction),
   };
   const data = await readData();
   const branding = data.branding;
@@ -134,7 +138,12 @@ export default async function InvoiceViewPage({
           data={data}
           filters={filters}
         />
-        <InvoiceTable data={data} invoices={invoices} />
+        <InvoiceTable
+          baseHref={summaryViewPath(view)}
+          data={data}
+          filters={filters}
+          invoices={invoices}
+        />
       </div>
     </main>
   );

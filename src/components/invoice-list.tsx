@@ -8,7 +8,23 @@ export type InvoiceFilters = {
   statuses: string[];
   department: string;
   search: string;
+  sort: InvoiceSortKey;
+  direction: InvoiceSortDirection;
 };
+
+export type InvoiceSortKey =
+  | ""
+  | "status"
+  | "vendor"
+  | "invoice"
+  | "po"
+  | "amount"
+  | "department"
+  | "decision"
+  | "payment"
+  | "received";
+
+export type InvoiceSortDirection = "asc" | "desc";
 
 export function one(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value || "";
@@ -18,8 +34,60 @@ export function many(value: string | string[] | undefined) {
   return Array.isArray(value) ? value.filter(Boolean) : value ? [value] : [];
 }
 
+export function sortKey(value: string | string[] | undefined): InvoiceSortKey {
+  const key = one(value);
+  return [
+    "status",
+    "vendor",
+    "invoice",
+    "po",
+    "amount",
+    "department",
+    "decision",
+    "payment",
+    "received",
+  ].includes(key)
+    ? (key as InvoiceSortKey)
+    : "";
+}
+
+export function sortDirection(
+  value: string | string[] | undefined,
+): InvoiceSortDirection {
+  return one(value) === "desc" ? "desc" : "asc";
+}
+
 export function departmentName(data: AppData, id: string) {
   return data.departments.find((department) => department.id === id)?.name || "Unassigned";
+}
+
+function amountValue(amount: string) {
+  const parsed = Number(amount.replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function sortValue(invoice: Invoice, data: AppData, key: InvoiceSortKey) {
+  if (key === "status") return invoice.status || "";
+  if (key === "vendor") return invoice.vendorName || "";
+  if (key === "invoice") return invoice.invoiceNumber || "";
+  if (key === "po") return invoice.poNumber || "";
+  if (key === "amount") return amountValue(invoice.amount || "");
+  if (key === "department") return departmentName(data, invoice.departmentId);
+  if (key === "decision") return invoice.departmentDecision || "Waiting";
+  if (key === "payment") return invoice.paymentProcessed ? "Processed" : "Not processed";
+  if (key === "received") return invoice.dateReceived || "";
+  return "";
+}
+
+function compareValues(left: string | number, right: string | number) {
+  if (typeof left === "number" && typeof right === "number") {
+    return left - right;
+  }
+
+  return String(left).localeCompare(String(right), undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
 }
 
 export function filterInvoices(
@@ -27,7 +95,7 @@ export function filterInvoices(
   data: AppData,
   filters: InvoiceFilters,
 ) {
-  return invoices.filter((invoice) => {
+  const filtered = invoices.filter((invoice) => {
     const matchesStatus =
       filters.statuses.length === 0 || filters.statuses.includes(invoice.status);
     const matchesDepartment =
@@ -46,6 +114,66 @@ export function filterInvoices(
       .toLowerCase();
     return matchesStatus && matchesDepartment && haystack.includes(filters.search.toLowerCase());
   });
+
+  if (!filters.sort) return filtered;
+
+  return filtered.slice().sort((left, right) => {
+    const result = compareValues(
+      sortValue(left, data, filters.sort),
+      sortValue(right, data, filters.sort),
+    );
+    return filters.direction === "desc" ? -result : result;
+  });
+}
+
+function sortHref({
+  baseHref,
+  filters,
+  sort,
+}: {
+  baseHref: string;
+  filters: InvoiceFilters;
+  sort: Exclude<InvoiceSortKey, "">;
+}) {
+  const params = new URLSearchParams();
+  if (filters.search) params.set("search", filters.search);
+  if (filters.department) params.set("department", filters.department);
+  filters.statuses.forEach((status) => params.append("status", status));
+  params.set("sort", sort);
+  params.set(
+    "direction",
+    filters.sort === sort && filters.direction === "asc" ? "desc" : "asc",
+  );
+  const query = params.toString();
+  return query ? `${baseHref}?${query}` : baseHref;
+}
+
+function SortHeader({
+  baseHref,
+  filters,
+  label,
+  sort,
+}: {
+  baseHref: string;
+  filters: InvoiceFilters;
+  label: string;
+  sort: Exclude<InvoiceSortKey, "">;
+}) {
+  const isActive = filters.sort === sort;
+  const indicator = isActive ? (filters.direction === "asc" ? " ^" : " v") : "";
+
+  return (
+    <th className="border-b border-[var(--line)] px-3 py-3">
+      <Link
+        className="focus-ring inline-flex items-center font-semibold hover:text-[var(--foreground)]"
+        href={sortHref({ baseHref, filters, sort })}
+        prefetch={false}
+      >
+        {label}
+        <span aria-hidden="true">{indicator}</span>
+      </Link>
+    </th>
+  );
 }
 
 export function FilterBar({
@@ -60,6 +188,8 @@ export function FilterBar({
   const filterKey = [
     filters.search,
     filters.department,
+    filters.sort,
+    filters.direction,
     ...filters.statuses,
   ].join("|");
   const statusOptions = filterableStatuses(data);
@@ -73,6 +203,8 @@ export function FilterBar({
       className="grid gap-4 border border-[var(--line)] bg-[var(--panel)] p-4 xl:grid-cols-[1fr_2fr_220px_auto_auto]"
       key={filterKey || "clear"}
     >
+      <input name="sort" type="hidden" value={filters.sort} />
+      <input name="direction" type="hidden" value={filters.direction} />
       <input
         className="focus-ring min-h-10 border border-[var(--line)] bg-white px-3 text-sm"
         name="search"
@@ -129,21 +261,31 @@ export function FilterBar({
   );
 }
 
-export function InvoiceTable({ data, invoices }: { data: AppData; invoices: Invoice[] }) {
+export function InvoiceTable({
+  baseHref,
+  data,
+  filters,
+  invoices,
+}: {
+  baseHref: string;
+  data: AppData;
+  filters: InvoiceFilters;
+  invoices: Invoice[];
+}) {
   return (
     <div className="overflow-x-auto border border-[var(--line)] bg-[var(--panel)]">
       <table className="w-full min-w-[1100px] border-collapse text-left text-sm">
         <thead className="bg-[var(--panel-strong)] text-xs uppercase text-[var(--muted)]">
           <tr>
-            <th className="border-b border-[var(--line)] px-3 py-3">Status</th>
-            <th className="border-b border-[var(--line)] px-3 py-3">Vendor</th>
-            <th className="border-b border-[var(--line)] px-3 py-3">Invoice</th>
-            <th className="border-b border-[var(--line)] px-3 py-3">PO</th>
-            <th className="border-b border-[var(--line)] px-3 py-3">Amount</th>
-            <th className="border-b border-[var(--line)] px-3 py-3">Department</th>
-            <th className="border-b border-[var(--line)] px-3 py-3">Decision</th>
-            <th className="border-b border-[var(--line)] px-3 py-3">Payment</th>
-            <th className="border-b border-[var(--line)] px-3 py-3">Received</th>
+            <SortHeader baseHref={baseHref} filters={filters} label="Status" sort="status" />
+            <SortHeader baseHref={baseHref} filters={filters} label="Vendor" sort="vendor" />
+            <SortHeader baseHref={baseHref} filters={filters} label="Invoice" sort="invoice" />
+            <SortHeader baseHref={baseHref} filters={filters} label="PO" sort="po" />
+            <SortHeader baseHref={baseHref} filters={filters} label="Amount" sort="amount" />
+            <SortHeader baseHref={baseHref} filters={filters} label="Department" sort="department" />
+            <SortHeader baseHref={baseHref} filters={filters} label="Decision" sort="decision" />
+            <SortHeader baseHref={baseHref} filters={filters} label="Payment" sort="payment" />
+            <SortHeader baseHref={baseHref} filters={filters} label="Received" sort="received" />
             <th className="border-b border-[var(--line)] px-3 py-3">Actions</th>
           </tr>
         </thead>
