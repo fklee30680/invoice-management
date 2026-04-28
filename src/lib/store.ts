@@ -12,6 +12,7 @@ import type {
   OrganizationEscalationSettings,
   PurchaseOrder,
   User,
+  Vendor,
 } from "./types";
 import {
   clearDatabaseIssue,
@@ -19,7 +20,7 @@ import {
   reportDatabaseIssue,
 } from "./runtime-config";
 import { defaultStatuses, statusRoles } from "./status-config";
-import { normalizePoNumber, slugify } from "./utils";
+import { normalizePoNumber, normalizeVendorName, slugify } from "./utils";
 
 const RUNTIME_ROOT = process.env.VERCEL
   ? path.join("/tmp", "invoice-management")
@@ -88,13 +89,17 @@ function normalizeData(data: AppData): AppData {
   const defaultStatusList = defaultStatuses();
   const invoices = (data.invoices || []).map((invoice) => {
     const legacyStatus = String(invoice.status);
+    const normalizedInvoice = {
+      ...invoice,
+      vendorValidationStatus: invoice.vendorValidationStatus || "Not Checked",
+    };
     if (legacyStatus === "OCR Processing") {
-      return { ...invoice, status: "Needs AP Review" as const };
+      return { ...normalizedInvoice, status: "Needs AP Review" as const };
     }
     if (legacyStatus === "Decision Received") {
-      return { ...invoice, status: "Approved/Completed" as const };
+      return { ...normalizedInvoice, status: "Approved/Completed" as const };
     }
-    return invoice;
+    return normalizedInvoice;
   });
   const statuses = mergeStatuses(defaultStatusList, data.statuses || [], invoices);
 
@@ -107,6 +112,16 @@ function normalizeData(data: AppData): AppData {
       departmentHeadEmail: department.departmentHeadEmail || "",
       escalationName: department.escalationName || "",
       escalationEmail: department.escalationEmail || "",
+    })),
+    vendors: (data.vendors || []).map((vendor) => ({
+      ...vendor,
+      vendorName: vendor.vendorName || "",
+      normalizedVendorName:
+        vendor.normalizedVendorName || normalizeVendorName(vendor.vendorName || ""),
+      vendorNumber: vendor.vendorNumber || "",
+      email: vendor.email || "",
+      active: vendor.active !== false,
+      uploadedAt: vendor.uploadedAt || new Date().toISOString(),
     })),
     notificationTemplate: data.notificationTemplate || defaultNotificationTemplate(),
     branding: {
@@ -286,6 +301,7 @@ function seedData(): AppData {
     departments,
     users,
     purchaseOrders,
+    vendors: [],
     invoices: [],
     invoiceFiles: [],
     auditEvents: [
@@ -427,6 +443,50 @@ export function findPurchaseOrder(data: AppData, poNumber: string) {
   const normalized = normalizePoNumber(poNumber);
   if (!normalized) return undefined;
   return data.purchaseOrders.find((po) => po.normalizedPoNumber === normalized);
+}
+
+export function upsertVendor(
+  data: AppData,
+  vendorName: string,
+  vendorNumber = "",
+  email = "",
+  active = true,
+) {
+  const normalizedVendorName = normalizeVendorName(vendorName);
+  if (!normalizedVendorName) return undefined;
+
+  const existing = data.vendors.find(
+    (vendor) => vendor.normalizedVendorName === normalizedVendorName,
+  );
+
+  if (existing) {
+    existing.vendorName = vendorName.trim();
+    existing.vendorNumber = vendorNumber.trim();
+    existing.email = email.trim().toLowerCase();
+    existing.active = active;
+    existing.uploadedAt = new Date().toISOString();
+    return existing;
+  }
+
+  const vendor: Vendor = {
+    id: createId("vendor"),
+    vendorName: vendorName.trim(),
+    normalizedVendorName,
+    vendorNumber: vendorNumber.trim(),
+    email: email.trim().toLowerCase(),
+    active,
+    uploadedAt: new Date().toISOString(),
+  };
+  data.vendors.push(vendor);
+  return vendor;
+}
+
+export function findVendorByName(data: AppData, vendorName: string) {
+  const normalized = normalizeVendorName(vendorName);
+  if (!normalized) return undefined;
+  return data.vendors.find(
+    (vendor) => vendor.active && vendor.normalizedVendorName === normalized,
+  );
 }
 
 export function getInvoiceFile(data: AppData, fileId: string) {

@@ -14,6 +14,11 @@ const setupLinks = [
   { href: "/settings/environment", label: "Environment" },
 ];
 
+const uploadLinks = [
+  { href: "/uploads/vendors", label: "Vendor File" },
+  { href: "/uploads/po-list", label: "PO List Update" },
+];
+
 function MenuLink({ href, label }: { href: string; label: string }) {
   return (
     <Link
@@ -59,6 +64,7 @@ export function TopMenu({
             <>
               <MenuLink href="/" label="Dashboard" />
               <TopMenuDropdown label="Invoices" links={invoiceLinks} />
+              <TopMenuDropdown label="Uploads" links={uploadLinks} />
               <TopMenuDropdown label="Setup" links={setupLinks} />
               <MenuLink href="/audit" label="Audit Log" />
             </>

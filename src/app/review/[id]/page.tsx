@@ -78,6 +78,7 @@ export default async function ReviewPage({
             <dl className="grid gap-px bg-[var(--line)] text-sm sm:grid-cols-2">
               {[
                 ["Vendor Name", invoice.vendorName || "Unknown Vendor"],
+                ["Vendor Record", invoice.vendorValidationStatus || "Not Checked"],
                 ["Invoice Number", invoice.invoiceNumber || "Not set"],
                 ["Invoice Date", formatDate(invoice.invoiceDate)],
                 ["Amount", currencyDisplay(invoice.amount)],

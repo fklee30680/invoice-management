@@ -112,6 +112,16 @@ export type PurchaseOrder = {
   uploadedAt: string;
 };
 
+export type Vendor = {
+  id: string;
+  vendorName: string;
+  normalizedVendorName: string;
+  vendorNumber: string;
+  email: string;
+  active: boolean;
+  uploadedAt: string;
+};
+
 export type InvoiceComment = {
   id: string;
   author: string;
@@ -145,6 +155,8 @@ export type AuditEvent = {
 export type Invoice = {
   id: string;
   vendorName: string;
+  vendorRecordId?: string;
+  vendorValidationStatus?: "Matched" | "Not Found" | "Not Checked";
   invoiceNumber: string;
   invoiceDate: string;
   amount: string;
@@ -166,6 +178,7 @@ export type AppData = {
   departments: Department[];
   users: User[];
   purchaseOrders: PurchaseOrder[];
+  vendors: Vendor[];
   invoices: Invoice[];
   invoiceFiles: InvoiceFile[];
   auditEvents: AuditEvent[];

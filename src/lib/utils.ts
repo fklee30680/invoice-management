@@ -26,6 +26,20 @@ export function normalizePoNumber(value: string) {
   return value.trim().toUpperCase();
 }
 
+export function normalizeVendorName(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(
+      /\b(inc|incorporated|llc|ltd|limited|corp|corporation|company|co)\b/g,
+      "",
+    )
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function currencyDisplay(value: string) {
   if (!value) return "Not set";
   const normalized = value.replace(/[$,]/g, "");
@@ -44,4 +58,3 @@ export function slugify(value: string) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
 }
-

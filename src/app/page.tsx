@@ -3,7 +3,6 @@ import Image from "next/image";
 import {
   updateAndRouteInvoice,
   uploadInvoices,
-  uploadPoList,
 } from "@/lib/actions";
 import {
   invoicesForSummaryView,
@@ -48,29 +47,7 @@ function Metric({
 
 function UploadPanel() {
   return (
-    <section className="grid gap-4 lg:grid-cols-2">
-      <form
-        action={uploadPoList}
-        className="border border-[var(--line)] bg-[var(--panel)] p-4"
-      >
-        <h2 className="text-base font-semibold">PO List Upload</h2>
-        <p className="mt-1 text-sm text-[var(--muted)]">
-          Required columns: PO number, vendor, department.
-        </p>
-        <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-          <input
-            className="focus-ring min-h-10 flex-1 border border-[var(--line)] bg-white px-3 py-2 text-sm"
-            name="poFile"
-            type="file"
-            accept=".csv,.xlsx,.xls"
-            required
-          />
-          <button className="focus-ring bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--accent-strong)]">
-            Import PO List
-          </button>
-        </div>
-      </form>
-
+    <section>
       <form
         action={uploadInvoices}
         className="border border-[var(--line)] bg-[var(--panel)] p-4"
@@ -134,6 +111,9 @@ function ApWorkQueue({ data }: { data: AppData }) {
                     {invoice.invoiceNumber || "No invoice number"}
                   </span>
                 </h3>
+                <p className="mt-1 text-xs text-[var(--muted)]">
+                  Vendor record: {invoice.vendorValidationStatus || "Not Checked"}
+                </p>
               </div>
               <Link
                 className="focus-ring border border-[var(--line)] px-3 py-1.5 text-xs font-semibold hover:bg-slate-100"

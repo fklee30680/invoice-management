@@ -158,6 +158,9 @@ export function InvoiceTable({ data, invoices }: { data: AppData; invoices: Invo
               <td className="border-b border-[var(--line)] px-3 py-3 font-medium">
                 {invoice.vendorName || "Unknown Vendor"}
                 <div className="mt-1 text-xs font-normal text-[var(--muted)]">
+                  Vendor record: {invoice.vendorValidationStatus || "Not Checked"}
+                </div>
+                <div className="mt-1 text-xs font-normal text-[var(--muted)]">
                   {invoice.ocrSummary}
                 </div>
               </td>

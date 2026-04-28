@@ -14,17 +14,20 @@ import {
 } from "./file-storage";
 import { extractInvoiceMetadata } from "./ocr";
 import { parsePoUpload } from "./po-parser";
+import { parseVendorUpload } from "./vendor-parser";
 import {
   addAudit,
   addInvoice,
   addInvoiceFile,
   createId,
   findPurchaseOrder,
+  findVendorByName,
   getInvoice,
   getInvoiceFile,
   mutateData,
   upsertDepartment,
   upsertPurchaseOrder,
+  upsertVendor,
 } from "./store";
 import { STATUS_TONES, statusLabelForRole, statusRoles } from "./status-config";
 import type { BrandingLogo, DepartmentDecision, Invoice, StatusTone } from "./types";
@@ -142,6 +145,42 @@ export async function uploadPoList(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/settings");
+  revalidatePath("/uploads/po-list");
+}
+
+export async function uploadVendorList(formData: FormData) {
+  const file = formData.get("vendorFile");
+  if (!(file instanceof File) || file.size === 0) {
+    return;
+  }
+
+  const rows = await parseVendorUpload(file, {
+    headerRow: Math.max(Number(value(formData, "headerRow")) || 1, 1),
+    vendorName: value(formData, "vendorNameColumn") || "Vendor Name",
+    vendorNumber: value(formData, "vendorNumberColumn"),
+    email: value(formData, "vendorEmailColumn"),
+    active: value(formData, "activeColumn"),
+  });
+
+  await mutateData((data) => {
+    for (const row of rows) {
+      upsertVendor(
+        data,
+        row.vendorName,
+        row.vendorNumber,
+        row.email,
+        row.active,
+      );
+    }
+    addAudit(data, {
+      actor: "AP",
+      type: "vendor_upload",
+      message: `Imported ${rows.length} vendor rows from ${file.name}.`,
+    });
+  });
+
+  revalidatePath("/");
+  revalidatePath("/uploads/vendors");
 }
 
 export async function uploadInvoices(formData: FormData) {
@@ -173,6 +212,13 @@ export async function uploadInvoices(formData: FormData) {
 
       await mutateData((data) => {
         const purchaseOrder = findPurchaseOrder(data, extracted.poNumber);
+        const vendorName = extracted.vendorName || purchaseOrder?.vendorName || "";
+        const vendorRecord = purchaseOrder ? undefined : findVendorByName(data, vendorName);
+        const vendorValidationStatus = purchaseOrder
+          ? "Not Checked"
+          : vendorRecord
+            ? "Matched"
+            : "Not Found";
         const departmentId = purchaseOrder?.departmentId || "";
         const department = data.departments.find((item) => item.id === departmentId);
         const canNotify = Boolean(purchaseOrder && department?.email);
@@ -184,7 +230,9 @@ export async function uploadInvoices(formData: FormData) {
 
         const invoice: Invoice = {
           id: invoiceId,
-          vendorName: extracted.vendorName || purchaseOrder?.vendorName || "",
+          vendorName,
+          vendorRecordId: vendorRecord?.id,
+          vendorValidationStatus,
           invoiceNumber: extracted.invoiceNumber,
           invoiceDate: extracted.invoiceDate,
           amount: extracted.amount,
@@ -197,7 +245,9 @@ export async function uploadInvoices(formData: FormData) {
           comments: [],
           fileId,
           notificationSentAt: "",
-          ocrSummary: extracted.summary,
+          ocrSummary: purchaseOrder
+            ? extracted.summary
+            : `${extracted.summary} Vendor record: ${vendorValidationStatus}.`.trim(),
           createdAt: now,
           updatedAt: now,
         };
@@ -219,6 +269,16 @@ export async function uploadInvoices(formData: FormData) {
               ? `Matched ${purchaseOrder.poNumber}, but ${department?.name || "the department"} has no email configured. AP review required.`
               : "No matching PO found; AP review required.",
         });
+        if (!purchaseOrder) {
+          addAudit(data, {
+            invoiceId,
+            actor: "System",
+            type: vendorRecord ? "vendor_matched" : "vendor_missing",
+            message: vendorRecord
+              ? `Vendor matched vendor record: ${vendorRecord.vendorName}.`
+              : "Vendor was not found in the vendor list.",
+          });
+        }
       });
 
       const data = await mutateData((current) => current);
@@ -249,6 +309,16 @@ export async function updateAndRouteInvoice(formData: FormData) {
     invoice.poNumber = value(formData, "poNumber");
     invoice.dateReceived = value(formData, "dateReceived");
     invoice.departmentId = value(formData, "departmentId");
+    const purchaseOrder = findPurchaseOrder(data, invoice.poNumber);
+    const vendorRecord = purchaseOrder
+      ? undefined
+      : findVendorByName(data, invoice.vendorName);
+    invoice.vendorRecordId = vendorRecord?.id;
+    invoice.vendorValidationStatus = purchaseOrder
+      ? "Not Checked"
+      : vendorRecord
+        ? "Matched"
+        : "Not Found";
     invoice.status = invoice.departmentId
       ? statusLabelForRole(data, "routed")
       : statusLabelForRole(data, "apReview");
