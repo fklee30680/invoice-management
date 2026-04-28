@@ -13,6 +13,7 @@ import {
   stageFileForProcessing,
 } from "./file-storage";
 import { extractInvoiceMetadata } from "./ocr";
+import { isPaymentFileFieldSource, sourceLabel } from "./payment-file";
 import { parsePoUpload } from "./po-parser";
 import { requireApUser } from "./session";
 import { parseVendorUpload } from "./vendor-parser";
@@ -30,8 +31,18 @@ import {
   upsertPurchaseOrder,
   upsertVendor,
 } from "./store";
-import { STATUS_TONES, statusLabelForRole, statusRoles } from "./status-config";
-import type { BrandingLogo, DepartmentDecision, Invoice, StatusTone } from "./types";
+import {
+  STATUS_TONES,
+  statusLabelForRole,
+  statusRoles,
+  statusesForCompleted,
+} from "./status-config";
+import type {
+  BrandingLogo,
+  DepartmentDecision,
+  Invoice,
+  StatusTone,
+} from "./types";
 
 function value(formData: FormData, key: string) {
   return String(formData.get(key) || "").trim();
@@ -182,6 +193,111 @@ export async function uploadVendorList(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/uploads/vendors");
+}
+
+export async function updatePaymentFileSettings(formData: FormData) {
+  await requireApUser();
+  const columnIds = formData.getAll("columnId").map((item) => String(item));
+
+  await mutateData((data) => {
+    data.paymentFile.columns = columnIds
+      .map((columnId) => {
+        const source = value(formData, `source-${columnId}`);
+        if (!isPaymentFileFieldSource(source)) return null;
+        return {
+          id: columnId,
+          header: value(formData, `header-${columnId}`) || sourceLabel(source),
+          source,
+          included: checkbox(formData, `included-${columnId}`),
+        };
+      })
+      .filter((column) => column !== null);
+
+    addAudit(data, {
+      actor: "AP",
+      type: "payment_file_updated",
+      message: "Updated payment file column setup.",
+    });
+  });
+
+  revalidatePath("/files/payment-file");
+}
+
+export async function addPaymentFileColumn(formData: FormData) {
+  await requireApUser();
+  const source = value(formData, "source");
+  if (!isPaymentFileFieldSource(source)) return;
+
+  await mutateData((data) => {
+    data.paymentFile.columns.push({
+      id: createId("payment-column"),
+      header: value(formData, "header") || sourceLabel(source),
+      source,
+      included: true,
+    });
+    addAudit(data, {
+      actor: "AP",
+      type: "payment_file_column_added",
+      message: "Added payment file column.",
+    });
+  });
+
+  revalidatePath("/files/payment-file");
+}
+
+export async function deletePaymentFileColumn(formData: FormData) {
+  await requireApUser();
+  const columnId = value(formData, "columnId");
+  if (!columnId) return;
+
+  await mutateData((data) => {
+    data.paymentFile.columns = data.paymentFile.columns.filter(
+      (column) => column.id !== columnId,
+    );
+    addAudit(data, {
+      actor: "AP",
+      type: "payment_file_column_deleted",
+      message: "Deleted payment file column.",
+    });
+  });
+
+  revalidatePath("/files/payment-file");
+}
+
+export async function markManualPaymentInvoicesPaid(formData: FormData) {
+  await requireApUser();
+  const invoiceIds = new Set(
+    formData.getAll("invoiceId").map((item) => String(item)).filter(Boolean),
+  );
+  if (invoiceIds.size === 0) return;
+
+  await mutateData((data) => {
+    let count = 0;
+    const completedStatuses = statusesForCompleted(data);
+    for (const invoice of data.invoices) {
+      if (!invoiceIds.has(invoice.id)) continue;
+      if (!completedStatuses.includes(invoice.status) || invoice.paymentProcessed) {
+        continue;
+      }
+      invoice.paymentProcessed = true;
+      invoice.updatedAt = new Date().toISOString();
+      count += 1;
+      addAudit(data, {
+        invoiceId: invoice.id,
+        actor: "AP",
+        type: "payment_processed_updated",
+        message: "AP marked invoice paid from manual payment list.",
+      });
+    }
+    addAudit(data, {
+      actor: "AP",
+      type: "manual_payment_batch_paid",
+      message: `Marked ${count} manual payment invoices as paid.`,
+    });
+  });
+
+  revalidatePath("/");
+  revalidatePath("/invoices", "layout");
 }
 
 export async function uploadInvoices(formData: FormData) {

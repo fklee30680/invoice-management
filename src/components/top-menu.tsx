@@ -17,6 +17,7 @@ const setupLinks = [
 const uploadLinks = [
   { href: "/uploads/vendors", label: "Vendor File" },
   { href: "/uploads/po-list", label: "PO List Update" },
+  { href: "/files/payment-file", label: "Payment File" },
 ];
 
 function MenuLink({ href, label }: { href: string; label: string }) {
@@ -64,7 +65,7 @@ export function TopMenu({
             <>
               <MenuLink href="/" label="Dashboard" />
               <TopMenuDropdown label="Invoices" links={invoiceLinks} />
-              <TopMenuDropdown label="Uploads" links={uploadLinks} />
+              <TopMenuDropdown label="Files" links={uploadLinks} />
               <TopMenuDropdown label="Setup" links={setupLinks} />
               <MenuLink href="/audit" label="Audit Log" />
             </>

@@ -59,7 +59,7 @@ export default async function VendorUploadPage() {
             ) : null}
             <div>
               <p className="text-sm font-semibold uppercase tracking-normal text-[var(--accent)]">
-                Uploads
+                Files
               </p>
               <h1 className="mt-1 text-3xl font-semibold tracking-normal">
                 Vendor File

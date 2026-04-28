@@ -68,6 +68,29 @@ export type NotificationTemplate = {
   departmentBody: string;
 };
 
+export type PaymentFileFieldSource =
+  | "vendorName"
+  | "invoiceNumber"
+  | "invoiceDate"
+  | "amount"
+  | "poNumber"
+  | "department"
+  | "departmentDecision"
+  | "dateReceived"
+  | "dateApproved"
+  | "paymentProcessed";
+
+export type PaymentFileColumn = {
+  id: string;
+  header: string;
+  source: PaymentFileFieldSource;
+  included: boolean;
+};
+
+export type PaymentFileSettings = {
+  columns: PaymentFileColumn[];
+};
+
 export type BrandingLogo = {
   originalName: string;
   storedName: string;
@@ -184,6 +207,7 @@ export type AppData = {
   invoiceFiles: InvoiceFile[];
   auditEvents: AuditEvent[];
   notificationTemplate: NotificationTemplate;
+  paymentFile: PaymentFileSettings;
   branding: BrandingSettings;
   statuses: InvoiceStatusDefinition[];
   escalationContacts: OrganizationEscalationSettings;

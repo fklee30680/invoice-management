@@ -10,6 +10,7 @@ import type {
   InvoiceFile,
   NotificationTemplate,
   OrganizationEscalationSettings,
+  PaymentFileSettings,
   PurchaseOrder,
   User,
   Vendor,
@@ -19,6 +20,10 @@ import {
   getDatabaseConfig,
   reportDatabaseIssue,
 } from "./runtime-config";
+import {
+  defaultPaymentFileSettings,
+  normalizePaymentFileSettings,
+} from "./payment-file";
 import { defaultStatuses, statusRoles } from "./status-config";
 import { normalizePoNumber, normalizeVendorName, slugify } from "./utils";
 
@@ -83,6 +88,10 @@ function defaultEscalationContacts(): OrganizationEscalationSettings {
   };
 }
 
+function defaultPaymentFile(): PaymentFileSettings {
+  return defaultPaymentFileSettings();
+}
+
 function normalizeData(data: AppData): AppData {
   const defaultBrand = defaultBranding();
   const defaultEscalations = defaultEscalationContacts();
@@ -125,6 +134,7 @@ function normalizeData(data: AppData): AppData {
       uploadedAt: vendor.uploadedAt || new Date().toISOString(),
     })),
     notificationTemplate: data.notificationTemplate || defaultNotificationTemplate(),
+    paymentFile: normalizePaymentFileSettings(data.paymentFile || defaultPaymentFile()),
     branding: {
       ...defaultBrand,
       ...(data.branding || {}),
@@ -315,6 +325,7 @@ function seedData(): AppData {
       },
     ],
     notificationTemplate: defaultNotificationTemplate(),
+    paymentFile: defaultPaymentFile(),
     branding: defaultBranding(),
     statuses: defaultStatuses(),
     escalationContacts: defaultEscalationContacts(),
