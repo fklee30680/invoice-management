@@ -3,7 +3,6 @@ import Image from "next/image";
 import { signOut } from "@/lib/auth-actions";
 import {
   cloneSampleInvoice,
-  completeInvoice,
   deleteInvoice,
   updateAndRouteInvoice,
   uploadInvoices,
@@ -34,11 +33,8 @@ function many(value: string | string[] | undefined) {
 function statusClass(status: WorkflowStatus) {
   const map: Record<WorkflowStatus, string> = {
     Uploaded: "border-slate-300 bg-slate-50 text-slate-700",
-    "OCR Processing": "border-cyan-300 bg-cyan-50 text-cyan-800",
     "Needs AP Review": "border-amber-300 bg-amber-50 text-amber-800",
     Routed: "border-teal-300 bg-teal-50 text-teal-800",
-    "Decision Received": "border-blue-300 bg-blue-50 text-blue-800",
-    "Needs AP Rework": "border-orange-300 bg-orange-50 text-orange-800",
     "Approved/Completed": "border-emerald-300 bg-emerald-50 text-emerald-800",
     Rejected: "border-red-300 bg-red-50 text-red-800",
     Hold: "border-purple-300 bg-purple-50 text-purple-800",
@@ -220,7 +216,7 @@ function FilterBar({
   filters: { statuses: string[]; department: string; search: string };
 }) {
   return (
-    <form className="grid gap-4 border border-[var(--line)] bg-[var(--panel)] p-4 xl:grid-cols-[1fr_2fr_220px_auto]">
+    <form className="grid gap-4 border border-[var(--line)] bg-[var(--panel)] p-4 xl:grid-cols-[1fr_2fr_220px_auto_auto]">
       <input
         className="focus-ring min-h-10 border border-[var(--line)] bg-white px-3 text-sm"
         name="search"
@@ -246,21 +242,30 @@ function FilterBar({
           ))}
         </div>
       </fieldset>
-      <select
-        className="focus-ring min-h-10 border border-[var(--line)] bg-white px-3 text-sm"
-        name="department"
-        defaultValue={filters.department}
-      >
-        <option value="">All departments</option>
-        {data.departments.map((department) => (
-          <option key={department.id} value={department.id}>
-            {department.name}
-          </option>
-        ))}
-      </select>
+      <label className="text-xs font-semibold uppercase text-[var(--muted)]">
+        Department
+        <select
+          className="focus-ring mt-1 min-h-10 w-full border border-[var(--line)] bg-white px-3 text-sm font-normal normal-case text-[var(--foreground)]"
+          name="department"
+          defaultValue={filters.department}
+        >
+          <option value="">All departments</option>
+          {data.departments.map((department) => (
+            <option key={department.id} value={department.id}>
+              {department.name}
+            </option>
+          ))}
+        </select>
+      </label>
       <button className="focus-ring bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700">
         Filter
       </button>
+      <Link
+        className="focus-ring inline-flex items-center justify-center border border-[var(--line)] bg-white px-4 py-2 text-sm font-semibold hover:bg-slate-100"
+        href="/"
+      >
+        Clear Filters
+      </Link>
     </form>
   );
 }
@@ -333,14 +338,6 @@ function InvoiceTable({ data, invoices }: { data: AppData; invoices: Invoice[] }
                   >
                     Download
                   </Link>
-                  {invoice.status === "Decision Received" ? (
-                    <form action={completeInvoice}>
-                      <input type="hidden" name="invoiceId" value={invoice.id} />
-                      <button className="focus-ring border border-emerald-600 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">
-                        Complete
-                      </button>
-                    </form>
-                  ) : null}
                   <form action={deleteInvoice}>
                     <input type="hidden" name="invoiceId" value={invoice.id} />
                     <button className="focus-ring border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50">
@@ -366,7 +363,7 @@ function InvoiceTable({ data, invoices }: { data: AppData; invoices: Invoice[] }
 
 function ApWorkQueue({ data }: { data: AppData }) {
   const queue = data.invoices.filter((invoice) =>
-    ["Needs AP Review", "Needs AP Rework", "Routed"].includes(invoice.status),
+    ["Needs AP Review", "Routed"].includes(invoice.status),
   );
 
   return (
@@ -528,7 +525,7 @@ export default async function Home({ searchParams }: PageProps) {
   const persistenceStatus = getPersistenceStatus();
   const invoices = filterInvoices(data.invoices, data, filters);
   const needsAp = data.invoices.filter((invoice) =>
-    ["Needs AP Review", "Needs AP Rework"].includes(invoice.status),
+    invoice.status === "Needs AP Review",
   ).length;
   const routed = data.invoices.filter((invoice) => invoice.status === "Routed").length;
   const done = data.invoices.filter(

@@ -2,11 +2,8 @@ import type { DepartmentDecision, WorkflowStatus } from "./types";
 
 export const WORKFLOW_STATUSES: WorkflowStatus[] = [
   "Uploaded",
-  "OCR Processing",
   "Needs AP Review",
   "Routed",
-  "Decision Received",
-  "Needs AP Rework",
   "Approved/Completed",
   "Rejected",
   "Hold",
@@ -22,4 +19,3 @@ export const DEPARTMENT_DECISIONS: DepartmentDecision[] = [
 ];
 
 export const AP_USER_ID = "user-ap-admin";
-

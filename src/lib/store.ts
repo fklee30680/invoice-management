@@ -62,8 +62,23 @@ function defaultBranding(): BrandingSettings {
 
 function normalizeData(data: AppData): AppData {
   const defaultBrand = defaultBranding();
+  const invoices = (data.invoices || []).map((invoice) => {
+    const legacyStatus = String(invoice.status);
+    if (legacyStatus === "OCR Processing") {
+      return { ...invoice, status: "Needs AP Review" as const };
+    }
+    if (legacyStatus === "Needs AP Rework") {
+      return { ...invoice, status: "Needs AP Review" as const };
+    }
+    if (legacyStatus === "Decision Received") {
+      return { ...invoice, status: "Approved/Completed" as const };
+    }
+    return invoice;
+  });
+
   return {
     ...data,
+    invoices,
     notificationTemplate: data.notificationTemplate || defaultNotificationTemplate(),
     branding: {
       ...defaultBrand,

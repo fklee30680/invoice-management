@@ -16,11 +16,8 @@ function departmentName(data: AppData, id: string) {
 function statusClass(status: WorkflowStatus) {
   const map: Record<WorkflowStatus, string> = {
     Uploaded: "border-slate-300 bg-slate-50 text-slate-700",
-    "OCR Processing": "border-cyan-300 bg-cyan-50 text-cyan-800",
     "Needs AP Review": "border-amber-300 bg-amber-50 text-amber-800",
     Routed: "border-teal-300 bg-teal-50 text-teal-800",
-    "Decision Received": "border-blue-300 bg-blue-50 text-blue-800",
-    "Needs AP Rework": "border-orange-300 bg-orange-50 text-orange-800",
     "Approved/Completed": "border-emerald-300 bg-emerald-50 text-emerald-800",
     Rejected: "border-red-300 bg-red-50 text-red-800",
     Hold: "border-purple-300 bg-purple-50 text-purple-800",
