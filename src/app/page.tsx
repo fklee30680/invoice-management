@@ -13,7 +13,6 @@ import {
   filterInvoices,
   many,
   one,
-  statusClass,
 } from "@/components/invoice-list";
 import {
   invoicesForSummaryView,
@@ -22,6 +21,7 @@ import {
 } from "@/lib/invoice-views";
 import { getPersistenceStatus, type PersistenceStatus } from "@/lib/runtime-config";
 import { requireApUser } from "@/lib/session";
+import { statusBadgeClass, statusesForApWorkQueue } from "@/lib/status-config";
 import { readData } from "@/lib/store";
 import type { AppData } from "@/lib/types";
 
@@ -175,9 +175,8 @@ function UploadPanel() {
 }
 
 function ApWorkQueue({ data }: { data: AppData }) {
-  const queue = data.invoices.filter((invoice) =>
-    ["Needs AP Review", "Needs AP Rework"].includes(invoice.status),
-  );
+  const apWorkStatuses = statusesForApWorkQueue(data);
+  const queue = data.invoices.filter((invoice) => apWorkStatuses.includes(invoice.status));
 
   return (
     <section className="space-y-3">
@@ -202,7 +201,7 @@ function ApWorkQueue({ data }: { data: AppData }) {
             <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
               <div>
                 <span
-                  className={`inline-flex border px-2 py-1 text-xs font-semibold ${statusClass(invoice.status)}`}
+                  className={`inline-flex border px-2 py-1 text-xs font-semibold ${statusBadgeClass(data, invoice.status)}`}
                 >
                   {invoice.status}
                 </span>
@@ -396,7 +395,7 @@ export default async function Home({ searchParams }: PageProps) {
                       ? "With departments"
                       : "Completed"
               }
-              value={invoicesForSummaryView(data.invoices, view).length}
+              value={invoicesForSummaryView(data.invoices, view, data).length}
             />
           ))}
         </section>

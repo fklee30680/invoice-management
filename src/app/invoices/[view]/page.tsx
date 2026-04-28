@@ -42,7 +42,7 @@ export default async function InvoiceViewPage({
   const data = await readData();
   const branding = data.branding;
   const viewConfig = INVOICE_SUMMARY_VIEWS[view];
-  const baseInvoices = invoicesForSummaryView(data.invoices, view);
+  const baseInvoices = invoicesForSummaryView(data.invoices, view, data);
   const invoices = filterInvoices(baseInvoices, data, filters);
 
   return (

@@ -2,8 +2,9 @@ import Link from "next/link";
 import Image from "next/image";
 import { signOut } from "@/lib/auth-actions";
 import { requireUser } from "@/lib/session";
+import { statusBadgeClass, statusesForDepartmentWork } from "@/lib/status-config";
 import { readData } from "@/lib/store";
-import type { AppData, Invoice, WorkflowStatus } from "@/lib/types";
+import type { AppData, Invoice } from "@/lib/types";
 import { currencyDisplay, formatDate } from "@/lib/utils";
 
 export const runtime = "nodejs";
@@ -11,19 +12,6 @@ export const dynamic = "force-dynamic";
 
 function departmentName(data: AppData, id: string) {
   return data.departments.find((department) => department.id === id)?.name || "Unassigned";
-}
-
-function statusClass(status: WorkflowStatus) {
-  const map: Record<WorkflowStatus, string> = {
-    Uploaded: "border-slate-300 bg-slate-50 text-slate-700",
-    "Needs AP Review": "border-amber-300 bg-amber-50 text-amber-800",
-    "Needs AP Rework": "border-orange-300 bg-orange-50 text-orange-800",
-    Routed: "border-teal-300 bg-teal-50 text-teal-800",
-    "Approved/Completed": "border-emerald-300 bg-emerald-50 text-emerald-800",
-    Rejected: "border-red-300 bg-red-50 text-red-800",
-    Hold: "border-purple-300 bg-purple-50 text-purple-800",
-  };
-  return map[status];
 }
 
 function InvoiceList({
@@ -66,7 +54,7 @@ function InvoiceList({
               <tr className="align-top hover:bg-slate-50" key={invoice.id}>
                 <td className="border-b border-[var(--line)] px-3 py-3">
                   <span
-                    className={`inline-flex border px-2 py-1 text-xs font-semibold ${statusClass(invoice.status)}`}
+                    className={`inline-flex border px-2 py-1 text-xs font-semibold ${statusBadgeClass(data, invoice.status)}`}
                   >
                     {invoice.status}
                   </span>
@@ -153,8 +141,13 @@ export default async function DepartmentDashboard() {
   const invoices = data.invoices.filter(
     (invoice) => user.departmentId && invoice.departmentId === user.departmentId,
   );
-  const needsWork = invoices.filter((invoice) => invoice.status === "Routed");
-  const otherInvoices = invoices.filter((invoice) => invoice.status !== "Routed");
+  const departmentWorkStatuses = statusesForDepartmentWork(data);
+  const needsWork = invoices.filter((invoice) =>
+    departmentWorkStatuses.includes(invoice.status),
+  );
+  const otherInvoices = invoices.filter(
+    (invoice) => !departmentWorkStatuses.includes(invoice.status),
+  );
 
   return (
     <main className="min-h-screen px-4 py-6 sm:px-6 lg:px-8">

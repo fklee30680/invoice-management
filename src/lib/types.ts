@@ -1,13 +1,36 @@
 export type Role = "AP" | "DEPARTMENT";
 
-export type WorkflowStatus =
-  | "Uploaded"
-  | "Needs AP Review"
-  | "Needs AP Rework"
-  | "Routed"
-  | "Approved/Completed"
-  | "Rejected"
-  | "Hold";
+export type WorkflowStatus = string;
+
+export type StatusTone =
+  | "slate"
+  | "amber"
+  | "orange"
+  | "teal"
+  | "emerald"
+  | "red"
+  | "purple"
+  | "blue";
+
+export type StatusSystemRole =
+  | "uploaded"
+  | "apReview"
+  | "apRework"
+  | "routed"
+  | "completed"
+  | "rejected"
+  | "hold";
+
+export type InvoiceStatusDefinition = {
+  id: string;
+  label: string;
+  tone: StatusTone;
+  showInFilter: boolean;
+  showInApWorkQueue: boolean;
+  showInDepartmentWork: boolean;
+  showInCompleted: boolean;
+  systemRole?: StatusSystemRole;
+};
 
 export type DepartmentDecision =
   | "Receiving Record"
@@ -131,6 +154,7 @@ export type AppData = {
   auditEvents: AuditEvent[];
   notificationTemplate: NotificationTemplate;
   branding: BrandingSettings;
+  statuses: InvoiceStatusDefinition[];
 };
 
 export type InvoiceFilter = {

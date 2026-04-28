@@ -1,4 +1,5 @@
-import type { Invoice } from "./types";
+import { statusesForApWorkQueue, statusesForCompleted } from "./status-config";
+import type { AppData, Invoice } from "./types";
 
 export type InvoiceSummaryView =
   | "total"
@@ -35,11 +36,11 @@ export function summaryViewPath(view: InvoiceSummaryView) {
 export function invoicesForSummaryView(
   invoices: Invoice[],
   view: InvoiceSummaryView,
+  data?: AppData,
 ) {
   if (view === "needs-ap-work") {
-    return invoices.filter((invoice) =>
-      ["Needs AP Review", "Needs AP Rework"].includes(invoice.status),
-    );
+    const statuses = data ? statusesForApWorkQueue(data) : ["Needs AP Review", "Needs AP Rework"];
+    return invoices.filter((invoice) => statuses.includes(invoice.status));
   }
 
   if (view === "with-departments") {
@@ -47,7 +48,8 @@ export function invoicesForSummaryView(
   }
 
   if (view === "completed") {
-    return invoices.filter((invoice) => invoice.status === "Approved/Completed");
+    const statuses = data ? statusesForCompleted(data) : ["Approved/Completed"];
+    return invoices.filter((invoice) => statuses.includes(invoice.status));
   }
 
   return invoices;

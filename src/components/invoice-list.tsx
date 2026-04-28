@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { deleteInvoice } from "@/lib/actions";
-import { WORKFLOW_STATUSES } from "@/lib/constants";
-import type { AppData, Invoice, WorkflowStatus } from "@/lib/types";
+import { filterableStatuses, statusBadgeClass } from "@/lib/status-config";
+import type { AppData, Invoice } from "@/lib/types";
 import { currencyDisplay, formatDate } from "@/lib/utils";
 
 export type InvoiceFilters = {
@@ -16,19 +16,6 @@ export function one(value: string | string[] | undefined) {
 
 export function many(value: string | string[] | undefined) {
   return Array.isArray(value) ? value.filter(Boolean) : value ? [value] : [];
-}
-
-export function statusClass(status: WorkflowStatus) {
-  const map: Record<WorkflowStatus, string> = {
-    Uploaded: "border-slate-300 bg-slate-50 text-slate-700",
-    "Needs AP Review": "border-amber-300 bg-amber-50 text-amber-800",
-    "Needs AP Rework": "border-orange-300 bg-orange-50 text-orange-800",
-    Routed: "border-teal-300 bg-teal-50 text-teal-800",
-    "Approved/Completed": "border-emerald-300 bg-emerald-50 text-emerald-800",
-    Rejected: "border-red-300 bg-red-50 text-red-800",
-    Hold: "border-purple-300 bg-purple-50 text-purple-800",
-  };
-  return map[status];
 }
 
 export function departmentName(data: AppData, id: string) {
@@ -74,6 +61,11 @@ export function FilterBar({
     filters.department,
     ...filters.statuses,
   ].join("|");
+  const statusOptions = filterableStatuses(data);
+  const statusSummary =
+    filters.statuses.length === 0
+      ? "All statuses"
+      : `${filters.statuses.length} selected`;
 
   return (
     <form
@@ -86,25 +78,26 @@ export function FilterBar({
         placeholder="Search vendor, PO, invoice, status"
         defaultValue={filters.search}
       />
-      <fieldset className="border border-[var(--line)] bg-white px-3 py-2">
-        <legend className="px-1 text-xs font-semibold uppercase text-[var(--muted)]">
-          Status
-        </legend>
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {WORKFLOW_STATUSES.map((status) => (
-            <label className="flex items-center gap-2 text-xs font-medium" key={status}>
+      <details className="relative text-xs font-semibold uppercase text-[var(--muted)]">
+        <summary className="focus-ring mt-1 flex min-h-10 cursor-pointer list-none items-center justify-between border border-[var(--line)] bg-white px-3 text-sm font-normal normal-case text-[var(--foreground)]">
+          <span>{statusSummary}</span>
+          <span aria-hidden="true">v</span>
+        </summary>
+        <div className="absolute z-10 mt-1 grid max-h-64 w-full min-w-64 gap-2 overflow-auto border border-[var(--line)] bg-white p-3 shadow-lg">
+          {statusOptions.map((status) => (
+            <label className="flex items-center gap-2 text-xs font-medium normal-case text-[var(--foreground)]" key={status.id}>
               <input
                 className="h-4 w-4 accent-[var(--accent)]"
-                defaultChecked={filters.statuses.includes(status)}
+                defaultChecked={filters.statuses.includes(status.label)}
                 name="status"
                 type="checkbox"
-                value={status}
+                value={status.label}
               />
-              {status}
+              {status.label}
             </label>
           ))}
         </div>
-      </fieldset>
+      </details>
       <label className="text-xs font-semibold uppercase text-[var(--muted)]">
         Department
         <select
@@ -157,7 +150,7 @@ export function InvoiceTable({ data, invoices }: { data: AppData; invoices: Invo
             <tr key={invoice.id} className="align-top hover:bg-slate-50">
               <td className="border-b border-[var(--line)] px-3 py-3">
                 <span
-                  className={`inline-flex border px-2 py-1 text-xs font-semibold ${statusClass(invoice.status)}`}
+                  className={`inline-flex border px-2 py-1 text-xs font-semibold ${statusBadgeClass(data, invoice.status)}`}
                 >
                   {invoice.status}
                 </span>

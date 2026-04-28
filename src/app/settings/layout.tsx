@@ -18,6 +18,11 @@ const setupLinks = [
     description: "Department routing names and recipient addresses.",
   },
   {
+    href: "/settings/statuses",
+    label: "Statuses",
+    description: "Invoice status names, colors, filters, and queues.",
+  },
+  {
     href: "/settings/branding",
     label: "Branding",
     description: "Logo, colors, fonts, and display names.",
@@ -75,7 +80,7 @@ export default async function SettingsLayout({
           </div>
         </header>
 
-        <nav className="grid gap-3 md:grid-cols-3">
+        <nav className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {setupLinks.map((link) => (
             <Link
               className="focus-ring border border-[var(--line)] bg-white px-4 py-3 text-sm hover:border-[var(--accent)] hover:bg-teal-50"

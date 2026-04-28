@@ -27,7 +27,8 @@ import {
   upsertDepartment,
   upsertPurchaseOrder,
 } from "./store";
-import type { BrandingLogo, DepartmentDecision, Invoice } from "./types";
+import { STATUS_TONES, statusLabelForRole } from "./status-config";
+import type { BrandingLogo, DepartmentDecision, Invoice, StatusTone } from "./types";
 
 function value(formData: FormData, key: string) {
   return String(formData.get(key) || "").trim();
@@ -50,6 +51,15 @@ function fontValue(formData: FormData) {
   return allowed.has(selected)
     ? selected
     : "Arial, Helvetica, ui-sans-serif, system-ui, sans-serif";
+}
+
+function checkbox(formData: FormData, key: string) {
+  return formData.get(key) === "on";
+}
+
+function toneValue(formData: FormData) {
+  const selected = value(formData, "tone") as StatusTone;
+  return STATUS_TONES.includes(selected) ? selected : "slate";
 }
 
 function baseUrl() {
@@ -167,7 +177,9 @@ export async function uploadInvoices(formData: FormData) {
         const departmentId = purchaseOrder?.departmentId || "";
         const department = data.departments.find((item) => item.id === departmentId);
         const canNotify = Boolean(purchaseOrder && department?.email);
-        const status = canNotify ? "Routed" : "Needs AP Review";
+        const status = canNotify
+          ? statusLabelForRole(data, "routed")
+          : statusLabelForRole(data, "apReview");
 
         addInvoiceFile(data, invoiceFile);
 
@@ -212,7 +224,7 @@ export async function uploadInvoices(formData: FormData) {
 
       const data = await mutateData((current) => current);
       const invoice = getInvoice(data, invoiceId);
-      if (invoice?.status === "Routed") {
+      if (invoice?.status === statusLabelForRole(data, "routed")) {
         await notifyDepartment(invoice);
       }
     }
@@ -238,22 +250,25 @@ export async function updateAndRouteInvoice(formData: FormData) {
     invoice.poNumber = value(formData, "poNumber");
     invoice.dateReceived = value(formData, "dateReceived");
     invoice.departmentId = value(formData, "departmentId");
-    invoice.status = invoice.departmentId ? "Routed" : "Needs AP Review";
+    invoice.status = invoice.departmentId
+      ? statusLabelForRole(data, "routed")
+      : statusLabelForRole(data, "apReview");
     invoice.updatedAt = new Date().toISOString();
     updatedInvoice = invoice;
 
     addAudit(data, {
       invoiceId,
       actor: "AP",
-      type: invoice.status === "Routed" ? "rerouted" : "ap_edit",
+      type: invoice.status === statusLabelForRole(data, "routed") ? "rerouted" : "ap_edit",
       message:
-        invoice.status === "Routed"
+        invoice.status === statusLabelForRole(data, "routed")
           ? "AP updated metadata and routed the invoice."
           : "AP updated metadata; department still required.",
     });
   });
 
-  if (updatedInvoice?.status === "Routed") {
+  const current = await mutateData((data) => data);
+  if (updatedInvoice?.status === statusLabelForRole(current, "routed")) {
     await notifyDepartment(updatedInvoice);
   }
 
@@ -318,6 +333,110 @@ export async function updateNotificationTemplate(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/settings");
+}
+
+export async function addInvoiceStatus(formData: FormData) {
+  const label = value(formData, "label");
+  if (!label) return;
+
+  await mutateData((data) => {
+    const exists = data.statuses.some(
+      (status) => status.label.toLowerCase() === label.toLowerCase(),
+    );
+    if (exists) return;
+
+    data.statuses.push({
+      id: createId("status"),
+      label,
+      tone: toneValue(formData),
+      showInFilter: checkbox(formData, "showInFilter"),
+      showInApWorkQueue: checkbox(formData, "showInApWorkQueue"),
+      showInDepartmentWork: checkbox(formData, "showInDepartmentWork"),
+      showInCompleted: checkbox(formData, "showInCompleted"),
+    });
+    addAudit(data, {
+      actor: "AP",
+      type: "status_added",
+      message: `Added invoice status ${label}.`,
+    });
+  });
+
+  revalidatePath("/");
+  revalidatePath("/invoices", "layout");
+  revalidatePath("/settings/statuses");
+}
+
+export async function updateInvoiceStatus(formData: FormData) {
+  const statusId = value(formData, "statusId");
+  const label = value(formData, "label");
+  if (!statusId || !label) return;
+
+  await mutateData((data) => {
+    const status = data.statuses.find((item) => item.id === statusId);
+    if (!status) return;
+    const duplicate = data.statuses.some(
+      (item) =>
+        item.id !== statusId && item.label.toLowerCase() === label.toLowerCase(),
+    );
+    if (duplicate) return;
+
+    const oldLabel = status.label;
+    status.label = label;
+    status.tone = toneValue(formData);
+    status.showInFilter = checkbox(formData, "showInFilter");
+    status.showInApWorkQueue = checkbox(formData, "showInApWorkQueue");
+    status.showInDepartmentWork = checkbox(formData, "showInDepartmentWork");
+    status.showInCompleted = checkbox(formData, "showInCompleted");
+
+    if (oldLabel !== label) {
+      for (const invoice of data.invoices) {
+        if (invoice.status === oldLabel) {
+          invoice.status = label;
+          invoice.updatedAt = new Date().toISOString();
+        }
+      }
+    }
+
+    addAudit(data, {
+      actor: "AP",
+      type: "status_updated",
+      message: `Updated invoice status ${oldLabel} to ${label}.`,
+    });
+  });
+
+  revalidatePath("/");
+  revalidatePath("/department");
+  revalidatePath("/invoices", "layout");
+  revalidatePath("/settings/statuses");
+}
+
+export async function deleteInvoiceStatus(formData: FormData) {
+  const statusId = value(formData, "statusId");
+  if (!statusId) return;
+
+  await mutateData((data) => {
+    const status = data.statuses.find((item) => item.id === statusId);
+    if (!status) return;
+    const inUse = data.invoices.some((invoice) => invoice.status === status.label);
+    if (status.systemRole || inUse) {
+      addAudit(data, {
+        actor: "AP",
+        type: "status_delete_blocked",
+        message: `Could not delete ${status.label}; it is required by the workflow or used by invoices.`,
+      });
+      return;
+    }
+    data.statuses = data.statuses.filter((item) => item.id !== statusId);
+    addAudit(data, {
+      actor: "AP",
+      type: "status_deleted",
+      message: `Deleted invoice status ${status.label}.`,
+    });
+  });
+
+  revalidatePath("/");
+  revalidatePath("/invoices", "layout");
+  revalidatePath("/settings/statuses");
 }
 
 export async function updateBrandingSettings(formData: FormData) {
@@ -469,7 +588,7 @@ export async function completeInvoice(formData: FormData) {
   await mutateData((data) => {
     const invoice = getInvoice(data, invoiceId);
     if (!invoice) return;
-    invoice.status = "Approved/Completed";
+    invoice.status = statusLabelForRole(data, "completed");
     invoice.dateApproved = invoice.dateApproved || new Date().toISOString().slice(0, 10);
     invoice.updatedAt = new Date().toISOString();
     addAudit(data, {
@@ -555,7 +674,7 @@ export async function submitDepartmentDecision(formData: FormData) {
     }
 
     if (decision === "Not our Department Invoice") {
-      invoice.status = "Needs AP Rework";
+      invoice.status = statusLabelForRole(data, "apRework");
       invoice.dateApproved = "";
       addAudit(data, {
         invoiceId,
@@ -567,11 +686,11 @@ export async function submitDepartmentDecision(formData: FormData) {
     }
 
     if (decision === "Reject") {
-      invoice.status = "Rejected";
+      invoice.status = statusLabelForRole(data, "rejected");
     } else if (decision === "Hold") {
-      invoice.status = "Hold";
+      invoice.status = statusLabelForRole(data, "hold");
     } else {
-      invoice.status = "Approved/Completed";
+      invoice.status = statusLabelForRole(data, "completed");
       invoice.dateApproved = now.slice(0, 10);
     }
 
@@ -617,7 +736,7 @@ export async function cloneSampleInvoice() {
       poNumber: po?.poNumber || "PO-10045",
       dateReceived: now.slice(0, 10),
       dateApproved: "",
-      status: "Routed",
+      status: statusLabelForRole(data, "routed"),
       departmentId: po?.departmentId || "",
       departmentDecision: "",
       comments: [],

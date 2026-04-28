@@ -17,6 +17,7 @@ import {
   getDatabaseConfig,
   reportDatabaseIssue,
 } from "./runtime-config";
+import { defaultStatuses } from "./status-config";
 import { normalizePoNumber, slugify } from "./utils";
 
 const RUNTIME_ROOT = process.env.VERCEL
@@ -62,6 +63,7 @@ function defaultBranding(): BrandingSettings {
 
 function normalizeData(data: AppData): AppData {
   const defaultBrand = defaultBranding();
+  const defaultStatusList = defaultStatuses();
   const invoices = (data.invoices || []).map((invoice) => {
     const legacyStatus = String(invoice.status);
     if (legacyStatus === "OCR Processing") {
@@ -72,6 +74,7 @@ function normalizeData(data: AppData): AppData {
     }
     return invoice;
   });
+  const statuses = mergeStatuses(defaultStatusList, data.statuses || [], invoices);
 
   return {
     ...data,
@@ -82,7 +85,54 @@ function normalizeData(data: AppData): AppData {
       ...(data.branding || {}),
       logo: data.branding?.logo || null,
     },
+    statuses,
   };
+}
+
+function mergeStatuses(
+  defaultStatusList: ReturnType<typeof defaultStatuses>,
+  configuredStatuses: AppData["statuses"],
+  invoices: AppData["invoices"],
+) {
+  const byRole = new Map(
+    configuredStatuses
+      .filter((status) => status.systemRole)
+      .map((status) => [status.systemRole, status]),
+  );
+  const byLabel = new Map(configuredStatuses.map((status) => [status.label, status]));
+  const statuses = defaultStatusList.map((defaultStatus) => ({
+    ...defaultStatus,
+    ...(defaultStatus.systemRole ? byRole.get(defaultStatus.systemRole) : undefined),
+  }));
+
+  for (const status of configuredStatuses) {
+    if (status.systemRole && statuses.some((item) => item.systemRole === status.systemRole)) {
+      continue;
+    }
+    if (!statuses.some((item) => item.id === status.id || item.label === status.label)) {
+      statuses.push(status);
+    }
+  }
+
+  for (const invoice of invoices) {
+    if (!invoice.status || statuses.some((status) => status.label === invoice.status)) {
+      continue;
+    }
+    const configured = byLabel.get(invoice.status);
+    statuses.push(
+      configured || {
+        id: createId("status"),
+        label: invoice.status,
+        tone: "blue",
+        showInFilter: true,
+        showInApWorkQueue: false,
+        showInDepartmentWork: false,
+        showInCompleted: false,
+      },
+    );
+  }
+
+  return statuses;
 }
 
 function hasDatabase() {
@@ -193,6 +243,7 @@ function seedData(): AppData {
     ],
     notificationTemplate: defaultNotificationTemplate(),
     branding: defaultBranding(),
+    statuses: defaultStatuses(),
   };
 }
 

@@ -1,14 +1,4 @@
-import type { DepartmentDecision, WorkflowStatus } from "./types";
-
-export const WORKFLOW_STATUSES: WorkflowStatus[] = [
-  "Uploaded",
-  "Needs AP Review",
-  "Needs AP Rework",
-  "Routed",
-  "Approved/Completed",
-  "Rejected",
-  "Hold",
-];
+import type { DepartmentDecision } from "./types";
 
 export const DEPARTMENT_DECISIONS: DepartmentDecision[] = [
   "Receiving Record",

@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { submitDepartmentDecision } from "@/lib/actions";
 import { DEPARTMENT_DECISIONS } from "@/lib/constants";
 import { canAccessInvoice, requireUser } from "@/lib/session";
+import { statusBadgeClass } from "@/lib/status-config";
 import { readData } from "@/lib/store";
 import { currencyDisplay, formatDate, formatDateTime } from "@/lib/utils";
 
@@ -14,15 +15,6 @@ type ReviewPageProps = {
   params: Promise<{ id: string }>;
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
-
-function statusClass(status: string) {
-  if (status === "Rejected") return "border-red-300 bg-red-50 text-red-800";
-  if (status === "Hold") return "border-purple-300 bg-purple-50 text-purple-800";
-  if (status === "Approved/Completed") return "border-emerald-300 bg-emerald-50 text-emerald-800";
-  if (status === "Needs AP Rework") return "border-orange-300 bg-orange-50 text-orange-800";
-  if (status === "Needs AP Review") return "border-amber-300 bg-amber-50 text-amber-800";
-  return "border-teal-300 bg-teal-50 text-teal-800";
-}
 
 export default async function ReviewPage({
   params,
@@ -72,7 +64,7 @@ export default async function ReviewPage({
             </p>
           </div>
           <span
-            className={`inline-flex self-start border px-3 py-2 text-sm font-semibold sm:self-auto ${statusClass(invoice.status)}`}
+            className={`inline-flex self-start border px-3 py-2 text-sm font-semibold sm:self-auto ${statusBadgeClass(data, invoice.status)}`}
           >
             {invoice.status}
           </span>
