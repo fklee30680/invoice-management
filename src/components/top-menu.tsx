@@ -8,6 +8,7 @@ import { TopMenuDropdown } from "./top-menu-dropdown";
 const setupLinks = [
   { href: "/settings/email", label: "Email Template" },
   { href: "/settings/departments", label: "Department Emails" },
+  { href: "/settings/escalation", label: "Escalation Emails" },
   { href: "/settings/statuses", label: "Statuses" },
   { href: "/settings/branding", label: "Branding" },
   { href: "/settings/environment", label: "Environment" },
