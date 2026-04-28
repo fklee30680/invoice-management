@@ -1,10 +1,9 @@
 "use server";
 
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { AP_USER_ID, DEPARTMENT_DECISIONS } from "./constants";
+import { DEPARTMENT_DECISIONS } from "./constants";
 import { sendDepartmentNotification } from "./email";
 import {
   deleteStoredBrandingLogo,
@@ -768,55 +767,4 @@ export async function submitDepartmentDecision(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath(`/review/${invoiceId}`);
-}
-
-export async function cloneSampleInvoice() {
-  const source = path.join(process.cwd(), "public", "file.svg");
-  const invoiceId = createId("invoice");
-  const fileId = createId("file");
-  const storedName = `${invoiceId}.svg`;
-  const bytes = await readFile(source);
-  const now = new Date().toISOString();
-  const invoiceFile = await saveInvoiceFile({
-    id: fileId,
-    invoiceId,
-    originalName: "Northstar-Invoice-PO-10045.svg",
-    storedName,
-    mimeType: "image/svg+xml",
-    size: bytes.length,
-    uploadedAt: now,
-    bytes,
-  });
-
-  await mutateData((data) => {
-    const po = data.purchaseOrders[0];
-    addInvoiceFile(data, invoiceFile);
-    addInvoice(data, {
-      id: invoiceId,
-      vendorName: po?.vendorName || "Northstar Supply",
-      invoiceNumber: "INV-10045",
-      invoiceDate: now.slice(0, 10),
-      amount: "1280.00",
-      poNumber: po?.poNumber || "PO-10045",
-      dateReceived: now.slice(0, 10),
-      dateApproved: "",
-      status: statusLabelForRole(data, "routed"),
-      departmentId: po?.departmentId || "",
-      departmentDecision: "",
-      comments: [],
-      fileId,
-      notificationSentAt: now,
-      ocrSummary: "Sample invoice created for workflow testing.",
-      createdAt: now,
-      updatedAt: now,
-    });
-    addAudit(data, {
-      invoiceId,
-      actor: AP_USER_ID,
-      type: "sample_created",
-      message: "Created a sample routed invoice for testing.",
-    });
-  });
-
-  revalidatePath("/");
 }

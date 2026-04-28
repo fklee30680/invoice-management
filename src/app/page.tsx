@@ -1,18 +1,10 @@
 import Link from "next/link";
 import Image from "next/image";
 import {
-  cloneSampleInvoice,
   updateAndRouteInvoice,
   uploadInvoices,
   uploadPoList,
 } from "@/lib/actions";
-import {
-  FilterBar,
-  InvoiceTable,
-  filterInvoices,
-  many,
-  one,
-} from "@/components/invoice-list";
 import {
   invoicesForSummaryView,
   summaryViewPath,
@@ -29,6 +21,10 @@ export const dynamic = "force-dynamic";
 type PageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
+
+function one(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value || "";
+}
 
 function Metric({
   label,
@@ -52,7 +48,7 @@ function Metric({
 
 function UploadPanel() {
   return (
-    <section className="grid gap-4 lg:grid-cols-[1fr_1fr_220px]">
+    <section className="grid gap-4 lg:grid-cols-2">
       <form
         action={uploadPoList}
         className="border border-[var(--line)] bg-[var(--panel)] p-4"
@@ -96,19 +92,6 @@ function UploadPanel() {
             Upload Invoices
           </button>
         </div>
-      </form>
-
-      <form
-        action={cloneSampleInvoice}
-        className="border border-[var(--line)] bg-[var(--panel)] p-4"
-      >
-        <h2 className="text-base font-semibold">Demo Data</h2>
-        <p className="mt-1 text-sm text-[var(--muted)]">
-          Create a routed invoice using a seeded PO.
-        </p>
-        <button className="focus-ring mt-4 w-full border border-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent)] hover:bg-teal-50">
-          Add Sample
-        </button>
       </form>
     </section>
   );
@@ -248,14 +231,8 @@ export default async function Home({ searchParams }: PageProps) {
   await requireApUser();
   const params = (await searchParams) || {};
   const pageError = one(params.error);
-  const filters = {
-    statuses: many(params.status),
-    department: one(params.department),
-    search: one(params.search),
-  };
   const data = await readData();
   const branding = data.branding;
-  const invoices = filterInvoices(data.invoices, data, filters);
   const metricViews: InvoiceSummaryView[] = [
     "total",
     "needs-ap-work",
@@ -321,8 +298,6 @@ export default async function Home({ searchParams }: PageProps) {
           </section>
         ) : null}
         <UploadPanel />
-        <FilterBar data={data} filters={filters} clearHref="/" />
-        <InvoiceTable data={data} invoices={invoices} />
         <ApWorkQueue data={data} />
       </div>
     </main>

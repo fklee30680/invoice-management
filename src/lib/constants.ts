@@ -8,5 +8,3 @@ export const DEPARTMENT_DECISIONS: DepartmentDecision[] = [
   "Hold",
   "Not our Department Invoice",
 ];
-
-export const AP_USER_ID = "user-ap-admin";
