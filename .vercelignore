@@ -2,7 +2,7 @@
 .next/
 node_modules/
 data/
-uploads/
+/uploads/
 invoice-management/
 .npm-cache*/
 .appdata/
