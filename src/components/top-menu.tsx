@@ -10,6 +10,7 @@ const setupLinks = [
   { href: "/settings/departments", label: "Department Emails" },
   { href: "/settings/statuses", label: "Statuses" },
   { href: "/settings/branding", label: "Branding" },
+  { href: "/settings/environment", label: "Environment" },
 ];
 
 function MenuLink({ href, label }: { href: string; label: string }) {

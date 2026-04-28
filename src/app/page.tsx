@@ -18,7 +18,6 @@ import {
   summaryViewPath,
   type InvoiceSummaryView,
 } from "@/lib/invoice-views";
-import { getPersistenceStatus, type PersistenceStatus } from "@/lib/runtime-config";
 import { requireApUser } from "@/lib/session";
 import { statusBadgeClass, statusesForApWorkQueue } from "@/lib/status-config";
 import { readData } from "@/lib/store";
@@ -48,64 +47,6 @@ function Metric({
       <div className="text-sm text-[var(--muted)]">{label}</div>
       <div className="mt-2 text-2xl font-semibold tracking-normal">{value}</div>
     </Link>
-  );
-}
-
-function StorageStatus({ status }: { status: PersistenceStatus }) {
-  const itemClass = "border border-[var(--line)] bg-white px-3 py-2";
-  const goodClass = "text-emerald-700";
-  const warnClass = "text-amber-700";
-  const databaseLabel = status.records.issue
-    ? "Postgres configured but unavailable"
-    : status.records.configured
-      ? "Postgres active"
-      : "Temporary storage";
-  const fileStorageLabel = status.files.issue
-    ? "Blob configured but unavailable"
-    : status.files.configured
-      ? "Vercel Blob active"
-      : "Temporary storage";
-
-  return (
-    <section className="grid gap-3 text-sm md:grid-cols-2">
-      <div className={itemClass}>
-        <div className="text-xs font-semibold uppercase text-[var(--muted)]">
-          Database
-        </div>
-        <div className={`mt-1 font-semibold ${status.records.configured && !status.records.issue ? goodClass : warnClass}`}>
-          {databaseLabel}
-        </div>
-        <div className="mt-1 text-xs text-[var(--muted)]">
-          Env: {status.records.variableName}
-        </div>
-        {status.records.issue ? (
-          <div className="mt-2 text-xs text-amber-800">
-            Last error: {status.records.issue}
-          </div>
-        ) : null}
-      </div>
-      <div className={itemClass}>
-        <div className="text-xs font-semibold uppercase text-[var(--muted)]">
-          File Storage
-        </div>
-        <div className={`mt-1 font-semibold ${status.files.configured && !status.files.issue ? goodClass : warnClass}`}>
-          {fileStorageLabel}
-        </div>
-        <div className="mt-1 text-xs text-[var(--muted)]">
-          Env: {status.files.variableName}
-        </div>
-        {status.files.issue ? (
-          <div className="mt-2 text-xs text-amber-800">
-            Last error: {status.files.issue}
-          </div>
-        ) : null}
-      </div>
-      {status.warning ? (
-        <div className="border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900 md:col-span-2">
-          {status.warning}
-        </div>
-      ) : null}
-    </section>
   );
 }
 
@@ -314,7 +255,6 @@ export default async function Home({ searchParams }: PageProps) {
   };
   const data = await readData();
   const branding = data.branding;
-  const persistenceStatus = getPersistenceStatus();
   const invoices = filterInvoices(data.invoices, data, filters);
   const metricViews: InvoiceSummaryView[] = [
     "total",
@@ -376,11 +316,10 @@ export default async function Home({ searchParams }: PageProps) {
 
         {pageError === "file-storage" ? (
           <section className="border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
-            Invoice upload failed because persistent file storage is not working. Check the
-            File Storage panel before retrying.
+            Invoice upload failed because persistent file storage is not working.
+            Check Setup &gt; Environment before retrying.
           </section>
         ) : null}
-        <StorageStatus status={persistenceStatus} />
         <UploadPanel />
         <FilterBar data={data} filters={filters} clearHref="/" />
         <InvoiceTable data={data} invoices={invoices} />
