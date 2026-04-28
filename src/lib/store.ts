@@ -9,6 +9,7 @@ import type {
   Invoice,
   InvoiceFile,
   NotificationTemplate,
+  OrganizationEscalationSettings,
   PurchaseOrder,
   User,
 } from "./types";
@@ -61,8 +62,29 @@ function defaultBranding(): BrandingSettings {
   };
 }
 
+function defaultEscalationContacts(): OrganizationEscalationSettings {
+  return {
+    apSupervisor: {
+      title: "AP Supervisor",
+      name: "",
+      email: "",
+    },
+    cfo: {
+      title: "CFO",
+      name: "",
+      email: "",
+    },
+    executive: {
+      title: "Organization CEO or Manager",
+      name: "",
+      email: "",
+    },
+  };
+}
+
 function normalizeData(data: AppData): AppData {
   const defaultBrand = defaultBranding();
+  const defaultEscalations = defaultEscalationContacts();
   const defaultStatusList = defaultStatuses();
   const invoices = (data.invoices || []).map((invoice) => {
     const legacyStatus = String(invoice.status);
@@ -79,6 +101,13 @@ function normalizeData(data: AppData): AppData {
   return {
     ...data,
     invoices,
+    departments: (data.departments || []).map((department) => ({
+      ...department,
+      departmentHeadName: department.departmentHeadName || "",
+      departmentHeadEmail: department.departmentHeadEmail || "",
+      escalationName: department.escalationName || "",
+      escalationEmail: department.escalationEmail || "",
+    })),
     notificationTemplate: data.notificationTemplate || defaultNotificationTemplate(),
     branding: {
       ...defaultBrand,
@@ -86,6 +115,20 @@ function normalizeData(data: AppData): AppData {
       logo: data.branding?.logo || null,
     },
     statuses,
+    escalationContacts: {
+      apSupervisor: {
+        ...defaultEscalations.apSupervisor,
+        ...(data.escalationContacts?.apSupervisor || {}),
+      },
+      cfo: {
+        ...defaultEscalations.cfo,
+        ...(data.escalationContacts?.cfo || {}),
+      },
+      executive: {
+        ...defaultEscalations.executive,
+        ...(data.escalationContacts?.executive || {}),
+      },
+    },
   };
 }
 
@@ -257,6 +300,7 @@ function seedData(): AppData {
     notificationTemplate: defaultNotificationTemplate(),
     branding: defaultBranding(),
     statuses: defaultStatuses(),
+    escalationContacts: defaultEscalationContacts(),
   };
 }
 
@@ -339,6 +383,10 @@ export function upsertDepartment(data: AppData, name: string, email = "") {
     id: `dept-${slugify(name) || createId("department")}`,
     name: name.trim(),
     email: email.trim().toLowerCase(),
+    departmentHeadName: "",
+    departmentHeadEmail: "",
+    escalationName: "",
+    escalationEmail: "",
   };
   data.departments.push(department);
   return department;

@@ -45,6 +45,22 @@ export type Department = {
   id: string;
   name: string;
   email: string;
+  departmentHeadName?: string;
+  departmentHeadEmail?: string;
+  escalationName?: string;
+  escalationEmail?: string;
+};
+
+export type EscalationContact = {
+  title: string;
+  name: string;
+  email: string;
+};
+
+export type OrganizationEscalationSettings = {
+  apSupervisor: EscalationContact;
+  cfo: EscalationContact;
+  executive: EscalationContact;
 };
 
 export type NotificationTemplate = {
@@ -156,6 +172,7 @@ export type AppData = {
   notificationTemplate: NotificationTemplate;
   branding: BrandingSettings;
   statuses: InvoiceStatusDefinition[];
+  escalationContacts: OrganizationEscalationSettings;
 };
 
 export type InvoiceFilter = {

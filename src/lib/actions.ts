@@ -283,6 +283,10 @@ export async function addDepartment(formData: FormData) {
 
   await mutateData((data) => {
     const department = upsertDepartment(data, name, email);
+    department.departmentHeadName = value(formData, "departmentHeadName");
+    department.departmentHeadEmail = value(formData, "departmentHeadEmail").toLowerCase();
+    department.escalationName = value(formData, "escalationName");
+    department.escalationEmail = value(formData, "escalationEmail").toLowerCase();
     addAudit(data, {
       actor: "AP",
       type: "department_saved",
@@ -305,6 +309,10 @@ export async function updateDepartment(formData: FormData) {
     if (!department) return;
     department.name = name;
     department.email = email;
+    department.departmentHeadName = value(formData, "departmentHeadName");
+    department.departmentHeadEmail = value(formData, "departmentHeadEmail").toLowerCase();
+    department.escalationName = value(formData, "escalationName");
+    department.escalationEmail = value(formData, "escalationEmail").toLowerCase();
     addAudit(data, {
       actor: "AP",
       type: "department_updated",
@@ -313,6 +321,34 @@ export async function updateDepartment(formData: FormData) {
   });
 
   revalidatePath("/");
+  revalidatePath("/settings");
+}
+
+export async function updateEscalationContacts(formData: FormData) {
+  await mutateData((data) => {
+    data.escalationContacts.apSupervisor = {
+      title: value(formData, "apSupervisorTitle") || "AP Supervisor",
+      name: value(formData, "apSupervisorName"),
+      email: value(formData, "apSupervisorEmail").toLowerCase(),
+    };
+    data.escalationContacts.cfo = {
+      title: value(formData, "cfoTitle") || "CFO",
+      name: value(formData, "cfoName"),
+      email: value(formData, "cfoEmail").toLowerCase(),
+    };
+    data.escalationContacts.executive = {
+      title: value(formData, "executiveTitle") || "Organization CEO or Manager",
+      name: value(formData, "executiveName"),
+      email: value(formData, "executiveEmail").toLowerCase(),
+    };
+    addAudit(data, {
+      actor: "AP",
+      type: "escalation_contacts_updated",
+      message: "Updated organization escalation contact setup.",
+    });
+  });
+
+  revalidatePath("/settings/departments");
   revalidatePath("/settings");
 }
 
