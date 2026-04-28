@@ -1,5 +1,4 @@
 import Image from "next/image";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   FilterBar,
@@ -50,13 +49,7 @@ export default async function InvoiceViewPage({
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-4 border-b border-[var(--line)] pb-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <Link
-              className="focus-ring inline-flex border border-[var(--line)] bg-white px-3 py-1.5 text-sm font-semibold hover:bg-slate-100"
-              href="/"
-            >
-              Back to Dashboard
-            </Link>
-            <div className="mt-4 flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               {branding.logo ? (
                 <Image
                   alt={`${branding.appTitle} logo`}

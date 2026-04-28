@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import type { CSSProperties } from "react";
+import { TopMenu } from "@/components/top-menu";
+import { currentUser } from "@/lib/session";
 import { readData } from "@/lib/store";
 import "./globals.css";
 
@@ -18,6 +20,7 @@ export default async function RootLayout({
 }>) {
   const data = await readData();
   const branding = data.branding;
+  const user = await currentUser();
   const brandStyle = {
     "--background": branding.backgroundColor,
     "--foreground": branding.textColor,
@@ -33,6 +36,7 @@ export default async function RootLayout({
   return (
     <html lang="en" className="h-full antialiased">
       <body className="min-h-full flex flex-col" style={brandStyle}>
+        <TopMenu branding={branding} user={user} />
         {children}
       </body>
     </html>

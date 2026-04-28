@@ -1,6 +1,5 @@
 import Link from "next/link";
 import Image from "next/image";
-import { signOut } from "@/lib/auth-actions";
 import {
   cloneSampleInvoice,
   updateAndRouteInvoice,
@@ -305,7 +304,7 @@ function ApWorkQueue({ data }: { data: AppData }) {
 }
 
 export default async function Home({ searchParams }: PageProps) {
-  const user = await requireApUser();
+  await requireApUser();
   const params = (await searchParams) || {};
   const pageError = one(params.error);
   const filters = {
@@ -327,7 +326,7 @@ export default async function Home({ searchParams }: PageProps) {
   return (
     <main className="min-h-screen px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl space-y-6">
-        <header className="flex flex-col gap-4 border-b border-[var(--line)] pb-5 lg:flex-row lg:items-end lg:justify-between">
+        <header className="border-b border-[var(--line)] pb-5">
           <div>
             <div className="flex flex-wrap items-center gap-3">
               {branding.logo ? (
@@ -353,31 +352,6 @@ export default async function Home({ searchParams }: PageProps) {
               Upload invoices, validate against PO data, route department review,
               and track every invoice through AP completion.
             </p>
-          </div>
-          <div className="border border-[var(--line)] bg-white px-4 py-3 text-sm">
-            <div className="font-semibold">{user.name}</div>
-            <div className="mt-1 text-[var(--muted)]">
-              OCR/email use local mock behavior until Azure and SMTP variables are set.
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Link
-                className="focus-ring border border-[var(--line)] px-3 py-1.5 text-xs font-semibold hover:bg-slate-100"
-                href="/settings"
-              >
-                Setup
-              </Link>
-              <Link
-                className="focus-ring border border-[var(--line)] px-3 py-1.5 text-xs font-semibold hover:bg-slate-100"
-                href="/audit"
-              >
-                Audit Log
-              </Link>
-              <form action={signOut}>
-                <button className="focus-ring border border-[var(--line)] px-3 py-1.5 text-xs font-semibold hover:bg-slate-100">
-                  Sign Out
-                </button>
-              </form>
-            </div>
           </div>
         </header>
 

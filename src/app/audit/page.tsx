@@ -8,22 +8,16 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export default async function AuditPage() {
-  const user = await requireApUser();
+  await requireApUser();
   const data = await readData();
   const branding = data.branding;
 
   return (
     <main className="min-h-screen px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl space-y-6">
-        <header className="flex flex-col gap-4 border-b border-[var(--line)] pb-5 lg:flex-row lg:items-end lg:justify-between">
+        <header className="border-b border-[var(--line)] pb-5">
           <div>
-            <Link
-              className="focus-ring inline-flex border border-[var(--line)] bg-white px-3 py-1.5 text-sm font-semibold hover:bg-slate-100"
-              href="/"
-            >
-              Back to Dashboard
-            </Link>
-            <div className="mt-4 flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               {branding.logo ? (
                 <Image
                   alt={`${branding.appTitle} logo`}
@@ -47,10 +41,6 @@ export default async function AuditPage() {
               Review invoice uploads, routing changes, department decisions,
               notifications, setup changes, and deletion activity.
             </p>
-          </div>
-          <div className="border border-[var(--line)] bg-white px-4 py-3 text-sm">
-            <div className="font-semibold">{user.name}</div>
-            <div className="mt-1 text-[var(--muted)]">AP access required</div>
           </div>
         </header>
 

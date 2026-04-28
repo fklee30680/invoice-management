@@ -37,13 +37,7 @@ export default async function ReviewPage({
       <div className="mx-auto max-w-5xl space-y-5">
         <header className="flex flex-col gap-4 border-b border-[var(--line)] pb-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <Link
-              className="focus-ring inline-flex border border-[var(--line)] bg-white px-3 py-1.5 text-sm font-semibold hover:bg-slate-100"
-              href={user.role === "AP" ? "/" : "/department"}
-            >
-              Back to Dashboard
-            </Link>
-            <div className="mt-4 flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               {branding.logo ? (
                 <Image
                   alt={`${branding.appTitle} logo`}

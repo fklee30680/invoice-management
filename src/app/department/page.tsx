@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
-import { signOut } from "@/lib/auth-actions";
+import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/session";
 import { statusBadgeClass, statusesForDepartmentWork } from "@/lib/status-config";
 import { readData } from "@/lib/store";
@@ -115,22 +115,7 @@ function InvoiceList({
 export default async function DepartmentDashboard() {
   const user = await requireUser();
   if (user.role === "AP") {
-    return (
-      <main className="min-h-screen px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-4xl border border-[var(--line)] bg-white p-6">
-          <h1 className="text-2xl font-semibold">AP Dashboard</h1>
-          <p className="mt-2 text-sm text-[var(--muted)]">
-            AP users manage all invoices from the main dashboard.
-          </p>
-          <Link
-            className="focus-ring mt-4 inline-flex bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--accent-strong)]"
-            href="/"
-          >
-            Open AP Dashboard
-          </Link>
-        </div>
-      </main>
-    );
+    redirect("/");
   }
 
   const data = await readData();
@@ -152,7 +137,7 @@ export default async function DepartmentDashboard() {
   return (
     <main className="min-h-screen px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl space-y-6">
-        <header className="flex flex-col gap-4 border-b border-[var(--line)] pb-5 lg:flex-row lg:items-end lg:justify-between">
+        <header className="border-b border-[var(--line)] pb-5">
           <div>
             <div className="flex flex-wrap items-center gap-3">
               {branding.logo ? (
@@ -179,12 +164,6 @@ export default async function DepartmentDashboard() {
               to your department.
             </p>
           </div>
-          <form action={signOut} className="border border-[var(--line)] bg-white p-4">
-            <div className="text-sm font-semibold">{user.email}</div>
-            <button className="focus-ring mt-3 border border-[var(--line)] px-3 py-1.5 text-xs font-semibold hover:bg-slate-100">
-              Sign Out
-            </button>
-          </form>
         </header>
 
         <section className="grid gap-3 sm:grid-cols-3">
