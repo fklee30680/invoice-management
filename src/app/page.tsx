@@ -13,7 +13,7 @@ import { getPersistenceStatus, type PersistenceStatus } from "@/lib/runtime-conf
 import { requireApUser } from "@/lib/session";
 import { readData } from "@/lib/store";
 import type { AppData, Invoice, WorkflowStatus } from "@/lib/types";
-import { currencyDisplay, formatDate, formatDateTime } from "@/lib/utils";
+import { currencyDisplay, formatDate } from "@/lib/utils";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,6 +34,7 @@ function statusClass(status: WorkflowStatus) {
   const map: Record<WorkflowStatus, string> = {
     Uploaded: "border-slate-300 bg-slate-50 text-slate-700",
     "Needs AP Review": "border-amber-300 bg-amber-50 text-amber-800",
+    "Needs AP Rework": "border-orange-300 bg-orange-50 text-orange-800",
     Routed: "border-teal-300 bg-teal-50 text-teal-800",
     "Approved/Completed": "border-emerald-300 bg-emerald-50 text-emerald-800",
     Rejected: "border-red-300 bg-red-50 text-red-800",
@@ -363,7 +364,7 @@ function InvoiceTable({ data, invoices }: { data: AppData; invoices: Invoice[] }
 
 function ApWorkQueue({ data }: { data: AppData }) {
   const queue = data.invoices.filter((invoice) =>
-    ["Needs AP Review", "Routed"].includes(invoice.status),
+    ["Needs AP Review", "Needs AP Rework"].includes(invoice.status),
   );
 
   return (
@@ -492,25 +493,6 @@ function ApWorkQueue({ data }: { data: AppData }) {
   );
 }
 
-function AuditLog({ data }: { data: AppData }) {
-  return (
-    <section className="border border-[var(--line)] bg-[var(--panel)]">
-      <div className="border-b border-[var(--line)] px-4 py-3">
-        <h2 className="font-semibold">Recent Audit Events</h2>
-      </div>
-      <div className="divide-y divide-[var(--line)]">
-        {data.auditEvents.slice(0, 8).map((event) => (
-          <div className="grid gap-2 px-4 py-3 text-sm md:grid-cols-[180px_140px_1fr]" key={event.id}>
-            <span className="text-[var(--muted)]">{formatDateTime(event.createdAt)}</span>
-            <span className="font-mono text-xs uppercase text-[var(--muted)]">{event.type}</span>
-            <span>{event.message}</span>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 export default async function Home({ searchParams }: PageProps) {
   const user = await requireApUser();
   const params = (await searchParams) || {};
@@ -525,7 +507,7 @@ export default async function Home({ searchParams }: PageProps) {
   const persistenceStatus = getPersistenceStatus();
   const invoices = filterInvoices(data.invoices, data, filters);
   const needsAp = data.invoices.filter((invoice) =>
-    invoice.status === "Needs AP Review",
+    ["Needs AP Review", "Needs AP Rework"].includes(invoice.status),
   ).length;
   const routed = data.invoices.filter((invoice) => invoice.status === "Routed").length;
   const done = data.invoices.filter(
@@ -574,6 +556,12 @@ export default async function Home({ searchParams }: PageProps) {
               >
                 Setup
               </Link>
+              <Link
+                className="focus-ring border border-[var(--line)] px-3 py-1.5 text-xs font-semibold hover:bg-slate-100"
+                href="/audit"
+              >
+                Audit Log
+              </Link>
               <form action={signOut}>
                 <button className="focus-ring border border-[var(--line)] px-3 py-1.5 text-xs font-semibold hover:bg-slate-100">
                   Sign Out
@@ -601,7 +589,6 @@ export default async function Home({ searchParams }: PageProps) {
         <FilterBar data={data} filters={filters} />
         <InvoiceTable data={data} invoices={invoices} />
         <ApWorkQueue data={data} />
-        <AuditLog data={data} />
       </div>
     </main>
   );

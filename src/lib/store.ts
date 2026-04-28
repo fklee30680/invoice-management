@@ -67,9 +67,6 @@ function normalizeData(data: AppData): AppData {
     if (legacyStatus === "OCR Processing") {
       return { ...invoice, status: "Needs AP Review" as const };
     }
-    if (legacyStatus === "Needs AP Rework") {
-      return { ...invoice, status: "Needs AP Review" as const };
-    }
     if (legacyStatus === "Decision Received") {
       return { ...invoice, status: "Approved/Completed" as const };
     }

@@ -555,13 +555,13 @@ export async function submitDepartmentDecision(formData: FormData) {
     }
 
     if (decision === "Not our Department Invoice") {
-      invoice.status = "Needs AP Review";
+      invoice.status = "Needs AP Rework";
       invoice.dateApproved = "";
       addAudit(data, {
         invoiceId,
         actor: "Department Reviewer",
         type: "rework_returned",
-        message: "Department returned the invoice to AP review as not their department.",
+        message: "Department returned the invoice to AP rework as not their department.",
       });
       return;
     }

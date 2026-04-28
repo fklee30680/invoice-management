@@ -19,6 +19,7 @@ function statusClass(status: string) {
   if (status === "Rejected") return "border-red-300 bg-red-50 text-red-800";
   if (status === "Hold") return "border-purple-300 bg-purple-50 text-purple-800";
   if (status === "Approved/Completed") return "border-emerald-300 bg-emerald-50 text-emerald-800";
+  if (status === "Needs AP Rework") return "border-orange-300 bg-orange-50 text-orange-800";
   if (status === "Needs AP Review") return "border-amber-300 bg-amber-50 text-amber-800";
   return "border-teal-300 bg-teal-50 text-teal-800";
 }

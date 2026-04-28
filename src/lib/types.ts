@@ -3,6 +3,7 @@ export type Role = "AP" | "DEPARTMENT";
 export type WorkflowStatus =
   | "Uploaded"
   | "Needs AP Review"
+  | "Needs AP Rework"
   | "Routed"
   | "Approved/Completed"
   | "Rejected"
