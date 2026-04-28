@@ -216,8 +216,17 @@ function FilterBar({
   data: AppData;
   filters: { statuses: string[]; department: string; search: string };
 }) {
+  const filterKey = [
+    filters.search,
+    filters.department,
+    ...filters.statuses,
+  ].join("|");
+
   return (
-    <form className="grid gap-4 border border-[var(--line)] bg-[var(--panel)] p-4 xl:grid-cols-[1fr_2fr_220px_auto_auto]">
+    <form
+      className="grid gap-4 border border-[var(--line)] bg-[var(--panel)] p-4 xl:grid-cols-[1fr_2fr_220px_auto_auto]"
+      key={filterKey || "clear"}
+    >
       <input
         className="focus-ring min-h-10 border border-[var(--line)] bg-white px-3 text-sm"
         name="search"
@@ -264,6 +273,8 @@ function FilterBar({
       <Link
         className="focus-ring inline-flex items-center justify-center border border-[var(--line)] bg-white px-4 py-2 text-sm font-semibold hover:bg-slate-100"
         href="/"
+        prefetch={false}
+        replace
       >
         Clear Filters
       </Link>
