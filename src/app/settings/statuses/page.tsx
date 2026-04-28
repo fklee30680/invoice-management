@@ -49,6 +49,11 @@ export default async function StatusSettingsPage() {
           Configure invoice status names, badge colors, filter choices, and which
           records show in the AP, department, and completed invoice areas.
         </p>
+        <p className="mt-2 max-w-3xl text-sm text-[var(--muted)]">
+          Statuses used by invoices or workflow routing can be deleted after you
+          choose a replacement status. Workflow roles can move only to a custom
+          status that is not already assigned to another workflow role.
+        </p>
       </div>
 
       <form
@@ -108,8 +113,15 @@ export default async function StatusSettingsPage() {
           <tbody>
             {data.statuses.map((status) => {
               const formId = `status-${status.id}`;
+              const deleteFormId = `delete-${status.id}`;
               const count = usageCount(status.label, data);
-              const canDelete = !status.systemRole && count === 0;
+              const replacementOptions = data.statuses.filter((candidate) => {
+                if (candidate.id === status.id) return false;
+                if (status.systemRole && candidate.systemRole) return false;
+                return true;
+              });
+              const needsReplacement = Boolean(status.systemRole || count > 0);
+              const canDelete = !needsReplacement || replacementOptions.length > 0;
 
               return (
                 <tr className="align-top hover:bg-slate-50" key={status.id}>
@@ -180,6 +192,27 @@ export default async function StatusSettingsPage() {
                     {count}
                   </td>
                   <td className="border-b border-[var(--line)] px-3 py-3">
+                    <label className="mb-3 block text-xs font-semibold uppercase text-[var(--muted)]">
+                      Move To Before Delete
+                      <select
+                        className="focus-ring mt-1 min-h-10 w-full border border-[var(--line)] bg-white px-3 text-sm font-normal normal-case text-[var(--foreground)] disabled:opacity-45"
+                        disabled={!needsReplacement}
+                        form={deleteFormId}
+                        name="replacementStatusId"
+                        required={needsReplacement}
+                      >
+                        <option value="">
+                          {needsReplacement
+                            ? "Select replacement"
+                            : "Not needed"}
+                        </option>
+                        {replacementOptions.map((candidate) => (
+                          <option key={candidate.id} value={candidate.id}>
+                            {candidate.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                     <div className="flex flex-wrap gap-2">
                       <button
                         className="focus-ring border border-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-[var(--accent)] hover:bg-teal-50"
@@ -187,7 +220,7 @@ export default async function StatusSettingsPage() {
                       >
                         Save
                       </button>
-                      <form action={deleteInvoiceStatus}>
+                      <form action={deleteInvoiceStatus} id={deleteFormId}>
                         <input name="statusId" type="hidden" value={status.id} />
                         <button
                           className="focus-ring border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-45"
@@ -199,7 +232,12 @@ export default async function StatusSettingsPage() {
                     </div>
                     {!canDelete ? (
                       <div className="mt-2 text-xs text-[var(--muted)]">
-                        Cannot delete statuses required by workflow or used by invoices.
+                        Add a custom replacement status before deleting this workflow status.
+                      </div>
+                    ) : needsReplacement ? (
+                      <div className="mt-2 text-xs text-[var(--muted)]">
+                        Deleting will move current invoices and any workflow role
+                        to the selected replacement.
                       </div>
                     ) : null}
                   </td>

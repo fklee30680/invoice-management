@@ -412,25 +412,58 @@ export async function updateInvoiceStatus(formData: FormData) {
 
 export async function deleteInvoiceStatus(formData: FormData) {
   const statusId = value(formData, "statusId");
+  const replacementStatusId = value(formData, "replacementStatusId");
   if (!statusId) return;
 
   await mutateData((data) => {
     const status = data.statuses.find((item) => item.id === statusId);
     if (!status) return;
-    const inUse = data.invoices.some((invoice) => invoice.status === status.label);
-    if (status.systemRole || inUse) {
+    const replacement = data.statuses.find(
+      (item) => item.id === replacementStatusId && item.id !== statusId,
+    );
+    const inUseCount = data.invoices.filter(
+      (invoice) => invoice.status === status.label,
+    ).length;
+    const needsReplacement = Boolean(status.systemRole || inUseCount > 0);
+
+    if (needsReplacement && !replacement) {
       addAudit(data, {
         actor: "AP",
         type: "status_delete_blocked",
-        message: `Could not delete ${status.label}; it is required by the workflow or used by invoices.`,
+        message: `Could not delete ${status.label}; choose a replacement status first.`,
       });
       return;
     }
+
+    if (status.systemRole && replacement?.systemRole) {
+      addAudit(data, {
+        actor: "AP",
+        type: "status_delete_blocked",
+        message: `Could not delete ${status.label}; workflow roles can only move to a non-workflow replacement status.`,
+      });
+      return;
+    }
+
+    if (replacement) {
+      for (const invoice of data.invoices) {
+        if (invoice.status === status.label) {
+          invoice.status = replacement.label;
+          invoice.updatedAt = new Date().toISOString();
+        }
+      }
+
+      if (status.systemRole) {
+        replacement.systemRole = status.systemRole;
+      }
+    }
+
     data.statuses = data.statuses.filter((item) => item.id !== statusId);
     addAudit(data, {
       actor: "AP",
       type: "status_deleted",
-      message: `Deleted invoice status ${status.label}.`,
+      message: replacement
+        ? `Deleted invoice status ${status.label}; moved ${inUseCount} invoices and workflow role to ${replacement.label}.`
+        : `Deleted invoice status ${status.label}.`,
     });
   });
 
