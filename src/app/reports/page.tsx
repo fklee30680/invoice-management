@@ -1,4 +1,3 @@
-import Image from "next/image";
 import {
   buildReportMetrics,
   dateFieldLabel,
@@ -25,7 +24,6 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
   await requireApUser();
   const query = (await searchParams) || {};
   const data = await readData();
-  const branding = data.branding;
   const filters = parseReportFilters(query);
   const invoices = filteredReportInvoices(data, filters);
   const metrics = buildReportMetrics(data, invoices, filters);
@@ -42,26 +40,9 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
     <main className="min-h-screen px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="border-b border-[var(--line)] pb-5">
-          <div className="flex flex-wrap items-center gap-3">
-            {branding.logo ? (
-              <Image
-                alt={`${branding.appTitle} logo`}
-                className="max-h-12 max-w-40 object-contain"
-                height={48}
-                src="/branding/logo"
-                unoptimized
-                width={160}
-              />
-            ) : null}
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-normal text-[var(--accent)]">
-                AP Reports
-              </p>
-              <h1 className="mt-1 text-3xl font-semibold tracking-normal">
-                Reports
-              </h1>
-            </div>
-          </div>
+          <h1 className="text-3xl font-semibold tracking-normal">
+            Reports
+          </h1>
           <p className="mt-2 max-w-3xl text-sm text-[var(--muted)]">
             Run branded PDF reports using invoice metadata filters.
           </p>

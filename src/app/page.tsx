@@ -1,5 +1,4 @@
 import Link from "next/link";
-import Image from "next/image";
 import {
   updateAndRouteInvoice,
   uploadInvoices,
@@ -212,7 +211,6 @@ export default async function Home({ searchParams }: PageProps) {
   const params = (await searchParams) || {};
   const pageError = one(params.error);
   const data = await readData();
-  const branding = data.branding;
   const metricViews: InvoiceSummaryView[] = [
     "total",
     "needs-ap-work",
@@ -226,26 +224,9 @@ export default async function Home({ searchParams }: PageProps) {
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="border-b border-[var(--line)] pb-5">
           <div>
-            <div className="flex flex-wrap items-center gap-3">
-              {branding.logo ? (
-                <Image
-                  alt={`${branding.appTitle} logo`}
-                  className="max-h-14 max-w-44 object-contain"
-                  height={56}
-                  src="/branding/logo"
-                  unoptimized
-                  width={176}
-                />
-              ) : null}
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-normal text-[var(--accent)]">
-                  {branding.divisionLabel}
-                </p>
-                <h1 className="mt-2 text-3xl font-semibold tracking-normal">
-                  {branding.appTitle}
-                </h1>
-              </div>
-            </div>
+            <h1 className="text-3xl font-semibold tracking-normal">
+              Dashboard
+            </h1>
             <p className="mt-2 max-w-3xl text-sm text-[var(--muted)]">
               Upload invoices, validate against PO data, route department review,
               and track every invoice through AP completion.

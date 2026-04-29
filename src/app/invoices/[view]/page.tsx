@@ -1,4 +1,3 @@
-import Image from "next/image";
 import { notFound } from "next/navigation";
 import { markManualPaymentInvoicesPaid } from "@/lib/actions";
 import {
@@ -44,7 +43,6 @@ export default async function InvoiceViewPage({
     direction: sortDirection(query.direction),
   };
   const data = await readData();
-  const branding = data.branding;
   const viewConfig = INVOICE_SUMMARY_VIEWS[view];
   const baseInvoices = invoicesForSummaryView(data.invoices, view, data);
   const invoices = filterInvoices(baseInvoices, data, filters);
@@ -55,26 +53,9 @@ export default async function InvoiceViewPage({
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-4 border-b border-[var(--line)] pb-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <div className="flex flex-wrap items-center gap-3">
-              {branding.logo ? (
-                <Image
-                  alt={`${branding.appTitle} logo`}
-                  className="max-h-12 max-w-40 object-contain"
-                  height={48}
-                  src="/branding/logo"
-                  unoptimized
-                  width={160}
-                />
-              ) : null}
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-normal text-[var(--accent)]">
-                  Invoice List
-                </p>
-                <h1 className="mt-1 text-3xl font-semibold tracking-normal">
-                  {viewConfig.label}
-                </h1>
-              </div>
-            </div>
+            <h1 className="text-3xl font-semibold tracking-normal">
+              {viewConfig.label}
+            </h1>
             <p className="mt-2 max-w-3xl text-sm text-[var(--muted)]">
               {viewConfig.description}
             </p>

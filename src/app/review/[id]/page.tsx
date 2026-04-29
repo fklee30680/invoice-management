@@ -1,5 +1,4 @@
 import Link from "next/link";
-import Image from "next/image";
 import { notFound, redirect } from "next/navigation";
 import {
   submitDepartmentDecision,
@@ -30,7 +29,6 @@ export default async function ReviewPage({
   const { id } = await params;
   const query = (await searchParams) || {};
   const data = await readData();
-  const branding = data.branding;
   const user = await requireUser();
   const invoice = data.invoices.find((item) => item.id === id);
   if (!invoice) notFound();
@@ -48,21 +46,9 @@ export default async function ReviewPage({
       <div className="mx-auto max-w-5xl space-y-5">
         <header className="flex flex-col gap-4 border-b border-[var(--line)] pb-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <div className="flex flex-wrap items-center gap-3">
-              {branding.logo ? (
-                <Image
-                  alt={`${branding.appTitle} logo`}
-                  className="max-h-12 max-w-40 object-contain"
-                  height={48}
-                  src="/branding/logo"
-                  unoptimized
-                  width={160}
-                />
-              ) : null}
-              <h1 className="text-3xl font-semibold tracking-normal">
-                {user.role === "AP" ? "Invoice Review" : "Department Invoice Review"}
-              </h1>
-            </div>
+            <h1 className="text-3xl font-semibold tracking-normal">
+              {user.role === "AP" ? "Invoice Review" : "Department Invoice Review"}
+            </h1>
             <p className="mt-2 text-sm text-[var(--muted)]">
               {user.role === "AP"
                 ? `Signed in as ${user.name}. Update metadata, routing, and payment status.`
