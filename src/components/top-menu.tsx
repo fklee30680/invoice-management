@@ -67,6 +67,7 @@ export function TopMenu({
               <MenuLink href="/" label="Dashboard" />
               <TopMenuDropdown label="Invoices" links={invoiceLinks} />
               <TopMenuDropdown label="Files" links={uploadLinks} />
+              <MenuLink href="/reports" label="Reports" />
               <TopMenuDropdown label="Setup" links={setupLinks} />
               <MenuLink href="/audit" label="Audit Log" />
             </>
