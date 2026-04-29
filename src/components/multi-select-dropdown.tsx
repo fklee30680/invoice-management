@@ -3,15 +3,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 export type MultiSelectDropdownOption = {
+  group?: string;
   id: string;
-  label: string;
   inactive?: boolean;
+  label: string;
 };
 
 export function MultiSelectDropdown({
   clearLabel = "Clear selections",
   emptyLabel,
   initialSelected = [],
+  inputNameForOption,
+  inputValueForOption,
   isClearDisabled,
   name,
   onNormalizeSelection,
@@ -22,8 +25,10 @@ export function MultiSelectDropdown({
   clearLabel?: string;
   emptyLabel: string;
   initialSelected?: string[];
+  inputNameForOption?: (id: string) => string;
+  inputValueForOption?: (id: string) => string;
   isClearDisabled?: (selected: string[]) => boolean;
-  name: string;
+  name?: string;
   onNormalizeSelection?: (selected: string[], previous: string[]) => string[];
   options: MultiSelectDropdownOption[];
   placeholder: string;
@@ -71,12 +76,33 @@ export function MultiSelectDropdown({
             .join(", ")
         : `${selected.length} ${summaryPluralLabel} selected`;
   const clearDisabled = isClearDisabled?.(selected) || false;
+  const groupedOptions = options.reduce<
+    { group: string; options: MultiSelectDropdownOption[] }[]
+  >((groups, option) => {
+    const groupName = option.group || "";
+    const group = groups.find((item) => item.group === groupName);
+    if (group) {
+      group.options.push(option);
+    } else {
+      groups.push({ group: groupName, options: [option] });
+    }
+    return groups;
+  }, []);
 
   return (
     <div className="relative" ref={containerRef}>
-      {selected.map((id) => (
-        <input key={id} name={name} type="hidden" value={id} />
-      ))}
+      {selected.map((id) => {
+        const inputName = inputNameForOption?.(id) || name;
+        if (!inputName) return null;
+        return (
+          <input
+            key={id}
+            name={inputName}
+            type="hidden"
+            value={inputValueForOption?.(id) || id}
+          />
+        );
+      })}
       <button
         aria-expanded={open}
         className="focus-ring flex min-h-10 w-full items-center justify-between gap-3 border border-[var(--line)] bg-white px-3 py-2 text-left text-sm font-normal normal-case text-[var(--foreground)]"
@@ -93,30 +119,39 @@ export function MultiSelectDropdown({
       {open ? (
         <div className="absolute left-0 z-30 mt-1 max-h-72 w-full overflow-auto border border-[var(--line)] bg-white p-2 shadow-lg">
           {options.length > 0 ? (
-            <div className="grid gap-1">
-              {options.map((option) => (
-                <label
-                  className={`flex cursor-pointer items-center gap-2 px-2 py-1.5 text-sm ${
-                    option.inactive ? "text-[var(--muted)]" : "text-[var(--foreground)]"
-                  } hover:bg-slate-100`}
-                  key={option.id}
-                >
-                  <input
-                    checked={selected.includes(option.id)}
-                    className="h-4 w-4 accent-[var(--accent)]"
-                    onChange={(event) => {
-                      const next = event.currentTarget.checked
-                        ? [...selected, option.id]
-                        : selected.filter((id) => id !== option.id);
-                      setNormalizedSelection(Array.from(new Set(next)));
-                    }}
-                    type="checkbox"
-                  />
-                  <span>
-                    {option.label}
-                    {option.inactive ? " (inactive)" : ""}
-                  </span>
-                </label>
+            <div className="grid gap-2">
+              {groupedOptions.map((group) => (
+                <div className="grid gap-1" key={group.group || "options"}>
+                  {group.group ? (
+                    <div className="px-2 pt-1 text-xs font-semibold uppercase text-[var(--muted)]">
+                      {group.group}
+                    </div>
+                  ) : null}
+                  {group.options.map((option) => (
+                    <label
+                      className={`flex cursor-pointer items-center gap-2 px-2 py-1.5 text-sm ${
+                        option.inactive ? "text-[var(--muted)]" : "text-[var(--foreground)]"
+                      } hover:bg-slate-100`}
+                      key={option.id}
+                    >
+                      <input
+                        checked={selected.includes(option.id)}
+                        className="h-4 w-4 accent-[var(--accent)]"
+                        onChange={(event) => {
+                          const next = event.currentTarget.checked
+                            ? [...selected, option.id]
+                            : selected.filter((id) => id !== option.id);
+                          setNormalizedSelection(Array.from(new Set(next)));
+                        }}
+                        type="checkbox"
+                      />
+                      <span>
+                        {option.label}
+                        {option.inactive ? " (inactive)" : ""}
+                      </span>
+                    </label>
+                  ))}
+                </div>
               ))}
             </div>
           ) : (

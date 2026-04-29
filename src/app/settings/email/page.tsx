@@ -1,5 +1,10 @@
 import Link from "next/link";
 import {
+  DepartmentRecipientMultiSelect,
+  OrganizationContactMultiSelect,
+} from "@/components/email-template-recipient-selects";
+import { ScheduleMultiSelect } from "@/components/schedule-multi-select";
+import {
   addEscalationTemplate,
   deleteEscalationTemplate,
   sendTestEscalationEmail,
@@ -12,7 +17,7 @@ import {
   type EscalationCandidate,
 } from "@/lib/escalations";
 import { readData } from "@/lib/store";
-import type { EscalationRecipientConfig } from "@/lib/types";
+import type { EscalationRecipientConfig, EscalationTemplate } from "@/lib/types";
 import { formatDate, formatDateTime } from "@/lib/utils";
 
 export const runtime = "nodejs";
@@ -111,50 +116,138 @@ function TextArea({
   );
 }
 
+function PlaceholderReference() {
+  return (
+    <details className="border border-[var(--line)] bg-white px-3 py-2 text-sm">
+      <summary className="cursor-pointer font-semibold">Available placeholders</summary>
+      <div className="mt-2 grid gap-1 text-xs text-[var(--muted)] sm:grid-cols-2 lg:grid-cols-3">
+        {[
+          "{{vendor_name}}",
+          "{{invoice_number}}",
+          "{{po_number}}",
+          "{{amount}}",
+          "{{department_name}}",
+          "{{review_link}}",
+          "{{routed_at}}",
+          "{{notification_sent_at}}",
+          "{{escalation_schedule_name}}",
+          "{{escalation_schedule_days}}",
+          "{{escalation_template_name}}",
+          "{{business_days_waiting}}",
+          "{{organization_contact_titles}}",
+          "{{organization_contact_names}}",
+        ].map((placeholder) => (
+          <code key={placeholder}>{placeholder}</code>
+        ))}
+      </div>
+    </details>
+  );
+}
+
 function RecipientConfigFields({
   config,
   data,
-  form,
 }: {
   config: EscalationRecipientConfig;
   data: Awaited<ReturnType<typeof readData>>;
-  form?: string;
 }) {
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <fieldset className="border border-[var(--line)] bg-white p-3">
-        <legend className="px-1 text-xs font-semibold uppercase text-[var(--muted)]">
+    <div className="grid gap-3 lg:grid-cols-2">
+      <div>
+        <div className="text-xs font-semibold uppercase text-[var(--muted)]">
           Department Recipients
-        </legend>
-        <div className="grid gap-2">
-          <Checkbox defaultChecked={config.includeDepartmentEmail} form={form} label="Department email" name="includeDepartmentEmail" />
-          <Checkbox defaultChecked={config.includeDepartmentHeadEmail} form={form} label="Department head email" name="includeDepartmentHeadEmail" />
-          <Checkbox defaultChecked={config.includeDepartmentEscalationEmail} form={form} label="Department escalation email" name="includeDepartmentEscalationEmail" />
         </div>
-      </fieldset>
-      <fieldset className="border border-[var(--line)] bg-white p-3">
-        <legend className="px-1 text-xs font-semibold uppercase text-[var(--muted)]">
+        <div className="mt-1">
+          <DepartmentRecipientMultiSelect config={config} />
+        </div>
+      </div>
+      <div>
+        <div className="text-xs font-semibold uppercase text-[var(--muted)]">
           Organization Contacts
-        </legend>
-        <div className="grid gap-2">
-          <Checkbox
-            defaultChecked={config.includeOrganizationContactsForTriggeredSchedule}
-            form={form}
-            label="Include contacts assigned to triggered schedule"
-            name="includeOrganizationContactsForTriggeredSchedule"
-          />
-          {data.organizationEscalationContacts.map((contact) => (
-            <Checkbox
-              defaultChecked={config.specificOrganizationContactIds.includes(contact.id)}
-              form={form}
-              key={contact.id}
-              label={`${contact.title}: ${contact.name}`}
-              name="specificOrganizationContactIds"
-              value={contact.id}
-            />
-          ))}
         </div>
-      </fieldset>
+        <div className="mt-1">
+          <OrganizationContactMultiSelect
+            config={config}
+            contacts={data.organizationEscalationContacts}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function scheduleSummary(
+  scheduleIds: string[],
+  schedules: Awaited<ReturnType<typeof readData>>["escalationSchedules"],
+) {
+  const names = scheduleIds.map((id) => {
+    const schedule = schedules.find((item) => item.id === id);
+    if (!schedule) return `${id} (inactive)`;
+    return schedule.enabled ? schedule.name : `${schedule.name} (inactive)`;
+  });
+  if (names.length <= 2) return names.join(", ") || "No schedules selected";
+  return `${names.length} schedules selected`;
+}
+
+function departmentRecipientSummary(config: EscalationRecipientConfig) {
+  const labels = [
+    config.includeDepartmentEmail ? "Department Email" : "",
+    config.includeDepartmentHeadEmail ? "Department Head" : "",
+    config.includeDepartmentEscalationEmail ? "Department Escalation" : "",
+  ].filter(Boolean);
+  if (labels.length <= 2) return labels.join(", ") || "None selected";
+  return `${labels.length} department recipients selected`;
+}
+
+function organizationContactSummary(
+  config: EscalationRecipientConfig,
+  contacts: Awaited<ReturnType<typeof readData>>["organizationEscalationContacts"],
+) {
+  const labels = [
+    config.includeOrganizationContactsForTriggeredSchedule
+      ? "Assigned contacts for triggered schedule"
+      : "",
+    ...config.specificOrganizationContactIds.map((id) => {
+      const contact = contacts.find((item) => item.id === id);
+      if (!contact) return `${id} (inactive)`;
+      return contact.enabled
+        ? `${contact.title} - ${contact.name}`
+        : `${contact.title} - ${contact.name} (inactive)`;
+    }),
+  ].filter(Boolean);
+  if (labels.length <= 1) return labels.join("") || "None selected";
+  return `${labels.length} organization contact options selected`;
+}
+
+function TemplateSummary({
+  data,
+  template,
+}: {
+  data: Awaited<ReturnType<typeof readData>>;
+  template: EscalationTemplate;
+}) {
+  return (
+    <div className="grid gap-3 border-b border-[var(--line)] pb-3 text-sm lg:grid-cols-[1.3fr_1.2fr_1.4fr_1.6fr_auto]">
+      <div>
+        <div className="text-xs font-semibold uppercase text-[var(--muted)]">Template Name</div>
+        <div>{template.name}</div>
+      </div>
+      <div>
+        <div className="text-xs font-semibold uppercase text-[var(--muted)]">Assigned Schedules</div>
+        <div>{scheduleSummary(template.scheduleIds, data.escalationSchedules)}</div>
+      </div>
+      <div>
+        <div className="text-xs font-semibold uppercase text-[var(--muted)]">Department Recipients</div>
+        <div>{departmentRecipientSummary(template.recipientConfig)}</div>
+      </div>
+      <div>
+        <div className="text-xs font-semibold uppercase text-[var(--muted)]">Organization Contacts</div>
+        <div>{organizationContactSummary(template.recipientConfig, data.organizationEscalationContacts)}</div>
+      </div>
+      <div>
+        <div className="text-xs font-semibold uppercase text-[var(--muted)]">Status</div>
+        <div>{template.enabled ? "Enabled" : "Disabled"}</div>
+      </div>
     </div>
   );
 }
@@ -269,7 +362,7 @@ export default async function EmailSettingsPage({
 
       <section className="space-y-4">
         <h3 className="text-lg font-semibold">Escalation Email Templates</h3>
-        <form action={addEscalationTemplate} className="grid gap-3 border border-[var(--line)] bg-[var(--panel)] p-4">
+        <form action={addEscalationTemplate} className="grid gap-4 border border-[var(--line)] bg-[var(--panel)] p-4">
           <h4 className="font-semibold">Add Escalation Template</h4>
           <div className="grid gap-3 md:grid-cols-3">
             <TextInput label="Template Name" name="name" required />
@@ -278,19 +371,26 @@ export default async function EmailSettingsPage({
               <Checkbox defaultChecked label="Enabled" name="enabled" />
             </div>
           </div>
-          <fieldset className="border border-[var(--line)] bg-white p-3">
-            <legend className="px-1 text-xs font-semibold uppercase text-[var(--muted)]">
-              Assigned Schedules
-            </legend>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {data.escalationSchedules.map((schedule) => (
-                <Checkbox key={schedule.id} label={schedule.name} name="scheduleIds" value={schedule.id} />
-              ))}
+          <div className="grid gap-3 lg:grid-cols-[1fr_2fr]">
+            <div>
+              <div className="text-xs font-semibold uppercase text-[var(--muted)]">
+                Assigned Schedules
+              </div>
+              <div className="mt-1">
+                <ScheduleMultiSelect
+                  name="scheduleIds"
+                  placeholder="Select assigned schedules"
+                  schedules={data.escalationSchedules}
+                />
+              </div>
             </div>
-          </fieldset>
-          <TextInput label="Subject" name="subject" required />
-          <TextArea label="Body" name="body" required />
-          <RecipientConfigFields config={emptyRecipientConfig} data={data} />
+            <RecipientConfigFields config={emptyRecipientConfig} data={data} />
+          </div>
+          <div className="grid gap-3">
+            <TextInput label="Subject" name="subject" required />
+            <TextArea label="Body" name="body" required />
+            <PlaceholderReference />
+          </div>
           <div className="flex justify-end">
             <button className="focus-ring bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--accent-strong)]">
               Add Escalation Template
@@ -302,7 +402,8 @@ export default async function EmailSettingsPage({
           const formId = `template-${template.id}`;
           return (
             <article className="border border-[var(--line)] bg-[var(--panel)] p-4" key={template.id}>
-              <form action={updateEscalationTemplate} className="grid gap-3" id={formId}>
+              <TemplateSummary data={data} template={template} />
+              <form action={updateEscalationTemplate} className="mt-3 grid gap-4" id={formId}>
                 <input name="templateId" type="hidden" value={template.id} />
                 <div className="grid gap-3 md:grid-cols-3">
                   <TextInput defaultValue={template.name} form={formId} label="Template Name" name="name" required />
@@ -311,26 +412,32 @@ export default async function EmailSettingsPage({
                     <Checkbox defaultChecked={template.enabled} form={formId} label="Enabled" name="enabled" />
                   </div>
                 </div>
-                <fieldset className="border border-[var(--line)] bg-white p-3">
-                  <legend className="px-1 text-xs font-semibold uppercase text-[var(--muted)]">
-                    Assigned Schedules
-                  </legend>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {data.escalationSchedules.map((schedule) => (
-                      <Checkbox
-                        defaultChecked={template.scheduleIds.includes(schedule.id)}
-                        form={formId}
-                        key={schedule.id}
-                        label={schedule.name}
+                <div className="grid gap-3 lg:grid-cols-[1fr_2fr]">
+                  <div>
+                    <div className="text-xs font-semibold uppercase text-[var(--muted)]">
+                      Assigned Schedules
+                    </div>
+                    <div className="mt-1">
+                      <ScheduleMultiSelect
+                        initialSelected={template.scheduleIds}
                         name="scheduleIds"
-                        value={schedule.id}
+                        placeholder="Select assigned schedules"
+                        schedules={data.escalationSchedules}
                       />
-                    ))}
+                    </div>
+                    {template.enabled && template.scheduleIds.length === 0 ? (
+                      <div className="mt-2 text-xs text-amber-700">
+                        Enabled templates should be assigned to at least one schedule.
+                      </div>
+                    ) : null}
                   </div>
-                </fieldset>
-                <TextInput defaultValue={template.subject} form={formId} label="Subject" name="subject" required />
-                <TextArea defaultValue={template.body} form={formId} label="Body" name="body" required />
-                <RecipientConfigFields config={template.recipientConfig} data={data} form={formId} />
+                  <RecipientConfigFields config={template.recipientConfig} data={data} />
+                </div>
+                <div className="grid gap-3">
+                  <TextInput defaultValue={template.subject} form={formId} label="Subject" name="subject" required />
+                  <TextArea defaultValue={template.body} form={formId} label="Body" name="body" required />
+                  <PlaceholderReference />
+                </div>
               </form>
               <div className="mt-3 flex flex-wrap gap-2 border-t border-[var(--line)] pt-3">
                 <button className="focus-ring border border-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-[var(--accent)] hover:bg-teal-50" form={formId}>

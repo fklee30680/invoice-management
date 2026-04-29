@@ -48,7 +48,7 @@ export function TopMenuDropdown({
         }}
         type="button"
       >
-        {label}
+        <span className="font-bold">{label}</span>
         <span aria-hidden="true" className="text-[var(--muted)]">
           v
         </span>

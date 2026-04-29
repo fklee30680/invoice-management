@@ -676,14 +676,17 @@ export async function addEscalationTemplate(formData: FormData) {
   const name = value(formData, "name");
   const subject = value(formData, "subject");
   const body = value(formData, "body");
+  const enabled = checkbox(formData, "enabled");
+  const scheduleIds = idList(formData, "scheduleIds");
   if (!name || !subject || !body) return;
+  if (enabled && scheduleIds.length === 0) return;
 
   await mutateData((data) => {
     data.escalationTemplates.push({
       id: createId("escalation-template"),
       name,
-      enabled: checkbox(formData, "enabled"),
-      scheduleIds: idList(formData, "scheduleIds"),
+      enabled,
+      scheduleIds,
       recipientConfig: escalationRecipientConfig(formData),
       sortOrder: numberValue(formData, "sortOrder", data.escalationTemplates.length + 1),
       subject,
@@ -710,14 +713,17 @@ export async function updateEscalationTemplate(formData: FormData) {
   const name = value(formData, "name");
   const subject = value(formData, "subject");
   const body = value(formData, "body");
+  const enabled = checkbox(formData, "enabled");
+  const scheduleIds = idList(formData, "scheduleIds");
   if (!templateId || !name || !subject || !body) return;
+  if (enabled && scheduleIds.length === 0) return;
 
   await mutateData((data) => {
     const template = data.escalationTemplates.find((item) => item.id === templateId);
     if (!template) return;
     template.name = name;
-    template.enabled = checkbox(formData, "enabled");
-    template.scheduleIds = idList(formData, "scheduleIds");
+    template.enabled = enabled;
+    template.scheduleIds = scheduleIds;
     template.recipientConfig = escalationRecipientConfig(formData);
     template.sortOrder = numberValue(formData, "sortOrder", template.sortOrder);
     template.subject = subject;
