@@ -383,8 +383,13 @@ export default async function EmailSettingsPage({
         {dryRun ? (
           <div className="space-y-3">
             <div className="text-sm text-[var(--muted)]">
-              Dry run at {formatDateTime(dryRun.runAt)}. {dryRun.wouldSendCount} emails would be sent.
+              Dry run at {formatDateTime(dryRun.runAt)}. {dryRun.wouldSendCount} emails would be sent. {dryRun.skippedNoRecipientCount} would be skipped for missing recipients.
             </div>
+            {dryRun.errors.length ? (
+              <div className="border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                {dryRun.errors.join(" ")}
+              </div>
+            ) : null}
             <CandidateTable candidates={dryRun.candidates} />
           </div>
         ) : null}

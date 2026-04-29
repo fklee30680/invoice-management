@@ -110,6 +110,43 @@ function normalizeEscalationScheduler(
   };
 }
 
+export function normalizeOrganizationDepartmentScope(
+  scope:
+    | { appliesToAllDepartments?: boolean; departmentIds?: string[] }
+    | string[]
+    | string
+    | undefined,
+) {
+  if (!scope) {
+    return { appliesToAllDepartments: true, departmentIds: [] };
+  }
+
+  if (typeof scope === "string") {
+    return ["all", "ALL_DEPARTMENTS"].includes(scope)
+      ? { appliesToAllDepartments: true, departmentIds: [] }
+      : { appliesToAllDepartments: false, departmentIds: [scope] };
+  }
+
+  if (Array.isArray(scope)) {
+    if (
+      scope.length === 0 ||
+      scope.some((item) => ["all", "ALL_DEPARTMENTS"].includes(item))
+    ) {
+      return { appliesToAllDepartments: true, departmentIds: [] };
+    }
+    return { appliesToAllDepartments: false, departmentIds: scope.filter(Boolean) };
+  }
+
+  if (scope.appliesToAllDepartments !== false) {
+    return { appliesToAllDepartments: true, departmentIds: [] };
+  }
+
+  return {
+    appliesToAllDepartments: false,
+    departmentIds: (scope.departmentIds || []).filter(Boolean),
+  };
+}
+
 function defaultRecipientConfig() {
   return {
     includeDepartmentEmail: true,
@@ -169,7 +206,7 @@ function normalizeOrganizationEscalationContacts(
       email: contact.email || "",
       enabled: contact.enabled !== false,
       assignedScheduleIds: contact.assignedScheduleIds || [],
-      departmentScope: contact.departmentScope || [],
+      departmentScope: normalizeOrganizationDepartmentScope(contact.departmentScope),
       notes: contact.notes || "",
       createdAt: contact.createdAt || new Date().toISOString(),
       updatedAt: contact.updatedAt || new Date().toISOString(),
@@ -203,7 +240,7 @@ function normalizeOrganizationEscalationContacts(
         email: contact.email,
         enabled: true,
         assignedScheduleIds: [],
-        departmentScope: [],
+        departmentScope: { appliesToAllDepartments: true, departmentIds: [] },
         notes: "Migrated from prior organization escalation settings.",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),

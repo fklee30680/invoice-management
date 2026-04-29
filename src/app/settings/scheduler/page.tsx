@@ -117,6 +117,7 @@ export default async function SchedulerRuntimePage() {
                 <th className="border-b border-[var(--line)] px-3 py-3">Sent</th>
                 <th className="border-b border-[var(--line)] px-3 py-3">Would Send</th>
                 <th className="border-b border-[var(--line)] px-3 py-3">Failed</th>
+                <th className="border-b border-[var(--line)] px-3 py-3">Skipped</th>
                 <th className="border-b border-[var(--line)] px-3 py-3">Errors</th>
               </tr>
             </thead>
@@ -128,12 +129,13 @@ export default async function SchedulerRuntimePage() {
                   <td className="border-b border-[var(--line)] px-3 py-3">{summary.sentCount}</td>
                   <td className="border-b border-[var(--line)] px-3 py-3">{summary.wouldSendCount}</td>
                   <td className="border-b border-[var(--line)] px-3 py-3">{summary.failedCount}</td>
+                  <td className="border-b border-[var(--line)] px-3 py-3">{summary.skippedCount || 0}</td>
                   <td className="border-b border-[var(--line)] px-3 py-3">{summary.errors.join(" ") || "None"}</td>
                 </tr>
               ))}
               {data.escalationRunSummaries.length === 0 ? (
                 <tr>
-                  <td className="px-3 py-8 text-center text-[var(--muted)]" colSpan={6}>
+                  <td className="px-3 py-8 text-center text-[var(--muted)]" colSpan={7}>
                     No escalation scheduler runs have been recorded.
                   </td>
                 </tr>

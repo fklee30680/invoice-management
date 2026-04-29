@@ -3,6 +3,7 @@ import {
   deleteOrganizationEscalationContact,
   updateOrganizationEscalationContact,
 } from "@/lib/actions";
+import { DepartmentScopeSelect } from "@/components/department-scope-select";
 import { readData } from "@/lib/store";
 import { formatDateTime } from "@/lib/utils";
 
@@ -35,6 +36,19 @@ function Checkbox({
       {label}
     </label>
   );
+}
+
+function departmentScopeLabel(
+  contact: Awaited<ReturnType<typeof readData>>["organizationEscalationContacts"][number],
+  departments: Awaited<ReturnType<typeof readData>>["departments"],
+) {
+  if (contact.departmentScope.appliesToAllDepartments) return "All Departments";
+  const names = contact.departmentScope.departmentIds.map((id) => {
+    const department = departments.find((item) => item.id === id);
+    return department?.name || `${id} (inactive)`;
+  });
+  if (names.length <= 2) return names.join(", ") || "No departments selected";
+  return `${names.length} Departments`;
 }
 
 export default async function OrganizationEscalationContactsPage() {
@@ -80,11 +94,10 @@ export default async function OrganizationEscalationContactsPage() {
           <legend className="px-1 text-xs font-semibold uppercase text-[var(--muted)]">
             Department Scope
           </legend>
-          <div className="grid max-h-36 gap-2 overflow-auto">
-            {data.departments.map((department) => (
-              <Checkbox key={department.id} label={department.name} name="departmentScope" value={department.id} />
-            ))}
-          </div>
+          <DepartmentScopeSelect
+            departments={data.departments}
+            initialScope={{ appliesToAllDepartments: true, departmentIds: [] }}
+          />
         </fieldset>
         <label className="text-xs font-semibold uppercase text-[var(--muted)] lg:col-span-2">
           Notes
@@ -142,17 +155,20 @@ export default async function OrganizationEscalationContactsPage() {
                   <legend className="px-1 text-xs font-semibold uppercase text-[var(--muted)]">
                     Department Scope
                   </legend>
-                  <div className="grid max-h-36 gap-2 overflow-auto">
-                    {data.departments.map((department) => (
-                      <Checkbox
-                        defaultChecked={contact.departmentScope?.includes(department.id)}
-                        key={department.id}
-                        label={department.name}
-                        name="departmentScope"
-                        value={department.id}
-                      />
-                    ))}
+                  <DepartmentScopeSelect
+                    departments={data.departments}
+                    initialScope={contact.departmentScope}
+                  />
+                  <div className="mt-2 text-xs text-[var(--muted)]">
+                    Current: {departmentScopeLabel(contact, data.departments)}
                   </div>
+                  {contact.enabled &&
+                  !contact.departmentScope.appliesToAllDepartments &&
+                  contact.departmentScope.departmentIds.length === 0 ? (
+                    <div className="mt-2 text-xs text-amber-700">
+                      Enabled scoped contacts should have at least one department selected.
+                    </div>
+                  ) : null}
                 </fieldset>
                 <label className="text-xs font-semibold uppercase text-[var(--muted)] lg:col-span-2">
                   Notes

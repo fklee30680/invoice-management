@@ -4,6 +4,7 @@ import {
   calculateBusinessDaysElapsed,
   findEscalationCandidates,
 } from "./escalations";
+import { normalizeOrganizationDepartmentScope } from "./store";
 import type { AppData, EscalationSchedulerSettings } from "./types";
 
 const settings: EscalationSchedulerSettings = {
@@ -25,6 +26,16 @@ function baseData(): AppData {
         email: "facilities@example.com",
         departmentHeadEmail: "head@example.com",
         escalationEmail: "escalation@example.com",
+      },
+      {
+        id: "dept-2",
+        name: "Finance",
+        email: "finance-dept@example.com",
+      },
+      {
+        id: "dept-3",
+        name: "Planning",
+        email: "planning@example.com",
       },
     ],
     users: [],
@@ -227,7 +238,7 @@ describe("findEscalationCandidates", () => {
       email: "finance@example.com",
       enabled: true,
       assignedScheduleIds: ["schedule-1"],
-      departmentScope: [],
+      departmentScope: { appliesToAllDepartments: true, departmentIds: [] },
       notes: "",
       createdAt: "2026-04-24T19:00:00.000Z",
       updatedAt: "2026-04-24T19:00:00.000Z",
@@ -247,7 +258,7 @@ describe("findEscalationCandidates", () => {
       email: "facilities@example.com",
       enabled: true,
       assignedScheduleIds: ["schedule-1"],
-      departmentScope: [],
+      departmentScope: { appliesToAllDepartments: true, departmentIds: [] },
       notes: "",
       createdAt: "2026-04-24T19:00:00.000Z",
       updatedAt: "2026-04-24T19:00:00.000Z",
@@ -274,5 +285,164 @@ describe("findEscalationCandidates", () => {
     data.departments[0].departmentHeadEmail = "";
 
     assert.equal(findEscalationCandidates(data, new Date("2026-04-27T13:00:00.000Z")).length, 0);
+  });
+
+  it("includes organization contact scoped to all departments", () => {
+    const data = baseData();
+    data.escalationTemplates[0].recipientConfig.includeDepartmentEmail = false;
+    data.escalationTemplates[0].recipientConfig.includeOrganizationContactsForTriggeredSchedule = true;
+    data.organizationEscalationContacts.push({
+      id: "org-all",
+      title: "Finance Director",
+      name: "Pat Lee",
+      email: "director@example.com",
+      enabled: true,
+      assignedScheduleIds: ["schedule-1"],
+      departmentScope: { appliesToAllDepartments: true, departmentIds: [] },
+      notes: "",
+      createdAt: "2026-04-24T19:00:00.000Z",
+      updatedAt: "2026-04-24T19:00:00.000Z",
+    });
+
+    const candidate = findEscalationCandidates(data, new Date("2026-04-27T13:00:00.000Z"))[0];
+    assert.deepEqual(candidate.to, ["director@example.com"]);
+  });
+
+  it("includes organization contact scoped to the invoice department", () => {
+    const data = baseData();
+    data.escalationTemplates[0].recipientConfig.includeDepartmentEmail = false;
+    data.escalationTemplates[0].recipientConfig.includeOrganizationContactsForTriggeredSchedule = true;
+    data.organizationEscalationContacts.push({
+      id: "org-scoped",
+      title: "Facilities Liaison",
+      name: "Sam",
+      email: "sam@example.com",
+      enabled: true,
+      assignedScheduleIds: ["schedule-1"],
+      departmentScope: { appliesToAllDepartments: false, departmentIds: ["dept-1"] },
+      notes: "",
+      createdAt: "2026-04-24T19:00:00.000Z",
+      updatedAt: "2026-04-24T19:00:00.000Z",
+    });
+
+    const candidate = findEscalationCandidates(data, new Date("2026-04-27T13:00:00.000Z"))[0];
+    assert.deepEqual(candidate.to, ["sam@example.com"]);
+  });
+
+  it("includes organization contact scoped to one of multiple selected departments", () => {
+    const data = baseData();
+    data.escalationTemplates[0].recipientConfig.includeDepartmentEmail = false;
+    data.escalationTemplates[0].recipientConfig.includeOrganizationContactsForTriggeredSchedule = true;
+    data.organizationEscalationContacts.push({
+      id: "org-multi",
+      title: "Shared Liaison",
+      name: "Taylor",
+      email: "taylor@example.com",
+      enabled: true,
+      assignedScheduleIds: ["schedule-1"],
+      departmentScope: {
+        appliesToAllDepartments: false,
+        departmentIds: ["dept-1", "dept-2"],
+      },
+      notes: "",
+      createdAt: "2026-04-24T19:00:00.000Z",
+      updatedAt: "2026-04-24T19:00:00.000Z",
+    });
+
+    const candidate = findEscalationCandidates(data, new Date("2026-04-27T13:00:00.000Z"))[0];
+    assert.deepEqual(candidate.to, ["taylor@example.com"]);
+  });
+
+  it("excludes organization contact outside invoice department scope", () => {
+    const data = baseData();
+    data.escalationTemplates[0].recipientConfig.includeDepartmentEmail = false;
+    data.escalationTemplates[0].recipientConfig.includeOrganizationContactsForTriggeredSchedule = true;
+    data.organizationEscalationContacts.push({
+      id: "org-other",
+      title: "Finance Liaison",
+      name: "Morgan",
+      email: "morgan@example.com",
+      enabled: true,
+      assignedScheduleIds: ["schedule-1"],
+      departmentScope: { appliesToAllDepartments: false, departmentIds: ["dept-2"] },
+      notes: "",
+      createdAt: "2026-04-24T19:00:00.000Z",
+      updatedAt: "2026-04-24T19:00:00.000Z",
+    });
+
+    assert.equal(findEscalationCandidates(data, new Date("2026-04-27T13:00:00.000Z")).length, 0);
+  });
+
+  it("includes all-department contact when invoice has no department", () => {
+    const data = baseData();
+    data.invoices[0].departmentId = "";
+    data.escalationTemplates[0].recipientConfig.includeDepartmentEmail = false;
+    data.escalationTemplates[0].recipientConfig.includeOrganizationContactsForTriggeredSchedule = true;
+    data.organizationEscalationContacts.push({
+      id: "org-all",
+      title: "All Department Contact",
+      name: "Jordan",
+      email: "jordan@example.com",
+      enabled: true,
+      assignedScheduleIds: ["schedule-1"],
+      departmentScope: { appliesToAllDepartments: true, departmentIds: [] },
+      notes: "",
+      createdAt: "2026-04-24T19:00:00.000Z",
+      updatedAt: "2026-04-24T19:00:00.000Z",
+    });
+
+    const candidate = findEscalationCandidates(data, new Date("2026-04-27T13:00:00.000Z"))[0];
+    assert.deepEqual(candidate.to, ["jordan@example.com"]);
+  });
+
+  it("excludes scoped contact when invoice has no department", () => {
+    const data = baseData();
+    data.invoices[0].departmentId = "";
+    data.escalationTemplates[0].recipientConfig.includeDepartmentEmail = false;
+    data.escalationTemplates[0].recipientConfig.includeOrganizationContactsForTriggeredSchedule = true;
+    data.organizationEscalationContacts.push({
+      id: "org-scoped",
+      title: "Scoped Contact",
+      name: "Jordan",
+      email: "jordan@example.com",
+      enabled: true,
+      assignedScheduleIds: ["schedule-1"],
+      departmentScope: { appliesToAllDepartments: false, departmentIds: ["dept-1"] },
+      notes: "",
+      createdAt: "2026-04-24T19:00:00.000Z",
+      updatedAt: "2026-04-24T19:00:00.000Z",
+    });
+
+    assert.equal(findEscalationCandidates(data, new Date("2026-04-27T13:00:00.000Z")).length, 0);
+  });
+});
+
+describe("normalizeOrganizationDepartmentScope", () => {
+  it("migrates missing scope to all departments", () => {
+    assert.deepEqual(normalizeOrganizationDepartmentScope(undefined), {
+      appliesToAllDepartments: true,
+      departmentIds: [],
+    });
+  });
+
+  it("migrates empty array scope to all departments", () => {
+    assert.deepEqual(normalizeOrganizationDepartmentScope([]), {
+      appliesToAllDepartments: true,
+      departmentIds: [],
+    });
+  });
+
+  it("migrates array scope with department ids", () => {
+    assert.deepEqual(normalizeOrganizationDepartmentScope(["dept-1", "dept-2"]), {
+      appliesToAllDepartments: false,
+      departmentIds: ["dept-1", "dept-2"],
+    });
+  });
+
+  it("migrates all string scope", () => {
+    assert.deepEqual(normalizeOrganizationDepartmentScope("ALL_DEPARTMENTS"), {
+      appliesToAllDepartments: true,
+      departmentIds: [],
+    });
   });
 });

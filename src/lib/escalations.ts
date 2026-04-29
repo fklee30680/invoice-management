@@ -39,6 +39,7 @@ export type EscalationRunResult = {
   runAt: string;
   mode: "live" | "dry-run";
   candidates: EscalationCandidate[];
+  skippedNoRecipientCount: number;
   sentCount: number;
   wouldSendCount: number;
   failedCount: number;
@@ -179,7 +180,9 @@ function addRecipient(
 }
 
 function contactInScope(contact: OrganizationEscalationContact, departmentId: string) {
-  return !contact.departmentScope?.length || contact.departmentScope.includes(departmentId);
+  if (contact.departmentScope.appliesToAllDepartments) return true;
+  if (!departmentId) return false;
+  return contact.departmentScope.departmentIds.includes(departmentId);
 }
 
 function unique(values: string[]) {
@@ -281,7 +284,7 @@ function placeholderValues(
   };
 }
 
-export function findEscalationCandidates(data: AppData, now = new Date()) {
+function evaluateEscalations(data: AppData, now = new Date()) {
   const eligibleStatuses = statusesForEscalation(data);
   const schedules = [...data.escalationSchedules]
     .filter((schedule) => schedule.enabled)
@@ -290,9 +293,9 @@ export function findEscalationCandidates(data: AppData, now = new Date()) {
     .filter((template) => template.enabled)
     .sort((left, right) => left.sortOrder - right.sortOrder);
   const candidates: EscalationCandidate[] = [];
+  const skippedMessages: string[] = [];
 
   for (const invoice of data.invoices) {
-    if (!invoice.departmentId) continue;
     if (!eligibleStatuses.includes(invoice.status)) continue;
     const routedAt = invoice.routedAt || invoice.notificationSentAt || "";
     if (!routedAt) continue;
@@ -311,7 +314,12 @@ export function findEscalationCandidates(data: AppData, now = new Date()) {
       )) {
         if (sentForCycle(invoice, routedAt, schedule.id, template.id)) continue;
         const recipients = resolveRecipients(data, invoice, schedule, template);
-        if (recipients.to.length === 0) continue;
+        if (recipients.to.length === 0) {
+          skippedMessages.push(
+            `${invoice.invoiceNumber || invoice.id}: ${schedule.name} / ${template.name} skipped; no valid recipients.`,
+          );
+          continue;
+        }
         const rendered = renderEscalationTemplate(
           template,
           placeholderValues(data, invoice, schedule, template, businessDaysWaiting),
@@ -341,7 +349,11 @@ export function findEscalationCandidates(data: AppData, now = new Date()) {
     }
   }
 
-  return candidates;
+  return { candidates, skippedMessages };
+}
+
+export function findEscalationCandidates(data: AppData, now = new Date()) {
+  return evaluateEscalations(data, now).candidates;
 }
 
 export async function runEscalationCheck({
@@ -355,15 +367,16 @@ export async function runEscalationCheck({
 }): Promise<EscalationRunResult> {
   if (dryRun) {
     const data = await readData();
-    const candidates = findEscalationCandidates(data, now);
+    const evaluation = evaluateEscalations(data, now);
     return {
       runAt: now.toISOString(),
       mode: "dry-run",
-      candidates,
+      candidates: evaluation.candidates,
+      skippedNoRecipientCount: evaluation.skippedMessages.length,
       sentCount: 0,
-      wouldSendCount: candidates.length,
+      wouldSendCount: evaluation.candidates.length,
       failedCount: 0,
-      errors: [],
+      errors: evaluation.skippedMessages,
     };
   }
 
@@ -371,6 +384,7 @@ export async function runEscalationCheck({
     runAt: now.toISOString(),
     mode: "live",
     candidates: [],
+    skippedNoRecipientCount: 0,
     sentCount: 0,
     wouldSendCount: 0,
     failedCount: 0,
@@ -389,8 +403,11 @@ export async function runEscalationCheck({
     }
   }
 
-  const candidates = findEscalationCandidates(data, now);
+  const evaluation = evaluateEscalations(data, now);
+  const candidates = evaluation.candidates;
   result.candidates = candidates;
+  result.skippedNoRecipientCount = evaluation.skippedMessages.length;
+  result.errors.push(...evaluation.skippedMessages);
 
   for (const candidate of candidates) {
     try {
@@ -469,6 +486,7 @@ export async function recordRunSummary(result: EscalationRunResult) {
     sentCount: result.sentCount,
     wouldSendCount: result.mode === "dry-run" ? result.wouldSendCount : result.candidates.length,
     failedCount: result.failedCount,
+    skippedCount: result.skippedNoRecipientCount,
     errors: result.errors,
   };
   await mutateData((data) => {

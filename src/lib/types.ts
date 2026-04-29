@@ -61,7 +61,10 @@ export type OrganizationEscalationContact = {
   email: string;
   enabled: boolean;
   assignedScheduleIds: string[];
-  departmentScope?: string[];
+  departmentScope: {
+    appliesToAllDepartments: boolean;
+    departmentIds: string[];
+  };
   notes?: string;
   createdAt: string;
   updatedAt: string;
@@ -105,6 +108,7 @@ export type EscalationRunSummary = {
   sentCount: number;
   wouldSendCount: number;
   failedCount: number;
+  skippedCount?: number;
   errors: string[];
 };
 

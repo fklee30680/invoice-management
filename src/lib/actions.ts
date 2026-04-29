@@ -31,6 +31,7 @@ import {
   getInvoice,
   getInvoiceFile,
   mutateData,
+  normalizeOrganizationDepartmentScope,
   readData,
   upsertDepartment,
   upsertPurchaseOrder,
@@ -118,6 +119,14 @@ function escalationRecipientConfig(formData: FormData) {
     ),
     specificOrganizationContactIds: idList(formData, "specificOrganizationContactIds"),
   };
+}
+
+function departmentScopeFromForm(formData: FormData) {
+  return normalizeOrganizationDepartmentScope(idList(formData, "departmentScope"));
+}
+
+function validEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
 function setInvoiceStatus(invoice: Invoice, status: string, now = new Date()) {
@@ -852,7 +861,18 @@ export async function addOrganizationEscalationContact(formData: FormData) {
   const title = value(formData, "title");
   const name = value(formData, "name");
   const email = value(formData, "email").toLowerCase();
-  if (!title || !name || !email) return;
+  const enabled = checkbox(formData, "enabled");
+  const assignedScheduleIds = idList(formData, "assignedScheduleIds");
+  const departmentScope = departmentScopeFromForm(formData);
+  if (!title || !name || !email || !validEmail(email)) return;
+  if (enabled && assignedScheduleIds.length === 0) return;
+  if (
+    enabled &&
+    !departmentScope.appliesToAllDepartments &&
+    departmentScope.departmentIds.length === 0
+  ) {
+    return;
+  }
 
   await mutateData((data) => {
     data.organizationEscalationContacts.push({
@@ -860,9 +880,9 @@ export async function addOrganizationEscalationContact(formData: FormData) {
       title,
       name,
       email,
-      enabled: checkbox(formData, "enabled"),
-      assignedScheduleIds: idList(formData, "assignedScheduleIds"),
-      departmentScope: idList(formData, "departmentScope"),
+      enabled,
+      assignedScheduleIds,
+      departmentScope,
       notes: value(formData, "notes"),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -884,7 +904,18 @@ export async function updateOrganizationEscalationContact(formData: FormData) {
   const title = value(formData, "title");
   const name = value(formData, "name");
   const email = value(formData, "email").toLowerCase();
-  if (!contactId || !title || !name || !email) return;
+  const enabled = checkbox(formData, "enabled");
+  const assignedScheduleIds = idList(formData, "assignedScheduleIds");
+  const departmentScope = departmentScopeFromForm(formData);
+  if (!contactId || !title || !name || !email || !validEmail(email)) return;
+  if (enabled && assignedScheduleIds.length === 0) return;
+  if (
+    enabled &&
+    !departmentScope.appliesToAllDepartments &&
+    departmentScope.departmentIds.length === 0
+  ) {
+    return;
+  }
 
   await mutateData((data) => {
     const contact = data.organizationEscalationContacts.find(
@@ -894,9 +925,9 @@ export async function updateOrganizationEscalationContact(formData: FormData) {
     contact.title = title;
     contact.name = name;
     contact.email = email;
-    contact.enabled = checkbox(formData, "enabled");
-    contact.assignedScheduleIds = idList(formData, "assignedScheduleIds");
-    contact.departmentScope = idList(formData, "departmentScope");
+    contact.enabled = enabled;
+    contact.assignedScheduleIds = assignedScheduleIds;
+    contact.departmentScope = departmentScope;
     contact.notes = value(formData, "notes");
     contact.updatedAt = new Date().toISOString();
     addAudit(data, {
@@ -1091,6 +1122,7 @@ export async function sendTestEscalationEmail(formData: FormData) {
     runAt: new Date().toISOString(),
     mode: "live" as const,
     candidates: [],
+    skippedNoRecipientCount: 0,
     sentCount: 1,
     wouldSendCount: 0,
     failedCount: 0,
