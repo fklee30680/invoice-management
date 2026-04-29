@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { deleteInvoice } from "@/lib/actions";
+import { DeleteInvoiceConfirmation } from "@/components/delete-invoice-confirmation";
 import { filterableStatuses, statusBadgeClass } from "@/lib/status-config";
 import type { AppData, Invoice } from "@/lib/types";
 import { currencyDisplay, formatDate } from "@/lib/utils";
@@ -349,12 +349,7 @@ export function InvoiceTable({
                   >
                     Download
                   </Link>
-                  <form action={deleteInvoice}>
-                    <input type="hidden" name="invoiceId" value={invoice.id} />
-                    <button className="focus-ring border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50">
-                      Delete
-                    </button>
-                  </form>
+                  <DeleteInvoiceConfirmation invoiceId={invoice.id} />
                 </div>
               </td>
             </tr>

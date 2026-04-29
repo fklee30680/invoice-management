@@ -268,6 +268,7 @@ function normalizeDepartmentDecisions(
           label: decision,
           workflowAction: defaultDecision?.workflowAction || "complete",
           requireComment: defaultDecision?.requireComment || false,
+          requirePoNumber: defaultDecision?.requirePoNumber || false,
           active: true,
         };
       }
@@ -280,6 +281,10 @@ function normalizeDepartmentDecisions(
         label: decision.label || defaultDecision?.label || "",
         workflowAction: decision.workflowAction || defaultDecision?.workflowAction || "complete",
         requireComment: decision.requireComment === true,
+        requirePoNumber:
+          typeof decision.requirePoNumber === "boolean"
+            ? decision.requirePoNumber
+            : defaultDecision?.requirePoNumber || false,
         active: decision.active !== false,
       };
     })

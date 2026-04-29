@@ -112,6 +112,7 @@ export default async function DecisionSettingsPage() {
           </legend>
           <Checkbox defaultChecked label="Active" name="active" />
           <Checkbox label="Require comment" name="requireComment" />
+          <Checkbox label="Require PO" name="requirePoNumber" />
         </fieldset>
         <button className="focus-ring self-end bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--accent-strong)]">
           Add Decision
@@ -195,6 +196,12 @@ export default async function DecisionSettingsPage() {
                         form={formId}
                         label="Require comment"
                         name="requireComment"
+                      />
+                      <Checkbox
+                        defaultChecked={decision.requirePoNumber}
+                        form={formId}
+                        label="Require PO"
+                        name="requirePoNumber"
                       />
                     </div>
                   </td>

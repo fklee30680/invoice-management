@@ -19,7 +19,7 @@ import {
 import { extractInvoiceMetadata } from "./ocr";
 import { isPaymentFileFieldSource, sourceLabel } from "./payment-file";
 import { parsePoUpload } from "./po-parser";
-import { requireApUser } from "./session";
+import { canAccessInvoice, requireApUser, requireUser } from "./session";
 import { parseVendorUpload } from "./vendor-parser";
 import {
   addAudit,
@@ -1353,6 +1353,7 @@ export async function addDepartmentDecision(formData: FormData) {
       label,
       workflowAction: decisionWorkflowActionValue(formData),
       requireComment: checkbox(formData, "requireComment"),
+      requirePoNumber: checkbox(formData, "requirePoNumber"),
       active: checkbox(formData, "active"),
     });
     addAudit(data, {
@@ -1385,6 +1386,7 @@ export async function updateDepartmentDecision(formData: FormData) {
     decision.label = label;
     decision.workflowAction = decisionWorkflowActionValue(formData);
     decision.requireComment = checkbox(formData, "requireComment");
+    decision.requirePoNumber = checkbox(formData, "requirePoNumber");
     decision.active = checkbox(formData, "active");
 
     if (oldLabel !== label) {
@@ -1625,6 +1627,10 @@ export async function completeInvoice(formData: FormData) {
   });
 
   revalidatePath("/");
+  revalidatePath("/department");
+  revalidatePath("/invoices", "layout");
+  revalidatePath("/reports");
+  revalidatePath("/files/payment-file");
   revalidatePath(`/review/${invoiceId}`);
 }
 
@@ -1655,8 +1661,10 @@ export async function updateInvoicePaymentProcessed(formData: FormData) {
 }
 
 export async function deleteInvoice(formData: FormData) {
+  await requireApUser();
   const invoiceId = value(formData, "invoiceId");
-  if (!invoiceId) return;
+  const confirmed = value(formData, "confirmDelete") === "yes";
+  if (!invoiceId || !confirmed) return;
 
   let fileToDelete = null as ReturnType<typeof getInvoiceFile> | null;
 
@@ -1685,14 +1693,25 @@ export async function deleteInvoice(formData: FormData) {
   }
 
   revalidatePath("/");
+  revalidatePath("/department");
+  revalidatePath("/invoices", "layout");
+  revalidatePath("/reports");
+  revalidatePath("/files/payment-file");
   revalidatePath(`/review/${invoiceId}`);
 }
 
 export async function submitDepartmentDecision(formData: FormData) {
+  const user = await requireUser();
+  if (user.role !== "DEPARTMENT") redirect("/");
   const invoiceId = value(formData, "invoiceId");
   const decision = value(formData, "decision");
   const comment = value(formData, "comment");
+  const submittedPoNumber = value(formData, "poNumber");
   const currentData = await readData();
+  const currentInvoice = getInvoice(currentData, invoiceId);
+  if (!currentInvoice || !canAccessInvoice(user, currentInvoice)) {
+    redirect("/login");
+  }
   const decisionDefinition = currentData.departmentDecisions.find(
     (item) => item.active && item.label === decision,
   );
@@ -1702,7 +1721,13 @@ export async function submitDepartmentDecision(formData: FormData) {
   }
 
   if (decisionDefinition.requireComment && !comment) {
-    redirect(`/review/${invoiceId}?error=comment-required`);
+    redirect(`/review/${invoiceId}?error=comment-required&decision=${encodeURIComponent(decision)}`);
+  }
+
+  const currentPoNumber = currentInvoice.poNumber.trim();
+  const poNumberForDecision = currentPoNumber || submittedPoNumber;
+  if (decisionDefinition.requirePoNumber && !poNumberForDecision) {
+    redirect(`/review/${invoiceId}?error=po-required&decision=${encodeURIComponent(decision)}`);
   }
 
   await mutateData((data) => {
@@ -1710,6 +1735,16 @@ export async function submitDepartmentDecision(formData: FormData) {
     if (!invoice) return;
 
     const now = new Date().toISOString();
+    const existingPoNumber = invoice.poNumber.trim();
+    if (decisionDefinition.requirePoNumber && !existingPoNumber && submittedPoNumber) {
+      invoice.poNumber = submittedPoNumber;
+      addAudit(data, {
+        invoiceId,
+        actor: "Department Reviewer",
+        type: "po_number_added",
+        message: `Department reviewer added PO number ${submittedPoNumber} for PO-required decision ${decision}.`,
+      });
+    }
     invoice.departmentDecision = decision;
     invoice.updatedAt = now;
 
@@ -1759,5 +1794,9 @@ export async function submitDepartmentDecision(formData: FormData) {
   });
 
   revalidatePath("/");
+  revalidatePath("/department");
+  revalidatePath("/invoices", "layout");
+  revalidatePath("/reports");
+  revalidatePath("/files/payment-file");
   revalidatePath(`/review/${invoiceId}`);
 }

@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import {
-  submitDepartmentDecision,
   updateAndRouteInvoice,
   updateInvoicePaymentProcessed,
 } from "@/lib/actions";
+import { DepartmentDecisionForm } from "@/components/department-decision-form";
 import { canAccessInvoice, requireUser } from "@/lib/session";
 import { statusBadgeClass } from "@/lib/status-config";
 import { readData } from "@/lib/store";
@@ -36,10 +36,27 @@ export default async function ReviewPage({
 
   const department = data.departments.find((item) => item.id === invoice.departmentId);
   const error = Array.isArray(query.error) ? query.error[0] : query.error;
+  const selectedDecision = Array.isArray(query.decision) ? query.decision[0] : query.decision;
   const activeDecisions = data.departmentDecisions.filter((decision) => decision.active);
   const currentDecisionIsInactive =
     invoice.departmentDecision &&
     !activeDecisions.some((decision) => decision.label === invoice.departmentDecision);
+  const decisionOptions = [
+    ...activeDecisions,
+    ...(currentDecisionIsInactive
+      ? [
+          {
+            id: `inactive-${invoice.departmentDecision}`,
+            label: invoice.departmentDecision,
+            requirePoNumber: false,
+          },
+        ]
+      : []),
+  ].map((decision) => ({
+    id: decision.id,
+    label: decision.label,
+    requirePoNumber: decision.requirePoNumber,
+  }));
 
   return (
     <main className="min-h-screen px-4 py-6 sm:px-6 lg:px-8">
@@ -65,6 +82,12 @@ export default async function ReviewPage({
         {error === "comment-required" ? (
           <div className="border border-red-300 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
             A comment is required when sending the invoice back as not your department.
+          </div>
+        ) : null}
+
+        {error === "po-required" ? (
+          <div className="border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
+            PO number is required for this decision. Please enter the PO number before submitting.
           </div>
         ) : null}
 
@@ -256,45 +279,14 @@ export default async function ReviewPage({
             ) : null}
 
             {user.role === "DEPARTMENT" ? (
-              <form
-                action={submitDepartmentDecision}
-                className="border border-[var(--line)] bg-[var(--panel)] p-4"
-              >
-                <input type="hidden" name="invoiceId" value={invoice.id} />
-                <h2 className="font-semibold">Decision</h2>
-                <label className="mt-4 block text-xs font-semibold uppercase text-[var(--muted)]">
-                  Decision Type
-                  <select
-                    className="focus-ring mt-1 min-h-10 w-full border border-[var(--line)] bg-white px-3 text-sm font-normal normal-case text-[var(--foreground)]"
-                    name="decision"
-                    defaultValue={invoice.departmentDecision}
-                    required
-                  >
-                    <option value="">Select decision</option>
-                    {currentDecisionIsInactive ? (
-                      <option value={invoice.departmentDecision}>
-                        {invoice.departmentDecision}
-                      </option>
-                    ) : null}
-                    {activeDecisions.map((decision) => (
-                      <option key={decision.id} value={decision.label}>
-                        {decision.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="mt-4 block text-xs font-semibold uppercase text-[var(--muted)]">
-                  Comments
-                  <textarea
-                    className="focus-ring mt-1 min-h-28 w-full resize-y border border-[var(--line)] bg-white p-3 text-sm font-normal normal-case text-[var(--foreground)]"
-                    name="comment"
-                    placeholder="Add context for AP. Required if this invoice is not your department."
-                  />
-                </label>
-                <button className="focus-ring mt-4 w-full bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--accent-strong)]">
-                  Submit Decision
-                </button>
-              </form>
+              <DepartmentDecisionForm
+                currentDecision={invoice.departmentDecision}
+                decisionOptions={decisionOptions}
+                hasPoNumber={Boolean(invoice.poNumber.trim())}
+                initialDecision={selectedDecision || invoice.departmentDecision}
+                invoiceId={invoice.id}
+                poRequiredError={error === "po-required"}
+              />
             ) : null}
           </aside>
         </section>

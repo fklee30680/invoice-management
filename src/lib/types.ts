@@ -138,6 +138,7 @@ export type DepartmentDecisionDefinition = {
   label: string;
   workflowAction: DecisionWorkflowAction;
   requireComment: boolean;
+  requirePoNumber: boolean;
   active: boolean;
 };
 

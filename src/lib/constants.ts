@@ -7,6 +7,7 @@ export function defaultDepartmentDecisions(): DepartmentDecisionDefinition[] {
       label: "Receiving Record",
       workflowAction: "complete",
       requireComment: false,
+      requirePoNumber: true,
       active: true,
     },
     {
@@ -14,6 +15,7 @@ export function defaultDepartmentDecisions(): DepartmentDecisionDefinition[] {
       label: "P-Card",
       workflowAction: "complete",
       requireComment: false,
+      requirePoNumber: false,
       active: true,
     },
     {
@@ -21,6 +23,7 @@ export function defaultDepartmentDecisions(): DepartmentDecisionDefinition[] {
       label: "Request for Check",
       workflowAction: "complete",
       requireComment: false,
+      requirePoNumber: false,
       active: true,
     },
     {
@@ -28,6 +31,7 @@ export function defaultDepartmentDecisions(): DepartmentDecisionDefinition[] {
       label: "Reject",
       workflowAction: "reject",
       requireComment: false,
+      requirePoNumber: false,
       active: true,
     },
     {
@@ -35,6 +39,7 @@ export function defaultDepartmentDecisions(): DepartmentDecisionDefinition[] {
       label: "Hold",
       workflowAction: "hold",
       requireComment: false,
+      requirePoNumber: false,
       active: true,
     },
     {
@@ -42,6 +47,7 @@ export function defaultDepartmentDecisions(): DepartmentDecisionDefinition[] {
       label: "Not our Department Invoice",
       workflowAction: "apRework",
       requireComment: true,
+      requirePoNumber: false,
       active: true,
     },
   ];
