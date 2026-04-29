@@ -3,33 +3,31 @@ import Link from "next/link";
 import { signOut } from "@/lib/auth-actions";
 import { INVOICE_SUMMARY_VIEWS, summaryViewPath } from "@/lib/invoice-views";
 import type { BrandingSettings, User } from "@/lib/types";
+import { TOP_MENU_ITEM_CLASS } from "./menu-styles";
 import { TopMenuDropdown } from "./top-menu-dropdown";
 
 const setupLinks = [
-  { href: "/settings/email", label: "Email Templates" },
-  { href: "/settings/escalation-schedules", label: "Escalation Schedules" },
-  { href: "/settings/organization-escalation-contacts", label: "Organization Escalation Contacts" },
-  { href: "/settings/holidays-business-days", label: "Holidays And Business Days" },
-  { href: "/settings/scheduler", label: "Scheduler Runtime" },
-  { href: "/settings/departments", label: "Department Emails" },
-  { href: "/settings/statuses", label: "Statuses" },
-  { href: "/settings/decisions", label: "Decision Types" },
   { href: "/settings/branding", label: "Branding" },
+  { href: "/settings/decisions", label: "Decision Types" },
+  { href: "/settings/departments", label: "Department Emails" },
+  { href: "/settings/email", label: "Email Templates" },
   { href: "/settings/environment", label: "Environment" },
+  { href: "/settings/escalation-schedules", label: "Escalation Schedules" },
+  { href: "/settings/holidays-business-days", label: "Holidays And Business Days" },
+  { href: "/settings/organization-escalation-contacts", label: "Organization Escalation Contacts" },
+  { href: "/settings/scheduler", label: "Scheduler Runtime" },
+  { href: "/settings/statuses", label: "Statuses" },
 ];
 
 const uploadLinks = [
-  { href: "/uploads/vendors", label: "Vendor File" },
-  { href: "/uploads/po-list", label: "PO List Update" },
   { href: "/files/payment-file", label: "Payment File" },
+  { href: "/uploads/po-list", label: "PO List Update" },
+  { href: "/uploads/vendors", label: "Vendor File" },
 ];
 
 function MenuLink({ href, label }: { href: string; label: string }) {
   return (
-    <Link
-      className="focus-ring block px-3 py-2 text-sm font-medium hover:bg-slate-100"
-      href={href}
-    >
+    <Link className={TOP_MENU_ITEM_CLASS} href={href}>
       {label}
     </Link>
   );
@@ -67,12 +65,12 @@ export function TopMenu({
         <nav className="flex flex-wrap items-center gap-1">
           {user?.role === "AP" ? (
             <>
+              <MenuLink href="/audit" label="Audit Log" />
               <MenuLink href="/" label="Dashboard" />
-              <TopMenuDropdown label="Invoices" links={invoiceLinks} />
               <TopMenuDropdown label="Files" links={uploadLinks} />
+              <TopMenuDropdown label="Invoices" links={invoiceLinks} />
               <MenuLink href="/reports" label="Reports" />
               <TopMenuDropdown label="Setup" links={setupLinks} />
-              <MenuLink href="/audit" label="Audit Log" />
             </>
           ) : null}
 
@@ -82,7 +80,7 @@ export function TopMenu({
 
           {user ? (
             <form action={signOut}>
-              <button className="focus-ring min-h-10 border border-[var(--line)] bg-white px-3 text-sm font-semibold hover:bg-slate-100">
+              <button className={TOP_MENU_ITEM_CLASS}>
                 Sign Out
               </button>
             </form>
