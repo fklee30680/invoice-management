@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
+import { MultiSelectDropdown } from "./multi-select-dropdown";
 
 type DepartmentOption = {
   id: string;
@@ -26,51 +27,35 @@ export function DepartmentScopeSelect({
         : ["all"],
     [initialScope],
   );
-  const [selected, setSelected] = useState<string[]>(initialValues);
-  const appliesToAll = selected.includes("all");
-  const value = appliesToAll ? ["all"] : selected;
-  const unavailableDepartmentIds = selected.filter(
+  const unavailableDepartmentIds = initialValues.filter(
     (id) => id !== "all" && !departments.some((department) => department.id === id),
   );
+  const options = [
+    { id: "all", label: "All Departments" },
+    ...departments.map((department) => ({ id: department.id, label: department.name })),
+    ...unavailableDepartmentIds.map((departmentId) => ({
+      id: departmentId,
+      inactive: true,
+      label: departmentId,
+    })),
+  ];
 
   return (
-    <div className="grid gap-2">
-      <select
-        className="focus-ring min-h-32 w-full border border-[var(--line)] bg-white px-3 py-2 text-sm"
-        multiple
-        name="departmentScope"
-        onChange={(event) => {
-          const values = Array.from(event.currentTarget.selectedOptions).map(
-            (option) => option.value,
-          );
-          const selectedAll = values.includes("all");
-          const selectedDepartments = values.filter((item) => item !== "all");
-          setSelected((current) => {
-            if (selectedAll && !current.includes("all")) return ["all"];
-            return selectedAll && selectedDepartments.length === 0 ? ["all"] : selectedDepartments;
-          });
-        }}
-        value={value}
-      >
-        <option value="all">All Departments</option>
-        {departments.map((department) => (
-          <option key={department.id} value={department.id}>
-            {department.name}
-          </option>
-        ))}
-        {unavailableDepartmentIds.map((departmentId) => (
-          <option key={departmentId} value={departmentId}>
-            {departmentId} (inactive)
-          </option>
-        ))}
-      </select>
-      <div className="text-xs text-[var(--muted)]">
-        {appliesToAll
-          ? "Applies to all departments."
-          : selected.length
-            ? `Applies to ${selected.length} selected department${selected.length === 1 ? "" : "s"}.`
-            : "Select All Departments or at least one department."}
-      </div>
-    </div>
+    <MultiSelectDropdown
+      clearLabel="Clear department scope"
+      emptyLabel="No departments are available."
+      initialSelected={initialValues}
+      isClearDisabled={(selected) => selected.includes("all")}
+      name="departmentScope"
+      onNormalizeSelection={(next, previous) => {
+        const selectedAll = next.includes("all");
+        const selectedDepartments = next.filter((item) => item !== "all");
+        if (selectedAll && !previous.includes("all")) return ["all"];
+        return selectedDepartments;
+      }}
+      options={options}
+      placeholder="Select department scope"
+      summaryPluralLabel="departments"
+    />
   );
 }

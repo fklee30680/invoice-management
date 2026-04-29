@@ -4,11 +4,16 @@ import {
   updateOrganizationEscalationContact,
 } from "@/lib/actions";
 import { DepartmentScopeSelect } from "@/components/department-scope-select";
+import { ScheduleMultiSelect } from "@/components/schedule-multi-select";
 import { readData } from "@/lib/store";
 import { formatDateTime } from "@/lib/utils";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const fieldLabelClass = "text-xs font-semibold uppercase text-[var(--muted)]";
+const inputClass =
+  "focus-ring mt-1 min-h-10 w-full border border-[var(--line)] bg-white px-3 text-sm font-normal normal-case text-[var(--foreground)]";
 
 function Checkbox({
   defaultChecked,
@@ -51,6 +56,19 @@ function departmentScopeLabel(
   return `${names.length} Departments`;
 }
 
+function assignedSchedulesLabel(
+  contact: Awaited<ReturnType<typeof readData>>["organizationEscalationContacts"][number],
+  schedules: Awaited<ReturnType<typeof readData>>["escalationSchedules"],
+) {
+  const names = contact.assignedScheduleIds.map((id) => {
+    const schedule = schedules.find((item) => item.id === id);
+    if (!schedule) return `${id} (inactive)`;
+    return schedule.enabled ? schedule.name : `${schedule.name} (inactive)`;
+  });
+  if (names.length <= 2) return names.join(", ") || "No schedules selected";
+  return `${names.length} schedules selected`;
+}
+
 export default async function OrganizationEscalationContactsPage() {
   const data = await readData();
 
@@ -66,45 +84,51 @@ export default async function OrganizationEscalationContactsPage() {
 
       <form
         action={addOrganizationEscalationContact}
-        className="grid gap-3 border border-[var(--line)] bg-[var(--panel)] p-4 lg:grid-cols-3"
+        className="grid gap-4 border border-[var(--line)] bg-[var(--panel)] p-4"
       >
-        <label className="text-xs font-semibold uppercase text-[var(--muted)]">
-          Title / Role
-          <input className="focus-ring mt-1 min-h-10 w-full border border-[var(--line)] bg-white px-3 text-sm font-normal normal-case text-[var(--foreground)]" name="title" required />
-        </label>
-        <label className="text-xs font-semibold uppercase text-[var(--muted)]">
-          Name
-          <input className="focus-ring mt-1 min-h-10 w-full border border-[var(--line)] bg-white px-3 text-sm font-normal normal-case text-[var(--foreground)]" name="name" required />
-        </label>
-        <label className="text-xs font-semibold uppercase text-[var(--muted)]">
-          Email
-          <input className="focus-ring mt-1 min-h-10 w-full border border-[var(--line)] bg-white px-3 text-sm font-normal normal-case text-[var(--foreground)]" name="email" required type="email" />
-        </label>
-        <fieldset className="border border-[var(--line)] bg-white p-3 lg:col-span-2">
-          <legend className="px-1 text-xs font-semibold uppercase text-[var(--muted)]">
-            Assigned Schedules
-          </legend>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {data.escalationSchedules.map((schedule) => (
-              <Checkbox key={schedule.id} label={schedule.name} name="assignedScheduleIds" value={schedule.id} />
-            ))}
+        <fieldset className="grid gap-3 lg:grid-cols-4">
+          <legend className="sr-only">Contact Details</legend>
+          <label className={fieldLabelClass}>
+            Title / Role
+            <input className={inputClass} name="title" required />
+          </label>
+          <label className={fieldLabelClass}>
+            Name
+            <input className={inputClass} name="name" required />
+          </label>
+          <label className={fieldLabelClass}>
+            Email
+            <input className={inputClass} name="email" required type="email" />
+          </label>
+          <div className="flex items-end">
+            <Checkbox defaultChecked label="Enabled" name="enabled" />
           </div>
         </fieldset>
-        <fieldset className="border border-[var(--line)] bg-white p-3">
-          <legend className="px-1 text-xs font-semibold uppercase text-[var(--muted)]">
-            Department Scope
-          </legend>
-          <DepartmentScopeSelect
-            departments={data.departments}
-            initialScope={{ appliesToAllDepartments: true, departmentIds: [] }}
-          />
+
+        <fieldset className="grid gap-3 lg:grid-cols-2">
+          <legend className="sr-only">Escalation Assignment</legend>
+          <div>
+            <div className={fieldLabelClass}>Assigned Schedules</div>
+            <div className="mt-1">
+              <ScheduleMultiSelect schedules={data.escalationSchedules} />
+            </div>
+          </div>
+          <div>
+            <div className={fieldLabelClass}>Department Scope</div>
+            <div className="mt-1">
+              <DepartmentScopeSelect
+                departments={data.departments}
+                initialScope={{ appliesToAllDepartments: true, departmentIds: [] }}
+              />
+            </div>
+          </div>
         </fieldset>
-        <label className="text-xs font-semibold uppercase text-[var(--muted)] lg:col-span-2">
+
+        <label className={fieldLabelClass}>
           Notes
-          <input className="focus-ring mt-1 min-h-10 w-full border border-[var(--line)] bg-white px-3 text-sm font-normal normal-case text-[var(--foreground)]" name="notes" />
+          <input className={inputClass} name="notes" />
         </label>
-        <div className="grid gap-2 self-end">
-          <Checkbox defaultChecked label="Enabled" name="enabled" />
+        <div className="flex justify-end">
           <button className="focus-ring bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--accent-strong)]">
             Add Contact
           </button>
@@ -116,82 +140,115 @@ export default async function OrganizationEscalationContactsPage() {
           const formId = `org-contact-${contact.id}`;
           return (
             <article className="border border-[var(--line)] bg-[var(--panel)] p-4" key={contact.id}>
-              <form action={updateOrganizationEscalationContact} className="grid gap-3 lg:grid-cols-3" id={formId}>
+              <div className="grid gap-3 border-b border-[var(--line)] pb-3 text-sm lg:grid-cols-[1fr_1fr_1.3fr_1.4fr_1.4fr_auto]">
+                <div>
+                  <div className="text-xs font-semibold uppercase text-[var(--muted)]">Title</div>
+                  <div>{contact.title}</div>
+                </div>
+                <div>
+                  <div className="text-xs font-semibold uppercase text-[var(--muted)]">Name</div>
+                  <div>{contact.name}</div>
+                </div>
+                <div>
+                  <div className="text-xs font-semibold uppercase text-[var(--muted)]">Email</div>
+                  <div className="break-all">{contact.email}</div>
+                </div>
+                <div>
+                  <div className="text-xs font-semibold uppercase text-[var(--muted)]">Assigned Schedules</div>
+                  <div>{assignedSchedulesLabel(contact, data.escalationSchedules)}</div>
+                </div>
+                <div>
+                  <div className="text-xs font-semibold uppercase text-[var(--muted)]">Department Scope</div>
+                  <div>{departmentScopeLabel(contact, data.departments)}</div>
+                </div>
+                <div>
+                  <div className="text-xs font-semibold uppercase text-[var(--muted)]">Status</div>
+                  <div>{contact.enabled ? "Enabled" : "Disabled"}</div>
+                </div>
+              </div>
+
+              <form action={updateOrganizationEscalationContact} className="mt-3 grid gap-4" id={formId}>
                 <input name="contactId" type="hidden" value={contact.id} />
-                <label className="text-xs font-semibold uppercase text-[var(--muted)]">
-                  Title / Role
-                  <input className="focus-ring mt-1 min-h-10 w-full border border-[var(--line)] bg-white px-3 text-sm font-normal normal-case text-[var(--foreground)]" defaultValue={contact.title} name="title" required />
-                </label>
-                <label className="text-xs font-semibold uppercase text-[var(--muted)]">
-                  Name
-                  <input className="focus-ring mt-1 min-h-10 w-full border border-[var(--line)] bg-white px-3 text-sm font-normal normal-case text-[var(--foreground)]" defaultValue={contact.name} name="name" required />
-                </label>
-                <label className="text-xs font-semibold uppercase text-[var(--muted)]">
-                  Email
-                  <input className="focus-ring mt-1 min-h-10 w-full border border-[var(--line)] bg-white px-3 text-sm font-normal normal-case text-[var(--foreground)]" defaultValue={contact.email} name="email" required type="email" />
-                </label>
-                <fieldset className="border border-[var(--line)] bg-white p-3 lg:col-span-2">
-                  <legend className="px-1 text-xs font-semibold uppercase text-[var(--muted)]">
-                    Assigned Schedules
-                  </legend>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {data.escalationSchedules.map((schedule) => (
-                      <Checkbox
-                        defaultChecked={contact.assignedScheduleIds.includes(schedule.id)}
-                        key={schedule.id}
-                        label={schedule.name}
-                        name="assignedScheduleIds"
-                        value={schedule.id}
+
+                <fieldset className="grid gap-3 lg:grid-cols-4">
+                  <legend className="sr-only">Contact Details</legend>
+                  <label className={fieldLabelClass}>
+                    Title / Role
+                    <input className={inputClass} defaultValue={contact.title} name="title" required />
+                  </label>
+                  <label className={fieldLabelClass}>
+                    Name
+                    <input className={inputClass} defaultValue={contact.name} name="name" required />
+                  </label>
+                  <label className={fieldLabelClass}>
+                    Email
+                    <input className={inputClass} defaultValue={contact.email} name="email" required type="email" />
+                  </label>
+                  <div className="flex items-end">
+                    <Checkbox defaultChecked={contact.enabled} form={formId} label="Enabled" name="enabled" />
+                  </div>
+                </fieldset>
+
+                <fieldset className="grid gap-3 lg:grid-cols-2">
+                  <legend className="sr-only">Escalation Assignment</legend>
+                  <div>
+                    <div className={fieldLabelClass}>
+                      Assigned Schedules
+                    </div>
+                    <div className="mt-1" id={`${formId}-schedules`}>
+                      <ScheduleMultiSelect
+                        initialSelected={contact.assignedScheduleIds}
+                        schedules={data.escalationSchedules}
                       />
-                    ))}
-                  </div>
-                  {contact.enabled && contact.assignedScheduleIds.length === 0 ? (
-                    <div className="mt-2 text-xs text-amber-700">
-                      Enabled contacts should be assigned to at least one schedule.
                     </div>
-                  ) : null}
-                </fieldset>
-                <fieldset className="border border-[var(--line)] bg-white p-3">
-                  <legend className="px-1 text-xs font-semibold uppercase text-[var(--muted)]">
-                    Department Scope
-                  </legend>
-                  <DepartmentScopeSelect
-                    departments={data.departments}
-                    initialScope={contact.departmentScope}
-                  />
-                  <div className="mt-2 text-xs text-[var(--muted)]">
-                    Current: {departmentScopeLabel(contact, data.departments)}
+                    {contact.enabled && contact.assignedScheduleIds.length === 0 ? (
+                      <div className="mt-2 text-xs text-amber-700">
+                        Enabled contacts should be assigned to at least one schedule.
+                      </div>
+                    ) : null}
                   </div>
-                  {contact.enabled &&
-                  !contact.departmentScope.appliesToAllDepartments &&
-                  contact.departmentScope.departmentIds.length === 0 ? (
-                    <div className="mt-2 text-xs text-amber-700">
-                      Enabled scoped contacts should have at least one department selected.
+
+                  <div>
+                    <div className={fieldLabelClass}>
+                      Department Scope
                     </div>
-                  ) : null}
+                    <div className="mt-1" id={`${formId}-department-scope`}>
+                      <DepartmentScopeSelect
+                        departments={data.departments}
+                        initialScope={contact.departmentScope}
+                      />
+                    </div>
+                    {contact.enabled &&
+                    !contact.departmentScope.appliesToAllDepartments &&
+                    contact.departmentScope.departmentIds.length === 0 ? (
+                      <div className="mt-2 text-xs text-amber-700">
+                        Enabled scoped contacts should have at least one department selected.
+                      </div>
+                    ) : null}
+                  </div>
                 </fieldset>
-                <label className="text-xs font-semibold uppercase text-[var(--muted)] lg:col-span-2">
+
+                <label className={fieldLabelClass}>
                   Notes
-                  <input className="focus-ring mt-1 min-h-10 w-full border border-[var(--line)] bg-white px-3 text-sm font-normal normal-case text-[var(--foreground)]" defaultValue={contact.notes} name="notes" />
+                  <input className={inputClass} defaultValue={contact.notes} name="notes" />
                 </label>
-                <div className="grid gap-2 self-end">
-                  <Checkbox defaultChecked={contact.enabled} form={formId} label="Enabled" name="enabled" />
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--line)] pt-3">
                   <div className="text-xs text-[var(--muted)]">
                     Updated {formatDateTime(contact.updatedAt)}
                   </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button className="focus-ring border border-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-[var(--accent)] hover:bg-teal-50" form={formId}>
+                      Save
+                    </button>
+                    <button className="focus-ring border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50" form={`${formId}-delete`}>
+                      Delete / Disable
+                    </button>
+                  </div>
                 </div>
               </form>
-              <div className="mt-3 flex flex-wrap gap-2 border-t border-[var(--line)] pt-3">
-                <button className="focus-ring border border-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-[var(--accent)] hover:bg-teal-50" form={formId}>
-                  Save
-                </button>
-                <form action={deleteOrganizationEscalationContact}>
-                  <input name="contactId" type="hidden" value={contact.id} />
-                  <button className="focus-ring border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50">
-                    Delete / Disable
-                  </button>
-                </form>
-              </div>
+              <form action={deleteOrganizationEscalationContact} id={`${formId}-delete`}>
+                <input name="contactId" type="hidden" value={contact.id} />
+              </form>
             </article>
           );
         })}
