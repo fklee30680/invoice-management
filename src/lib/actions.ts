@@ -170,9 +170,11 @@ async function notifyDepartment(invoice: Invoice) {
         link: templateValues.review_link,
       });
       storedInvoice.notificationSentAt = new Date().toISOString();
-      storedInvoice.routedAt = storedInvoice.notificationSentAt;
-      storedInvoice.dateSubmittedToDepartment =
-        storedInvoice.notificationSentAt.slice(0, 10);
+      if (!storedInvoice.routedAt) {
+        storedInvoice.routedAt = storedInvoice.notificationSentAt;
+        storedInvoice.dateSubmittedToDepartment =
+          storedInvoice.notificationSentAt.slice(0, 10);
+      }
       addAudit(data, {
         invoiceId: storedInvoice.id,
         actor: "AP",
@@ -470,60 +472,121 @@ export async function uploadInvoices(formData: FormData) {
   revalidatePath("/");
 }
 
+function applyApInvoiceMetadataUpdate(
+  data: Awaited<ReturnType<typeof readData>>,
+  invoice: Invoice,
+  formData: FormData,
+) {
+  const previousDepartmentId = invoice.departmentId;
+  const previousDepartment = data.departments.find(
+    (department) => department.id === previousDepartmentId,
+  );
+  const previousStatus = invoice.status;
+  const previousRoutedAt = invoice.routedAt;
+  const now = new Date();
+  const nowIso = now.toISOString();
+
+  invoice.vendorName = value(formData, "vendorName");
+  invoice.invoiceNumber = value(formData, "invoiceNumber");
+  invoice.invoiceDate = value(formData, "invoiceDate");
+  invoice.amount = value(formData, "amount");
+  invoice.poNumber = value(formData, "poNumber");
+  invoice.dateReceived = value(formData, "dateReceived");
+  if (formData.has("dateUploaded")) {
+    invoice.dateUploaded = value(formData, "dateUploaded");
+  }
+  invoice.departmentId = value(formData, "departmentId");
+
+  const purchaseOrder = findPurchaseOrder(data, invoice.poNumber);
+  const vendorRecord = purchaseOrder
+    ? undefined
+    : findVendorByName(data, invoice.vendorName);
+  invoice.vendorRecordId = vendorRecord?.id;
+  invoice.vendorValidationStatus = purchaseOrder
+    ? "Not Checked"
+    : vendorRecord
+      ? "Matched"
+      : "Not Found";
+
+  const routedStatus = statusLabelForRole(data, "routed");
+  const nextStatus = invoice.departmentId
+    ? routedStatus
+    : statusLabelForRole(data, "apReview");
+  const departmentChanged = previousDepartmentId !== invoice.departmentId;
+  const firstRoute =
+    Boolean(invoice.departmentId) &&
+    (!previousDepartmentId || !previousRoutedAt || previousStatus !== routedStatus);
+
+  setInvoiceStatus(invoice, nextStatus, now);
+
+  if (invoice.departmentId && (departmentChanged || firstRoute)) {
+    invoice.routedAt = nowIso;
+    invoice.dateSubmittedToDepartment = nowIso.slice(0, 10);
+    invoice.departmentDecision = "";
+    invoice.notificationSentAt = "";
+  }
+
+  if (!invoice.departmentId) {
+    invoice.routedAt = "";
+    invoice.dateSubmittedToDepartment = "";
+    invoice.departmentDecision = "";
+    invoice.notificationSentAt = "";
+  }
+
+  if (!statusesForCompleted(data).includes(invoice.status)) {
+    invoice.dateApproved = "";
+  }
+
+  invoice.updatedAt = nowIso;
+
+  const nextDepartment = data.departments.find(
+    (department) => department.id === invoice.departmentId,
+  );
+  const shouldNotify =
+    invoice.status === routedStatus &&
+    Boolean(invoice.departmentId) &&
+    (departmentChanged || firstRoute);
+
+  addAudit(data, {
+    invoiceId: invoice.id,
+    actor: "AP",
+    type: departmentChanged ? "rerouted" : "ap_metadata_updated",
+    message: departmentChanged
+      ? `AP changed department from ${previousDepartment?.name || "Unassigned"} to ${nextDepartment?.name || "Unassigned"}${invoice.departmentId ? " and rerouted the invoice. Routed date was reset." : " and returned the invoice to AP review."}`
+      : "AP updated invoice metadata.",
+  });
+
+  return { shouldNotify };
+}
+
 export async function updateAndRouteInvoice(formData: FormData) {
+  await requireApUser();
   const invoiceId = value(formData, "invoiceId");
   let updatedInvoice: Invoice | undefined;
+  let shouldNotify = false;
 
   await mutateData((data) => {
     const invoice = getInvoice(data, invoiceId);
     if (!invoice) return;
 
-    invoice.vendorName = value(formData, "vendorName");
-    invoice.invoiceNumber = value(formData, "invoiceNumber");
-    invoice.invoiceDate = value(formData, "invoiceDate");
-    invoice.amount = value(formData, "amount");
-    invoice.poNumber = value(formData, "poNumber");
-    invoice.dateReceived = value(formData, "dateReceived");
-    invoice.departmentId = value(formData, "departmentId");
-    const purchaseOrder = findPurchaseOrder(data, invoice.poNumber);
-    const vendorRecord = purchaseOrder
-      ? undefined
-      : findVendorByName(data, invoice.vendorName);
-    invoice.vendorRecordId = vendorRecord?.id;
-    invoice.vendorValidationStatus = purchaseOrder
-      ? "Not Checked"
-      : vendorRecord
-        ? "Matched"
-        : "Not Found";
-    const now = new Date();
-    const nextStatus = invoice.departmentId
-      ? statusLabelForRole(data, "routed")
-      : statusLabelForRole(data, "apReview");
-    setInvoiceStatus(invoice, nextStatus, now);
-    if (invoice.departmentId) {
-      invoice.routedAt = now.toISOString();
-      invoice.dateSubmittedToDepartment = now.toISOString().slice(0, 10);
-    }
-    invoice.updatedAt = now.toISOString();
+    const result = applyApInvoiceMetadataUpdate(data, invoice, formData);
+    shouldNotify = result.shouldNotify;
     updatedInvoice = invoice;
-
-    addAudit(data, {
-      invoiceId,
-      actor: "AP",
-      type: invoice.status === statusLabelForRole(data, "routed") ? "rerouted" : "ap_edit",
-      message:
-        invoice.status === statusLabelForRole(data, "routed")
-          ? "AP updated metadata and routed the invoice."
-          : "AP updated metadata; department still required.",
-    });
   });
 
   const current = await mutateData((data) => data);
-  if (updatedInvoice?.status === statusLabelForRole(current, "routed")) {
+  if (updatedInvoice?.status === statusLabelForRole(current, "routed") && shouldNotify) {
     await notifyDepartment(updatedInvoice);
   }
 
   revalidatePath("/");
+  revalidatePath("/department");
+  revalidatePath("/reports");
+  revalidatePath("/invoices/total");
+  revalidatePath("/invoices/needs-ap-work");
+  revalidatePath("/invoices/with-departments");
+  revalidatePath("/invoices/completed");
+  revalidatePath("/invoices/manual-payment");
   revalidatePath(`/review/${invoiceId}`);
 }
 
