@@ -195,8 +195,8 @@ function resolveRecipients(
   const department = data.departments.find((item) => item.id === invoice.departmentId);
   const warnings: string[] = [];
   const to: string[] = [];
-  const cc = [...template.recipientConfig.customCcEmails];
-  const bcc = [...template.recipientConfig.customBccEmails];
+  const cc: string[] = [];
+  const bcc: string[] = [];
 
   if (template.recipientConfig.includeDepartmentEmail) {
     addRecipient(to, warnings, department?.email, "department email");
@@ -225,14 +225,10 @@ function resolveRecipients(
     addRecipient(to, warnings, contact?.email, contact?.title || contactId);
   }
 
-  for (const email of template.recipientConfig.customToEmails) {
-    addRecipient(to, warnings, email, email);
-  }
-
   return {
     to: unique(to),
-    cc: unique(cc.filter(validEmail).map((email) => email.trim().toLowerCase())),
-    bcc: unique(bcc.filter(validEmail).map((email) => email.trim().toLowerCase())),
+    cc,
+    bcc,
     warnings,
   };
 }

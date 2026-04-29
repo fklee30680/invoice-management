@@ -155,24 +155,6 @@ function RecipientConfigFields({
           ))}
         </div>
       </fieldset>
-      <TextArea
-        defaultValue={config.customToEmails.join("\n")}
-        form={form}
-        label="Custom To Emails"
-        name="customToEmails"
-      />
-      <TextArea
-        defaultValue={config.customCcEmails.join("\n")}
-        form={form}
-        label="Custom CC Emails"
-        name="customCcEmails"
-      />
-      <TextArea
-        defaultValue={config.customBccEmails.join("\n")}
-        form={form}
-        label="Custom BCC Emails"
-        name="customBccEmails"
-      />
     </div>
   );
 }
@@ -233,9 +215,6 @@ const emptyRecipientConfig: EscalationRecipientConfig = {
   includeDepartmentEscalationEmail: false,
   includeOrganizationContactsForTriggeredSchedule: false,
   specificOrganizationContactIds: [],
-  customToEmails: [],
-  customCcEmails: [],
-  customBccEmails: [],
 };
 
 export default async function EmailSettingsPage({

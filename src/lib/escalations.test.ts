@@ -89,9 +89,6 @@ function baseData(): AppData {
           includeDepartmentEscalationEmail: false,
           includeOrganizationContactsForTriggeredSchedule: false,
           specificOrganizationContactIds: [],
-          customToEmails: [],
-          customCcEmails: [],
-          customBccEmails: [],
         },
         sortOrder: 1,
         subject: "{{vendor_name}} {{business_days_waiting}}",
@@ -206,5 +203,76 @@ describe("findEscalationCandidates", () => {
       statusAtSend: "Routed",
     });
     assert.equal(findEscalationCandidates(data, new Date("2026-04-27T13:00:00.000Z")).length, 1);
+  });
+
+  it("resolves selected department recipients", () => {
+    const data = baseData();
+    data.escalationTemplates[0].recipientConfig.includeDepartmentHeadEmail = true;
+    data.escalationTemplates[0].recipientConfig.includeDepartmentEscalationEmail = true;
+
+    const candidate = findEscalationCandidates(data, new Date("2026-04-27T13:00:00.000Z"))[0];
+    assert.deepEqual(candidate.to.sort(), [
+      "escalation@example.com",
+      "facilities@example.com",
+      "head@example.com",
+    ]);
+  });
+
+  it("resolves organization contacts assigned to the triggered schedule", () => {
+    const data = baseData();
+    data.organizationEscalationContacts.push({
+      id: "org-1",
+      title: "Finance Director",
+      name: "Pat Lee",
+      email: "finance@example.com",
+      enabled: true,
+      assignedScheduleIds: ["schedule-1"],
+      departmentScope: [],
+      notes: "",
+      createdAt: "2026-04-24T19:00:00.000Z",
+      updatedAt: "2026-04-24T19:00:00.000Z",
+    });
+    data.escalationTemplates[0].recipientConfig.includeOrganizationContactsForTriggeredSchedule = true;
+
+    const candidate = findEscalationCandidates(data, new Date("2026-04-27T13:00:00.000Z"))[0];
+    assert.equal(candidate.to.includes("finance@example.com"), true);
+  });
+
+  it("removes duplicate resolved recipient emails", () => {
+    const data = baseData();
+    data.organizationEscalationContacts.push({
+      id: "org-1",
+      title: "Department Liaison",
+      name: "Alex",
+      email: "facilities@example.com",
+      enabled: true,
+      assignedScheduleIds: ["schedule-1"],
+      departmentScope: [],
+      notes: "",
+      createdAt: "2026-04-24T19:00:00.000Z",
+      updatedAt: "2026-04-24T19:00:00.000Z",
+    });
+    data.escalationTemplates[0].recipientConfig.includeOrganizationContactsForTriggeredSchedule = true;
+
+    const candidate = findEscalationCandidates(data, new Date("2026-04-27T13:00:00.000Z"))[0];
+    assert.equal(candidate.to.filter((email) => email === "facilities@example.com").length, 1);
+  });
+
+  it("records warnings for missing configured contact emails", () => {
+    const data = baseData();
+    data.escalationTemplates[0].recipientConfig.includeDepartmentHeadEmail = true;
+    data.departments[0].departmentHeadEmail = "";
+
+    const candidate = findEscalationCandidates(data, new Date("2026-04-27T13:00:00.000Z"))[0];
+    assert.equal(candidate.warnings.some((warning) => warning.includes("department head")), true);
+  });
+
+  it("skips escalation candidates when no valid recipients resolve", () => {
+    const data = baseData();
+    data.escalationTemplates[0].recipientConfig.includeDepartmentEmail = false;
+    data.escalationTemplates[0].recipientConfig.includeDepartmentHeadEmail = true;
+    data.departments[0].departmentHeadEmail = "";
+
+    assert.equal(findEscalationCandidates(data, new Date("2026-04-27T13:00:00.000Z")).length, 0);
   });
 });

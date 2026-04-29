@@ -107,13 +107,6 @@ function idList(formData: FormData, key: string) {
   return formData.getAll(key).map(String).filter(Boolean);
 }
 
-function emailList(formData: FormData, key: string) {
-  return value(formData, key)
-    .split(/[,\n;]/)
-    .map((item) => item.trim().toLowerCase())
-    .filter(Boolean);
-}
-
 function escalationRecipientConfig(formData: FormData) {
   return {
     includeDepartmentEmail: checkbox(formData, "includeDepartmentEmail"),
@@ -124,9 +117,6 @@ function escalationRecipientConfig(formData: FormData) {
       "includeOrganizationContactsForTriggeredSchedule",
     ),
     specificOrganizationContactIds: idList(formData, "specificOrganizationContactIds"),
-    customToEmails: emailList(formData, "customToEmails"),
-    customCcEmails: emailList(formData, "customCcEmails"),
-    customBccEmails: emailList(formData, "customBccEmails"),
   };
 }
 

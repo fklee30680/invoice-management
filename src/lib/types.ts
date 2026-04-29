@@ -40,9 +40,6 @@ export type EscalationRecipientConfig = {
   includeDepartmentEscalationEmail: boolean;
   includeOrganizationContactsForTriggeredSchedule: boolean;
   specificOrganizationContactIds: string[];
-  customToEmails: string[];
-  customCcEmails: string[];
-  customBccEmails: string[];
 };
 
 export type EscalationSchedule = {

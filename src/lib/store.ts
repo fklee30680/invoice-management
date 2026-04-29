@@ -117,21 +117,7 @@ function defaultRecipientConfig() {
     includeDepartmentEscalationEmail: false,
     includeOrganizationContactsForTriggeredSchedule: false,
     specificOrganizationContactIds: [],
-    customToEmails: [],
-    customCcEmails: [],
-    customBccEmails: [],
   };
-}
-
-function normalizeEmailList(value: unknown) {
-  if (Array.isArray(value)) return value.map(String).filter(Boolean);
-  if (typeof value === "string") {
-    return value
-      .split(/[,\n;]/)
-      .map((item) => item.trim())
-      .filter(Boolean);
-  }
-  return [];
 }
 
 function normalizeEscalationSchedules(data: AppData) {
@@ -343,8 +329,6 @@ function normalizeData(data: AppData): AppData {
         const legacy = template as unknown as {
           daysToNotify?: number;
           toRecipients?: { type: string; customEmail?: string }[];
-          ccRecipients?: { type: string; customEmail?: string }[];
-          bccRecipients?: { type: string; customEmail?: string }[];
         };
         const scheduleIds =
           template.scheduleIds && template.scheduleIds.length > 0
@@ -353,22 +337,11 @@ function normalizeData(data: AppData): AppData {
               ? [scheduleByDays.get(Math.max(Number(legacy.daysToNotify) || 0, 0)) || ""].filter(Boolean)
               : [];
         const legacyTo = legacy.toRecipients || [];
-        const legacyCc = legacy.ccRecipients || [];
-        const legacyBcc = legacy.bccRecipients || [];
         const recipientConfig = template.recipientConfig || {
           ...defaultRecipientConfig(),
           includeDepartmentEmail: legacyTo.some((item) => item.type === "departmentEmail"),
           includeDepartmentHeadEmail: legacyTo.some((item) => item.type === "departmentHeadEmail"),
           includeDepartmentEscalationEmail: legacyTo.some((item) => item.type === "departmentEscalationEmail"),
-          customToEmails: legacyTo
-            .filter((item) => item.type === "customEmail" && item.customEmail)
-            .map((item) => item.customEmail || ""),
-          customCcEmails: legacyCc
-            .filter((item) => item.type === "customEmail" && item.customEmail)
-            .map((item) => item.customEmail || ""),
-          customBccEmails: legacyBcc
-            .filter((item) => item.type === "customEmail" && item.customEmail)
-            .map((item) => item.customEmail || ""),
         };
         return {
           id: template.id || createId("escalation-template"),
@@ -380,9 +353,6 @@ function normalizeData(data: AppData): AppData {
             ...recipientConfig,
             specificOrganizationContactIds:
               recipientConfig.specificOrganizationContactIds || [],
-            customToEmails: normalizeEmailList(recipientConfig.customToEmails),
-            customCcEmails: normalizeEmailList(recipientConfig.customCcEmails),
-            customBccEmails: normalizeEmailList(recipientConfig.customBccEmails),
           },
           sortOrder: Number(template.sortOrder) || 0,
           subject: template.subject || "",
