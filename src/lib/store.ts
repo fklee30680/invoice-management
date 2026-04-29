@@ -6,9 +6,11 @@ import type {
   AuditEvent,
   BrandingSettings,
   Department,
+  EscalationSchedulerSettings,
   Invoice,
   InvoiceFile,
   NotificationTemplate,
+  OrganizationEscalationContacts,
   PaymentFileSettings,
   PurchaseOrder,
   User,
@@ -79,6 +81,50 @@ function defaultPaymentFile(): PaymentFileSettings {
   return defaultPaymentFileSettings();
 }
 
+function defaultEscalationScheduler(): EscalationSchedulerSettings {
+  return {
+    enabled: false,
+    timeOfDay: "08:00",
+    timezone: "America/New_York",
+    daysOfWeek: [1, 2, 3, 4, 5],
+    excludedWeekdays: [0, 6],
+    excludeHolidays: true,
+    countRoutedDateAsDayOne: false,
+  };
+}
+
+function defaultOrganizationEscalationContacts(): OrganizationEscalationContacts {
+  return {
+    apSupervisorTitle: "AP Supervisor",
+    apSupervisorName: "",
+    apSupervisorEmail: "",
+    cfoTitle: "CFO",
+    cfoName: "",
+    cfoEmail: "",
+    executiveTitle: "Executive",
+    executiveName: "",
+    executiveEmail: "",
+  };
+}
+
+function normalizeEscalationScheduler(
+  settings: Partial<EscalationSchedulerSettings> | undefined,
+) {
+  const defaults = defaultEscalationScheduler();
+  return {
+    ...defaults,
+    ...(settings || {}),
+    daysOfWeek:
+      Array.isArray(settings?.daysOfWeek) && settings.daysOfWeek.length > 0
+        ? settings.daysOfWeek.map(Number).filter((day) => day >= 0 && day <= 6)
+        : defaults.daysOfWeek,
+    excludedWeekdays:
+      Array.isArray(settings?.excludedWeekdays)
+        ? settings.excludedWeekdays.map(Number).filter((day) => day >= 0 && day <= 6)
+        : defaults.excludedWeekdays,
+  };
+}
+
 function normalizeDepartmentDecisions(
   decisions:
     | AppData["departmentDecisions"]
@@ -128,6 +174,8 @@ function normalizeData(data: AppData): AppData {
   const defaultStatusList = defaultStatuses();
   const invoices = (data.invoices || []).map((invoice) => {
     const legacyStatus = String(invoice.status);
+    const notificationSentAt = invoice.notificationSentAt || "";
+    const routedAt = invoice.routedAt || notificationSentAt || "";
     const normalizedInvoice = {
       ...invoice,
       vendorValidationStatus: invoice.vendorValidationStatus || "Not Checked",
@@ -135,8 +183,11 @@ function normalizeData(data: AppData): AppData {
       dateUploaded:
         invoice.dateUploaded || invoice.createdAt?.slice(0, 10) || invoice.dateReceived || "",
       dateSubmittedToDepartment:
-        invoice.dateSubmittedToDepartment || invoice.notificationSentAt?.slice(0, 10) || "",
+        invoice.dateSubmittedToDepartment || notificationSentAt.slice(0, 10) || "",
       statusDate: invoice.statusDate || invoice.updatedAt?.slice(0, 10) || "",
+      routedAt,
+      escalations: invoice.escalations || [],
+      notificationSentAt,
     };
     if (legacyStatus === "OCR Processing") {
       return { ...normalizedInvoice, status: "Needs AP Review" as const };
@@ -151,7 +202,13 @@ function normalizeData(data: AppData): AppData {
   return {
     ...data,
     invoices,
-    departments: data.departments || [],
+    departments: (data.departments || []).map((department) => ({
+      ...department,
+      departmentHeadName: department.departmentHeadName || "",
+      departmentHeadEmail: department.departmentHeadEmail || "",
+      escalationName: department.escalationName || "",
+      escalationEmail: department.escalationEmail || "",
+    })),
     vendors: (data.vendors || []).map((vendor) => ({
       ...vendor,
       vendorName: vendor.vendorName || "",
@@ -174,6 +231,30 @@ function normalizeData(data: AppData): AppData {
     },
     statuses,
     departmentDecisions: normalizeDepartmentDecisions(data.departmentDecisions),
+    escalationTemplates: (data.escalationTemplates || [])
+      .map((template) => ({
+        ...template,
+        daysToNotify: Number(template.daysToNotify) || 1,
+        enabled: template.enabled === true,
+        sortOrder: Number(template.sortOrder) || 0,
+        toRecipients: template.toRecipients || [],
+        ccRecipients: template.ccRecipients || [],
+        bccRecipients: template.bccRecipients || [],
+        createdAt: template.createdAt || new Date().toISOString(),
+        updatedAt: template.updatedAt || new Date().toISOString(),
+      }))
+      .sort((left, right) => left.sortOrder - right.sortOrder),
+    escalationScheduler: normalizeEscalationScheduler(data.escalationScheduler),
+    holidays: (data.holidays || []).map((holiday) => ({
+      ...holiday,
+      enabled: holiday.enabled !== false,
+      notes: holiday.notes || "",
+    })),
+    organizationEscalationContacts: {
+      ...defaultOrganizationEscalationContacts(),
+      ...(data.organizationEscalationContacts || {}),
+    },
+    escalationRunSummaries: data.escalationRunSummaries || [],
     escalationContacts: normalizeEscalationContacts(data.escalationContacts),
   };
 }
@@ -261,11 +342,18 @@ function mergeStatuses(
         showInApWorkQueue: false,
         showInDepartmentWork: false,
         showInCompleted: false,
+        includeInEscalation: false,
       },
     );
   }
 
-  return statuses;
+  return statuses.map((status) => ({
+    ...status,
+    includeInEscalation:
+      typeof status.includeInEscalation === "boolean"
+        ? status.includeInEscalation
+        : statusRoles(status).includes("routed"),
+  }));
 }
 
 function hasDatabase() {
@@ -376,6 +464,11 @@ function seedData(): AppData {
       },
     ],
     notificationTemplate: defaultNotificationTemplate(),
+    escalationTemplates: [],
+    escalationScheduler: defaultEscalationScheduler(),
+    holidays: [],
+    organizationEscalationContacts: defaultOrganizationEscalationContacts(),
+    escalationRunSummaries: [],
     paymentFile: defaultPaymentFile(),
     branding: defaultBranding(),
     statuses: defaultStatuses(),

@@ -3,7 +3,12 @@
 import path from "node:path";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { sendDepartmentNotification } from "./email";
+import {
+  recordRunSummary,
+  renderEscalationTemplate,
+  runEscalationCheck,
+} from "./escalations";
+import { sendDepartmentNotification, sendEscalationNotification } from "./email";
 import {
   deleteStoredBrandingLogo,
   deleteStoredInvoiceFile,
@@ -40,6 +45,8 @@ import {
 import type {
   BrandingLogo,
   DecisionWorkflowAction,
+  EscalationRecipientConfig,
+  EscalationRecipientType,
   Invoice,
   StatusTone,
 } from "./types";
@@ -71,6 +78,11 @@ function checkbox(formData: FormData, key: string) {
   return formData.get(key) === "on";
 }
 
+function numberValue(formData: FormData, key: string, fallback = 0) {
+  const parsed = Number(value(formData, key));
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 function toneValue(formData: FormData) {
   const selected = value(formData, "tone") as StatusTone;
   return STATUS_TONES.includes(selected) ? selected : "slate";
@@ -91,6 +103,18 @@ function fillTemplate(template: string, values: Record<string, string>) {
   return template.replace(/\{\{\s*([a-z_]+)\s*\}\}/gi, (_match, key: string) => {
     return values[key] || "";
   });
+}
+
+function recipientConfigs(formData: FormData, key: string): EscalationRecipientConfig[] {
+  const recipientTypes = formData
+    .getAll(key)
+    .map((item) => String(item))
+    .filter(Boolean) as EscalationRecipientType[];
+  const configs = recipientTypes.map((type) => ({
+    type,
+    customEmail: type === "customEmail" ? value(formData, `${key}Custom`) : undefined,
+  }));
+  return configs.filter((config) => config.type !== "customEmail" || config.customEmail);
 }
 
 function setInvoiceStatus(invoice: Invoice, status: string, now = new Date()) {
@@ -134,6 +158,7 @@ async function notifyDepartment(invoice: Invoice) {
         link: templateValues.review_link,
       });
       storedInvoice.notificationSentAt = new Date().toISOString();
+      storedInvoice.routedAt = storedInvoice.notificationSentAt;
       storedInvoice.dateSubmittedToDepartment =
         storedInvoice.notificationSentAt.slice(0, 10);
       addAudit(data, {
@@ -375,10 +400,12 @@ export async function uploadInvoices(formData: FormData) {
           dateUploaded: now.slice(0, 10),
           dateSubmittedToDepartment: canNotify ? now.slice(0, 10) : "",
           statusDate: now.slice(0, 10),
+          routedAt: canNotify ? now : "",
           status,
           departmentId,
           departmentDecision: "",
           paymentProcessed: false,
+          escalations: [],
           comments: [],
           fileId,
           notificationSentAt: "",
@@ -462,6 +489,7 @@ export async function updateAndRouteInvoice(formData: FormData) {
       : statusLabelForRole(data, "apReview");
     setInvoiceStatus(invoice, nextStatus, now);
     if (invoice.departmentId) {
+      invoice.routedAt = now.toISOString();
       invoice.dateSubmittedToDepartment = now.toISOString().slice(0, 10);
     }
     invoice.updatedAt = now.toISOString();
@@ -494,6 +522,10 @@ export async function addDepartment(formData: FormData) {
 
   await mutateData((data) => {
     const department = upsertDepartment(data, name, email);
+    department.departmentHeadName = value(formData, "departmentHeadName");
+    department.departmentHeadEmail = value(formData, "departmentHeadEmail").toLowerCase();
+    department.escalationName = value(formData, "escalationName");
+    department.escalationEmail = value(formData, "escalationEmail").toLowerCase();
     addAudit(data, {
       actor: "AP",
       type: "department_saved",
@@ -516,6 +548,10 @@ export async function updateDepartment(formData: FormData) {
     if (!department) return;
     department.name = name;
     department.email = email;
+    department.departmentHeadName = value(formData, "departmentHeadName");
+    department.departmentHeadEmail = value(formData, "departmentHeadEmail").toLowerCase();
+    department.escalationName = value(formData, "escalationName");
+    department.escalationEmail = value(formData, "escalationEmail").toLowerCase();
     addAudit(data, {
       actor: "AP",
       type: "department_updated",
@@ -605,26 +641,263 @@ export async function deleteEscalationContact(formData: FormData) {
 export async function updateNotificationTemplate(formData: FormData) {
   const departmentSubject = value(formData, "departmentSubject");
   const departmentBody = value(formData, "departmentBody");
-  const escalationSubject = value(formData, "escalationSubject");
-  const escalationBody = value(formData, "escalationBody");
-  if (!departmentSubject || !departmentBody || !escalationSubject || !escalationBody) {
+  if (!departmentSubject || !departmentBody) {
     return;
   }
 
   await mutateData((data) => {
     data.notificationTemplate.departmentSubject = departmentSubject;
     data.notificationTemplate.departmentBody = departmentBody;
-    data.notificationTemplate.escalationSubject = escalationSubject;
-    data.notificationTemplate.escalationBody = escalationBody;
     addAudit(data, {
       actor: "AP",
       type: "notification_template_updated",
-      message: "Updated notification email templates.",
+      message: "Updated department notification email template.",
     });
   });
 
   revalidatePath("/");
-  revalidatePath("/settings");
+  revalidatePath("/settings/email");
+}
+
+export async function addEscalationTemplate(formData: FormData) {
+  await requireApUser();
+  const name = value(formData, "name");
+  const escalationLevel = value(formData, "escalationLevel");
+  const subject = value(formData, "subject");
+  const body = value(formData, "body");
+  if (!name || !escalationLevel || !subject || !body) return;
+
+  await mutateData((data) => {
+    data.escalationTemplates.push({
+      id: createId("escalation-template"),
+      name,
+      escalationLevel,
+      daysToNotify: Math.max(numberValue(formData, "daysToNotify", 1), 1),
+      enabled: checkbox(formData, "enabled"),
+      sortOrder: numberValue(formData, "sortOrder", data.escalationTemplates.length + 1),
+      subject,
+      body,
+      toRecipients: recipientConfigs(formData, "toRecipients"),
+      ccRecipients: recipientConfigs(formData, "ccRecipients"),
+      bccRecipients: recipientConfigs(formData, "bccRecipients"),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    addAudit(data, {
+      actor: "AP",
+      type: "escalation_template_added",
+      message: `Added escalation template ${name}.`,
+    });
+  });
+
+  revalidatePath("/settings/email");
+}
+
+export async function updateEscalationTemplate(formData: FormData) {
+  await requireApUser();
+  const templateId = value(formData, "templateId");
+  const name = value(formData, "name");
+  const escalationLevel = value(formData, "escalationLevel");
+  const subject = value(formData, "subject");
+  const body = value(formData, "body");
+  if (!templateId || !name || !escalationLevel || !subject || !body) return;
+
+  await mutateData((data) => {
+    const template = data.escalationTemplates.find((item) => item.id === templateId);
+    if (!template) return;
+    template.name = name;
+    template.escalationLevel = escalationLevel;
+    template.daysToNotify = Math.max(numberValue(formData, "daysToNotify", 1), 1);
+    template.enabled = checkbox(formData, "enabled");
+    template.sortOrder = numberValue(formData, "sortOrder", template.sortOrder);
+    template.subject = subject;
+    template.body = body;
+    template.toRecipients = recipientConfigs(formData, "toRecipients");
+    template.ccRecipients = recipientConfigs(formData, "ccRecipients");
+    template.bccRecipients = recipientConfigs(formData, "bccRecipients");
+    template.updatedAt = new Date().toISOString();
+    addAudit(data, {
+      actor: "AP",
+      type: "escalation_template_updated",
+      message: `Updated escalation template ${name}.`,
+    });
+  });
+
+  revalidatePath("/settings/email");
+}
+
+export async function deleteEscalationTemplate(formData: FormData) {
+  await requireApUser();
+  const templateId = value(formData, "templateId");
+  if (!templateId) return;
+
+  await mutateData((data) => {
+    const template = data.escalationTemplates.find((item) => item.id === templateId);
+    data.escalationTemplates = data.escalationTemplates.filter(
+      (item) => item.id !== templateId,
+    );
+    addAudit(data, {
+      actor: "AP",
+      type: "escalation_template_deleted",
+      message: `Deleted escalation template ${template?.name || templateId}.`,
+    });
+  });
+
+  revalidatePath("/settings/email");
+}
+
+export async function updateEscalationSchedulerSettings(formData: FormData) {
+  await requireApUser();
+  await mutateData((data) => {
+    data.escalationScheduler = {
+      enabled: checkbox(formData, "enabled"),
+      timeOfDay: value(formData, "timeOfDay") || "08:00",
+      timezone: value(formData, "timezone") || "America/New_York",
+      daysOfWeek: formData.getAll("daysOfWeek").map(Number),
+      excludedWeekdays: formData.getAll("excludedWeekdays").map(Number),
+      excludeHolidays: checkbox(formData, "excludeHolidays"),
+      countRoutedDateAsDayOne: checkbox(formData, "countRoutedDateAsDayOne"),
+    };
+    data.organizationEscalationContacts = {
+      apSupervisorTitle: value(formData, "apSupervisorTitle") || "AP Supervisor",
+      apSupervisorName: value(formData, "apSupervisorName"),
+      apSupervisorEmail: value(formData, "apSupervisorEmail").toLowerCase(),
+      cfoTitle: value(formData, "cfoTitle") || "CFO",
+      cfoName: value(formData, "cfoName"),
+      cfoEmail: value(formData, "cfoEmail").toLowerCase(),
+      executiveTitle: value(formData, "executiveTitle") || "Executive",
+      executiveName: value(formData, "executiveName"),
+      executiveEmail: value(formData, "executiveEmail").toLowerCase(),
+    };
+    addAudit(data, {
+      actor: "AP",
+      type: "escalation_scheduler_updated",
+      message: "Updated escalation scheduler and organization escalation contacts.",
+    });
+  });
+
+  revalidatePath("/settings/email");
+}
+
+export async function addHoliday(formData: FormData) {
+  await requireApUser();
+  const date = value(formData, "date");
+  const name = value(formData, "name");
+  if (!date || !name) return;
+
+  await mutateData((data) => {
+    data.holidays.push({
+      id: createId("holiday"),
+      date,
+      name,
+      enabled: checkbox(formData, "enabled"),
+      notes: value(formData, "notes"),
+    });
+    addAudit(data, {
+      actor: "AP",
+      type: "holiday_added",
+      message: `Added holiday ${name}.`,
+    });
+  });
+
+  revalidatePath("/settings/email");
+}
+
+export async function updateHoliday(formData: FormData) {
+  await requireApUser();
+  const holidayId = value(formData, "holidayId");
+  if (!holidayId) return;
+
+  await mutateData((data) => {
+    const holiday = data.holidays.find((item) => item.id === holidayId);
+    if (!holiday) return;
+    holiday.date = value(formData, "date");
+    holiday.name = value(formData, "name");
+    holiday.enabled = checkbox(formData, "enabled");
+    holiday.notes = value(formData, "notes");
+    addAudit(data, {
+      actor: "AP",
+      type: "holiday_updated",
+      message: `Updated holiday ${holiday.name}.`,
+    });
+  });
+
+  revalidatePath("/settings/email");
+}
+
+export async function deleteHoliday(formData: FormData) {
+  await requireApUser();
+  const holidayId = value(formData, "holidayId");
+  if (!holidayId) return;
+
+  await mutateData((data) => {
+    const holiday = data.holidays.find((item) => item.id === holidayId);
+    data.holidays = data.holidays.filter((item) => item.id !== holidayId);
+    addAudit(data, {
+      actor: "AP",
+      type: "holiday_deleted",
+      message: `Deleted holiday ${holiday?.name || holidayId}.`,
+    });
+  });
+
+  revalidatePath("/settings/email");
+}
+
+export async function runEscalationsNow() {
+  await requireApUser();
+  await runEscalationCheck({ dryRun: false, ignoreSchedule: true });
+  revalidatePath("/settings/email");
+}
+
+export async function sendTestEscalationEmail(formData: FormData) {
+  await requireApUser();
+  const templateId = value(formData, "templateId");
+  const testEmail = value(formData, "testEmail").toLowerCase();
+  if (!templateId || !testEmail) return;
+
+  const data = await readData();
+  const template = data.escalationTemplates.find((item) => item.id === templateId);
+  if (!template) return;
+  const rendered = renderEscalationTemplate(template, {
+    vendor_name: "Sample Vendor",
+    invoice_number: "INV-1001",
+    po_number: "PO-1001",
+    amount: "$1,250.00",
+    department_name: "Sample Department",
+    review_link: `${baseUrl()}/review/sample`,
+    escalation_level: template.escalationLevel,
+    days_waiting: String(template.daysToNotify),
+    business_days_waiting: String(template.daysToNotify),
+    routed_at: new Date().toISOString().slice(0, 10),
+    notification_sent_at: new Date().toISOString().slice(0, 10),
+    department_head_name: "Department Head",
+    department_escalation_name: "Department Escalation",
+    ap_supervisor_name: data.organizationEscalationContacts.apSupervisorName,
+    cfo_name: data.organizationEscalationContacts.cfoName,
+    executive_name: data.organizationEscalationContacts.executiveName,
+  });
+
+  await sendEscalationNotification({
+    invoiceId: "sample",
+    subject: rendered.subject,
+    body: rendered.body,
+    link: `${baseUrl()}/review/sample`,
+    to: [testEmail],
+    escalationLevel: template.escalationLevel,
+    templateId: template.id,
+  });
+
+  const result = {
+    runAt: new Date().toISOString(),
+    mode: "live" as const,
+    candidates: [],
+    sentCount: 1,
+    wouldSendCount: 0,
+    failedCount: 0,
+    errors: [],
+  };
+  await recordRunSummary(result);
+  revalidatePath("/settings/email");
 }
 
 export async function addInvoiceStatus(formData: FormData) {
@@ -645,6 +918,7 @@ export async function addInvoiceStatus(formData: FormData) {
       showInApWorkQueue: checkbox(formData, "showInApWorkQueue"),
       showInDepartmentWork: checkbox(formData, "showInDepartmentWork"),
       showInCompleted: checkbox(formData, "showInCompleted"),
+      includeInEscalation: checkbox(formData, "includeInEscalation"),
     });
     addAudit(data, {
       actor: "AP",
@@ -679,6 +953,7 @@ export async function updateInvoiceStatus(formData: FormData) {
     status.showInApWorkQueue = checkbox(formData, "showInApWorkQueue");
     status.showInDepartmentWork = checkbox(formData, "showInDepartmentWork");
     status.showInCompleted = checkbox(formData, "showInCompleted");
+    status.includeInEscalation = checkbox(formData, "includeInEscalation");
 
     if (oldLabel !== label) {
       for (const invoice of data.invoices) {

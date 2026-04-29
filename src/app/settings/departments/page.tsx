@@ -77,6 +77,10 @@ export default async function DepartmentSettingsPage() {
             required
             type="email"
           />
+          <TextInput label="Department Head Name" name="departmentHeadName" />
+          <TextInput label="Department Head Email" name="departmentHeadEmail" type="email" />
+          <TextInput label="Department Escalation Name" name="escalationName" />
+          <TextInput label="Department Escalation Email" name="escalationEmail" type="email" />
         </div>
         <div className="flex justify-end">
           <button className="focus-ring bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--accent-strong)]">
@@ -119,6 +123,28 @@ export default async function DepartmentSettingsPage() {
                       name="email"
                       placeholder="required before auto-send"
                       required
+                      type="email"
+                    />
+                    <TextInput
+                      defaultValue={department.departmentHeadName}
+                      label="Department Head Name"
+                      name="departmentHeadName"
+                    />
+                    <TextInput
+                      defaultValue={department.departmentHeadEmail}
+                      label="Department Head Email"
+                      name="departmentHeadEmail"
+                      type="email"
+                    />
+                    <TextInput
+                      defaultValue={department.escalationName}
+                      label="Department Escalation Name"
+                      name="escalationName"
+                    />
+                    <TextInput
+                      defaultValue={department.escalationEmail}
+                      label="Department Escalation Email"
+                      name="escalationEmail"
                       type="email"
                     />
                   </div>

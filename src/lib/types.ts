@@ -29,8 +29,91 @@ export type InvoiceStatusDefinition = {
   showInApWorkQueue: boolean;
   showInDepartmentWork: boolean;
   showInCompleted: boolean;
+  includeInEscalation: boolean;
   systemRole?: StatusSystemRole;
   systemRoles?: StatusSystemRole[];
+};
+
+export type EscalationRecipientType =
+  | "departmentEmail"
+  | "departmentHeadEmail"
+  | "departmentEscalationEmail"
+  | "apSupervisorEmail"
+  | "cfoEmail"
+  | "executiveEmail"
+  | "customEmail";
+
+export type EscalationRecipientConfig = {
+  type: EscalationRecipientType;
+  customEmail?: string;
+};
+
+export type EscalationTemplate = {
+  id: string;
+  name: string;
+  escalationLevel: string;
+  daysToNotify: number;
+  enabled: boolean;
+  sortOrder: number;
+  subject: string;
+  body: string;
+  toRecipients: EscalationRecipientConfig[];
+  ccRecipients: EscalationRecipientConfig[];
+  bccRecipients: EscalationRecipientConfig[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type Holiday = {
+  id: string;
+  date: string;
+  name: string;
+  enabled: boolean;
+  notes?: string;
+};
+
+export type EscalationSchedulerSettings = {
+  enabled: boolean;
+  timeOfDay: string;
+  timezone: string;
+  daysOfWeek: number[];
+  excludedWeekdays: number[];
+  excludeHolidays: boolean;
+  countRoutedDateAsDayOne: boolean;
+};
+
+export type OrganizationEscalationContacts = {
+  apSupervisorTitle: string;
+  apSupervisorName: string;
+  apSupervisorEmail: string;
+  cfoTitle: string;
+  cfoName: string;
+  cfoEmail: string;
+  executiveTitle: string;
+  executiveName: string;
+  executiveEmail: string;
+};
+
+export type EscalationRunSummary = {
+  id: string;
+  runAt: string;
+  mode: "live" | "dry-run";
+  sentCount: number;
+  wouldSendCount: number;
+  failedCount: number;
+  errors: string[];
+};
+
+export type InvoiceEscalationEvent = {
+  id: string;
+  templateId: string;
+  escalationLevel: string;
+  sentAt: string;
+  routedAt: string;
+  daysToNotify: number;
+  businessDaysWaiting: number;
+  recipients: string[];
+  statusAtSend: string;
 };
 
 export type DecisionWorkflowAction = "complete" | "reject" | "hold" | "apRework";
@@ -47,6 +130,10 @@ export type Department = {
   id: string;
   name: string;
   email: string;
+  departmentHeadName?: string;
+  departmentHeadEmail?: string;
+  escalationName?: string;
+  escalationEmail?: string;
 };
 
 export type EscalationContact = {
@@ -189,10 +276,12 @@ export type Invoice = {
   dateUploaded: string;
   dateSubmittedToDepartment: string;
   statusDate: string;
+  routedAt: string;
   status: WorkflowStatus;
   departmentId: string;
   departmentDecision: string;
   paymentProcessed: boolean;
+  escalations: InvoiceEscalationEvent[];
   comments: InvoiceComment[];
   fileId: string;
   notificationSentAt: string;
@@ -210,6 +299,11 @@ export type AppData = {
   invoiceFiles: InvoiceFile[];
   auditEvents: AuditEvent[];
   notificationTemplate: NotificationTemplate;
+  escalationTemplates: EscalationTemplate[];
+  escalationScheduler: EscalationSchedulerSettings;
+  holidays: Holiday[];
+  organizationEscalationContacts: OrganizationEscalationContacts;
+  escalationRunSummaries: EscalationRunSummary[];
   paymentFile: PaymentFileSettings;
   branding: BrandingSettings;
   statuses: InvoiceStatusDefinition[];

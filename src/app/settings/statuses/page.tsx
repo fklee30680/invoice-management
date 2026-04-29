@@ -95,6 +95,7 @@ export default async function StatusSettingsPage() {
           <Checkbox label="AP work area" name="showInApWorkQueue" />
           <Checkbox label="Department work area" name="showInDepartmentWork" />
           <Checkbox label="Completed list" name="showInCompleted" />
+          <Checkbox label="Escalation processing" name="includeInEscalation" />
         </fieldset>
         <button className="focus-ring self-end bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--accent-strong)]">
           Add Status
@@ -195,6 +196,12 @@ export default async function StatusSettingsPage() {
                         form={formId}
                         label="Completed list"
                         name="showInCompleted"
+                      />
+                      <Checkbox
+                        defaultChecked={status.includeInEscalation}
+                        form={formId}
+                        label="Escalation processing"
+                        name="includeInEscalation"
                       />
                     </div>
                   </td>

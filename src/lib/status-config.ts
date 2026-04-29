@@ -38,6 +38,7 @@ export function defaultStatuses(): InvoiceStatusDefinition[] {
       showInApWorkQueue: false,
       showInDepartmentWork: false,
       showInCompleted: false,
+      includeInEscalation: false,
       systemRole: "uploaded",
     },
     {
@@ -48,6 +49,7 @@ export function defaultStatuses(): InvoiceStatusDefinition[] {
       showInApWorkQueue: true,
       showInDepartmentWork: false,
       showInCompleted: false,
+      includeInEscalation: false,
       systemRole: "apReview",
     },
     {
@@ -58,6 +60,7 @@ export function defaultStatuses(): InvoiceStatusDefinition[] {
       showInApWorkQueue: true,
       showInDepartmentWork: false,
       showInCompleted: false,
+      includeInEscalation: false,
       systemRole: "apRework",
     },
     {
@@ -68,6 +71,7 @@ export function defaultStatuses(): InvoiceStatusDefinition[] {
       showInApWorkQueue: false,
       showInDepartmentWork: true,
       showInCompleted: false,
+      includeInEscalation: true,
       systemRole: "routed",
     },
     {
@@ -78,6 +82,7 @@ export function defaultStatuses(): InvoiceStatusDefinition[] {
       showInApWorkQueue: false,
       showInDepartmentWork: false,
       showInCompleted: true,
+      includeInEscalation: false,
       systemRole: "completed",
     },
     {
@@ -88,6 +93,7 @@ export function defaultStatuses(): InvoiceStatusDefinition[] {
       showInApWorkQueue: false,
       showInDepartmentWork: false,
       showInCompleted: false,
+      includeInEscalation: false,
       systemRole: "rejected",
     },
     {
@@ -98,6 +104,7 @@ export function defaultStatuses(): InvoiceStatusDefinition[] {
       showInApWorkQueue: false,
       showInDepartmentWork: false,
       showInCompleted: false,
+      includeInEscalation: false,
       systemRole: "hold",
     },
   ];
@@ -136,6 +143,12 @@ export function statusesForDepartmentWork(data: AppData) {
 export function statusesForCompleted(data: AppData) {
   return data.statuses
     .filter((status) => status.showInCompleted)
+    .map((status) => status.label);
+}
+
+export function statusesForEscalation(data: AppData) {
+  return data.statuses
+    .filter((status) => status.includeInEscalation)
     .map((status) => status.label);
 }
 
