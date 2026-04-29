@@ -3,12 +3,13 @@ import { statusesForEscalation } from "./status-config";
 import { addAudit, createId, mutateData, readData } from "./store";
 import type {
   AppData,
-  EscalationRecipientConfig,
   EscalationRunSummary,
+  EscalationSchedule,
   EscalationSchedulerSettings,
   EscalationTemplate,
   Holiday,
   Invoice,
+  OrganizationEscalationContact,
 } from "./types";
 import { currencyDisplay, formatDate } from "./utils";
 
@@ -17,12 +18,14 @@ export type EscalationCandidate = {
   vendorName: string;
   invoiceNumber: string;
   invoiceDate: string;
+  departmentId: string;
   departmentName: string;
   routedAt: string;
+  scheduleId: string;
+  scheduleName: string;
+  scheduleDaysToNotify: number;
   templateId: string;
   templateName: string;
-  escalationLevel: string;
-  daysToNotify: number;
   businessDaysWaiting: number;
   to: string[];
   cc: string[];
@@ -76,10 +79,6 @@ function addDays(date: string, days: number) {
   return value.toISOString().slice(0, 10);
 }
 
-function compareDate(left: string, right: string) {
-  return left.localeCompare(right);
-}
-
 function isBusinessDay(
   date: string,
   weekday: number,
@@ -101,11 +100,11 @@ export function calculateBusinessDaysElapsed(
   const timezone = settings.timezone || "America/New_York";
   const start = datePartsInTimezone(new Date(startDate), timezone).date;
   const end = datePartsInTimezone(new Date(endDate), timezone).date;
-  if (!start || !end || compareDate(end, start) < 0) return 0;
+  if (!start || !end || end < start) return 0;
 
   let current = settings.countRoutedDateAsDayOne ? start : addDays(start, 1);
   let count = 0;
-  while (compareDate(current, end) <= 0) {
+  while (current <= end) {
     const weekday = new Date(`${current}T00:00:00.000Z`).getUTCDay();
     if (isBusinessDay(current, weekday, settings, holidays)) count += 1;
     current = addDays(current, 1);
@@ -123,7 +122,7 @@ export function schedulerTimeIsDue(settings: EscalationSchedulerSettings, now: D
 }
 
 export function renderEscalationTemplate(
-  template: Pick<EscalationTemplate, "subject" | "body" | "escalationLevel">,
+  template: Pick<EscalationTemplate, "subject" | "body" | "name">,
   values: Record<string, string>,
 ) {
   const render = (value: string) =>
@@ -134,9 +133,17 @@ export function renderEscalationTemplate(
   };
 }
 
-function templateSentForCycle(invoice: Invoice, templateId: string, routedAt: string) {
+function sentForCycle(
+  invoice: Invoice,
+  routedAt: string,
+  scheduleId: string,
+  templateId: string,
+) {
   return invoice.escalations.some(
-    (event) => event.templateId === templateId && event.routedAt === routedAt,
+    (event) =>
+      event.routedAt === routedAt &&
+      event.scheduleId === scheduleId &&
+      event.templateId === templateId,
   );
 }
 
@@ -149,55 +156,117 @@ function reviewLink(invoiceId: string) {
   return `${baseUrl}/review/${invoiceId}`;
 }
 
-function recipientValue(
-  data: AppData,
-  invoice: Invoice,
-  recipient: EscalationRecipientConfig,
-) {
-  const department = data.departments.find((item) => item.id === invoice.departmentId);
-  const org = data.organizationEscalationContacts;
-  if (recipient.type === "departmentEmail") return department?.email || "";
-  if (recipient.type === "departmentHeadEmail") return department?.departmentHeadEmail || "";
-  if (recipient.type === "departmentEscalationEmail") return department?.escalationEmail || "";
-  if (recipient.type === "apSupervisorEmail") return org.apSupervisorEmail;
-  if (recipient.type === "cfoEmail") return org.cfoEmail;
-  if (recipient.type === "executiveEmail") return org.executiveEmail;
-  return recipient.customEmail || "";
+function validEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
-function recipientLabel(recipient: EscalationRecipientConfig) {
-  if (recipient.type === "customEmail") return recipient.customEmail || "custom email";
-  return recipient.type;
+function addRecipient(
+  emails: string[],
+  warnings: string[],
+  email: string | undefined,
+  label: string,
+) {
+  const normalized = (email || "").trim().toLowerCase();
+  if (!normalized) {
+    warnings.push(`Missing recipient: ${label}.`);
+    return;
+  }
+  if (!validEmail(normalized)) {
+    warnings.push(`Invalid recipient skipped: ${label}.`);
+    return;
+  }
+  emails.push(normalized);
+}
+
+function contactInScope(contact: OrganizationEscalationContact, departmentId: string) {
+  return !contact.departmentScope?.length || contact.departmentScope.includes(departmentId);
+}
+
+function unique(values: string[]) {
+  return Array.from(new Set(values));
 }
 
 function resolveRecipients(
   data: AppData,
   invoice: Invoice,
-  recipients: EscalationRecipientConfig[],
+  schedule: EscalationSchedule,
+  template: EscalationTemplate,
 ) {
+  const department = data.departments.find((item) => item.id === invoice.departmentId);
   const warnings: string[] = [];
-  const emails = recipients
-    .map((recipient) => {
-      const email = recipientValue(data, invoice, recipient).trim().toLowerCase();
-      if (!email) warnings.push(`Missing recipient: ${recipientLabel(recipient)}.`);
-      return email;
-    })
-    .filter(Boolean);
+  const to: string[] = [];
+  const cc = [...template.recipientConfig.customCcEmails];
+  const bcc = [...template.recipientConfig.customBccEmails];
+
+  if (template.recipientConfig.includeDepartmentEmail) {
+    addRecipient(to, warnings, department?.email, "department email");
+  }
+  if (template.recipientConfig.includeDepartmentHeadEmail) {
+    addRecipient(to, warnings, department?.departmentHeadEmail, "department head email");
+  }
+  if (template.recipientConfig.includeDepartmentEscalationEmail) {
+    addRecipient(to, warnings, department?.escalationEmail, "department escalation email");
+  }
+
+  const orgContacts = data.organizationEscalationContacts.filter(
+    (contact) => contact.enabled && contactInScope(contact, invoice.departmentId),
+  );
+
+  if (template.recipientConfig.includeOrganizationContactsForTriggeredSchedule) {
+    for (const contact of orgContacts.filter((contact) =>
+      contact.assignedScheduleIds.includes(schedule.id),
+    )) {
+      addRecipient(to, warnings, contact.email, contact.title || contact.name);
+    }
+  }
+
+  for (const contactId of template.recipientConfig.specificOrganizationContactIds) {
+    const contact = orgContacts.find((item) => item.id === contactId);
+    addRecipient(to, warnings, contact?.email, contact?.title || contactId);
+  }
+
+  for (const email of template.recipientConfig.customToEmails) {
+    addRecipient(to, warnings, email, email);
+  }
+
   return {
-    emails: Array.from(new Set(emails)),
+    to: unique(to),
+    cc: unique(cc.filter(validEmail).map((email) => email.trim().toLowerCase())),
+    bcc: unique(bcc.filter(validEmail).map((email) => email.trim().toLowerCase())),
     warnings,
   };
+}
+
+function organizationContactsForTemplate(
+  data: AppData,
+  invoice: Invoice,
+  schedule: EscalationSchedule,
+  template: EscalationTemplate,
+) {
+  const contacts = data.organizationEscalationContacts.filter(
+    (contact) => contact.enabled && contactInScope(contact, invoice.departmentId),
+  );
+  const scheduled = template.recipientConfig.includeOrganizationContactsForTriggeredSchedule
+    ? contacts.filter((contact) => contact.assignedScheduleIds.includes(schedule.id))
+    : [];
+  const specific = contacts.filter((contact) =>
+    template.recipientConfig.specificOrganizationContactIds.includes(contact.id),
+  );
+  return [...scheduled, ...specific].filter(
+    (contact, index, all) => all.findIndex((item) => item.id === contact.id) === index,
+  );
 }
 
 function placeholderValues(
   data: AppData,
   invoice: Invoice,
+  schedule: EscalationSchedule,
   template: EscalationTemplate,
   businessDaysWaiting: number,
 ) {
   const department = data.departments.find((item) => item.id === invoice.departmentId);
-  const org = data.organizationEscalationContacts;
   const routedAt = invoice.routedAt || invoice.notificationSentAt || "";
+  const contacts = organizationContactsForTemplate(data, invoice, schedule, template);
   return {
     vendor_name: invoice.vendorName || "Unknown Vendor",
     invoice_number: invoice.invoiceNumber || "Not set",
@@ -205,24 +274,22 @@ function placeholderValues(
     amount: currencyDisplay(invoice.amount),
     department_name: department?.name || "Unassigned",
     review_link: reviewLink(invoice.id),
-    escalation_level: template.escalationLevel,
-    days_waiting: String(businessDaysWaiting),
-    business_days_waiting: String(businessDaysWaiting),
     routed_at: formatDate(routedAt),
     notification_sent_at: formatDate(invoice.notificationSentAt),
-    department_head_name: department?.departmentHeadName || "",
-    department_escalation_name: department?.escalationName || "",
-    ap_supervisor_name: org.apSupervisorName,
-    cfo_name: org.cfoName,
-    executive_name: org.executiveName,
+    escalation_schedule_name: schedule.name,
+    escalation_schedule_days: String(schedule.daysToNotify),
+    escalation_template_name: template.name,
+    business_days_waiting: String(businessDaysWaiting),
+    organization_contact_titles: contacts.map((contact) => contact.title).join(", "),
+    organization_contact_names: contacts.map((contact) => contact.name).join(", "),
   };
 }
 
-export function findEscalationCandidates(
-  data: AppData,
-  now = new Date(),
-) {
+export function findEscalationCandidates(data: AppData, now = new Date()) {
   const eligibleStatuses = statusesForEscalation(data);
+  const schedules = [...data.escalationSchedules]
+    .filter((schedule) => schedule.enabled)
+    .sort((left, right) => left.sortOrder - right.sortOrder);
   const templates = [...data.escalationTemplates]
     .filter((template) => template.enabled)
     .sort((left, right) => left.sortOrder - right.sortOrder);
@@ -241,38 +308,40 @@ export function findEscalationCandidates(
       data.holidays,
     );
 
-    for (const template of templates) {
-      if (businessDaysWaiting < template.daysToNotify) continue;
-      if (templateSentForCycle(invoice, template.id, routedAt)) continue;
-
-      const to = resolveRecipients(data, invoice, template.toRecipients);
-      const cc = resolveRecipients(data, invoice, template.ccRecipients);
-      const bcc = resolveRecipients(data, invoice, template.bccRecipients);
-      if (to.emails.length === 0) continue;
-      const rendered = renderEscalationTemplate(
-        template,
-        placeholderValues(data, invoice, template, businessDaysWaiting),
-      );
-
-      candidates.push({
-        invoiceId: invoice.id,
-        vendorName: invoice.vendorName || "Unknown Vendor",
-        invoiceNumber: invoice.invoiceNumber || "Not set",
-        invoiceDate: invoice.invoiceDate,
-        departmentName: departmentName(data, invoice.departmentId),
-        routedAt,
-        templateId: template.id,
-        templateName: template.name,
-        escalationLevel: template.escalationLevel,
-        daysToNotify: template.daysToNotify,
-        businessDaysWaiting,
-        to: to.emails,
-        cc: cc.emails,
-        bcc: bcc.emails,
-        warnings: [...to.warnings, ...cc.warnings, ...bcc.warnings],
-        subject: rendered.subject,
-        body: rendered.body,
-      });
+    for (const schedule of schedules) {
+      if (businessDaysWaiting < schedule.daysToNotify) continue;
+      for (const template of templates.filter((item) =>
+        item.scheduleIds.includes(schedule.id),
+      )) {
+        if (sentForCycle(invoice, routedAt, schedule.id, template.id)) continue;
+        const recipients = resolveRecipients(data, invoice, schedule, template);
+        if (recipients.to.length === 0) continue;
+        const rendered = renderEscalationTemplate(
+          template,
+          placeholderValues(data, invoice, schedule, template, businessDaysWaiting),
+        );
+        candidates.push({
+          invoiceId: invoice.id,
+          vendorName: invoice.vendorName || "Unknown Vendor",
+          invoiceNumber: invoice.invoiceNumber || "Not set",
+          invoiceDate: invoice.invoiceDate,
+          departmentId: invoice.departmentId,
+          departmentName: departmentName(data, invoice.departmentId),
+          routedAt,
+          scheduleId: schedule.id,
+          scheduleName: schedule.name,
+          scheduleDaysToNotify: schedule.daysToNotify,
+          templateId: template.id,
+          templateName: template.name,
+          businessDaysWaiting,
+          to: recipients.to,
+          cc: recipients.cc,
+          bcc: recipients.bcc,
+          warnings: recipients.warnings,
+          subject: rendered.subject,
+          body: rendered.body,
+        });
+      }
     }
   }
 
@@ -337,22 +406,31 @@ export async function runEscalationCheck({
         to: candidate.to,
         cc: candidate.cc,
         bcc: candidate.bcc,
-        escalationLevel: candidate.escalationLevel,
+        escalationLevel: candidate.scheduleName,
         templateId: candidate.templateId,
       });
 
       await mutateData((current) => {
         const invoice = current.invoices.find((item) => item.id === candidate.invoiceId);
         if (!invoice) return;
-        if (templateSentForCycle(invoice, candidate.templateId, candidate.routedAt)) return;
+        if (sentForCycle(invoice, candidate.routedAt, candidate.scheduleId, candidate.templateId)) {
+          return;
+        }
         invoice.escalations.push({
           id: createId("escalation-event"),
-          templateId: candidate.templateId,
-          escalationLevel: candidate.escalationLevel,
-          sentAt: now.toISOString(),
+          invoiceId: invoice.id,
           routedAt: candidate.routedAt,
-          daysToNotify: candidate.daysToNotify,
+          scheduleId: candidate.scheduleId,
+          scheduleName: candidate.scheduleName,
+          templateId: candidate.templateId,
+          templateName: candidate.templateName,
+          sentAt: now.toISOString(),
+          daysToNotify: candidate.scheduleDaysToNotify,
           businessDaysWaiting: candidate.businessDaysWaiting,
+          departmentId: candidate.departmentId,
+          departmentName: candidate.departmentName,
+          vendorName: candidate.vendorName,
+          invoiceNumber: candidate.invoiceNumber,
           recipients: [...candidate.to, ...candidate.cc, ...candidate.bcc],
           statusAtSend: invoice.status,
         });
@@ -363,8 +441,8 @@ export async function runEscalationCheck({
           type: "escalation_sent",
           message:
             `Escalation sent for ${candidate.vendorName} invoice ${candidate.invoiceNumber}; ` +
-            `${candidate.departmentName}; level ${candidate.escalationLevel}; ` +
-            `template ${candidate.templateName}; days ${candidate.daysToNotify}; ` +
+            `${candidate.departmentName}; schedule ${candidate.scheduleName}; ` +
+            `template ${candidate.templateName}; days ${candidate.scheduleDaysToNotify}; ` +
             `business days waiting ${candidate.businessDaysWaiting}; recipients ${[
               ...candidate.to,
               ...candidate.cc,

@@ -10,7 +10,6 @@ import type {
   Invoice,
   InvoiceFile,
   NotificationTemplate,
-  OrganizationEscalationContacts,
   PaymentFileSettings,
   PurchaseOrder,
   User,
@@ -93,20 +92,6 @@ function defaultEscalationScheduler(): EscalationSchedulerSettings {
   };
 }
 
-function defaultOrganizationEscalationContacts(): OrganizationEscalationContacts {
-  return {
-    apSupervisorTitle: "AP Supervisor",
-    apSupervisorName: "",
-    apSupervisorEmail: "",
-    cfoTitle: "CFO",
-    cfoName: "",
-    cfoEmail: "",
-    executiveTitle: "Executive",
-    executiveName: "",
-    executiveEmail: "",
-  };
-}
-
 function normalizeEscalationScheduler(
   settings: Partial<EscalationSchedulerSettings> | undefined,
 ) {
@@ -123,6 +108,123 @@ function normalizeEscalationScheduler(
         ? settings.excludedWeekdays.map(Number).filter((day) => day >= 0 && day <= 6)
         : defaults.excludedWeekdays,
   };
+}
+
+function defaultRecipientConfig() {
+  return {
+    includeDepartmentEmail: true,
+    includeDepartmentHeadEmail: false,
+    includeDepartmentEscalationEmail: false,
+    includeOrganizationContactsForTriggeredSchedule: false,
+    specificOrganizationContactIds: [],
+    customToEmails: [],
+    customCcEmails: [],
+    customBccEmails: [],
+  };
+}
+
+function normalizeEmailList(value: unknown) {
+  if (Array.isArray(value)) return value.map(String).filter(Boolean);
+  if (typeof value === "string") {
+    return value
+      .split(/[,\n;]/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function normalizeEscalationSchedules(data: AppData) {
+  const schedules = Array.isArray(data.escalationSchedules)
+    ? data.escalationSchedules
+    : [];
+  const normalized = schedules.map((schedule) => ({
+    id: schedule.id || createId("schedule"),
+    name: schedule.name || "Escalation Schedule",
+    description: schedule.description || "",
+    enabled: schedule.enabled !== false,
+    daysToNotify: Math.max(Number(schedule.daysToNotify) || 0, 0),
+    businessDayRuleId: schedule.businessDayRuleId || "",
+    sortOrder: Number(schedule.sortOrder) || 0,
+    createdAt: schedule.createdAt || new Date().toISOString(),
+    updatedAt: schedule.updatedAt || new Date().toISOString(),
+  }));
+
+  for (const template of data.escalationTemplates || []) {
+    const legacy = template as unknown as { daysToNotify?: number; scheduleIds?: string[] };
+    if (Array.isArray(legacy.scheduleIds) && legacy.scheduleIds.length > 0) continue;
+    if (legacy.daysToNotify === undefined) continue;
+    const daysToNotify = Math.max(Number(legacy.daysToNotify) || 0, 0);
+    if (normalized.some((schedule) => schedule.daysToNotify === daysToNotify)) continue;
+    normalized.push({
+      id: `schedule-${daysToNotify}-business-days`,
+      name: `${daysToNotify} Business Day Escalation`,
+      description: "Migrated from template Days to Notify.",
+      enabled: true,
+      daysToNotify,
+      businessDayRuleId: "",
+      sortOrder: normalized.length + 1,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  return normalized.sort((left, right) => left.sortOrder - right.sortOrder);
+}
+
+function normalizeOrganizationEscalationContacts(
+  contacts: AppData["organizationEscalationContacts"] | Record<string, unknown> | undefined,
+) {
+  if (Array.isArray(contacts)) {
+    return contacts.map((contact) => ({
+      id: contact.id || createId("org-contact"),
+      title: contact.title || "",
+      name: contact.name || "",
+      email: contact.email || "",
+      enabled: contact.enabled !== false,
+      assignedScheduleIds: contact.assignedScheduleIds || [],
+      departmentScope: contact.departmentScope || [],
+      notes: contact.notes || "",
+      createdAt: contact.createdAt || new Date().toISOString(),
+      updatedAt: contact.updatedAt || new Date().toISOString(),
+    }));
+  }
+
+  if (contacts && typeof contacts === "object") {
+    const legacy = contacts as Record<string, string | undefined>;
+    return [
+      {
+        title: legacy.apSupervisorTitle || "AP Supervisor",
+        name: legacy.apSupervisorName || "",
+        email: legacy.apSupervisorEmail || "",
+      },
+      {
+        title: legacy.cfoTitle || "CFO",
+        name: legacy.cfoName || "",
+        email: legacy.cfoEmail || "",
+      },
+      {
+        title: legacy.executiveTitle || "Executive",
+        name: legacy.executiveName || "",
+        email: legacy.executiveEmail || "",
+      },
+    ]
+      .filter((contact) => contact.name || contact.email)
+      .map((contact) => ({
+        id: createId("org-contact"),
+        title: contact.title,
+        name: contact.name,
+        email: contact.email,
+        enabled: true,
+        assignedScheduleIds: [],
+        departmentScope: [],
+        notes: "Migrated from prior organization escalation settings.",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }));
+  }
+
+  return [];
 }
 
 function normalizeDepartmentDecisions(
@@ -198,6 +300,10 @@ function normalizeData(data: AppData): AppData {
     return normalizedInvoice;
   });
   const statuses = mergeStatuses(defaultStatusList, data.statuses || [], invoices);
+  const escalationSchedules = normalizeEscalationSchedules(data);
+  const scheduleByDays = new Map(
+    escalationSchedules.map((schedule) => [schedule.daysToNotify, schedule.id]),
+  );
 
   return {
     ...data,
@@ -231,18 +337,60 @@ function normalizeData(data: AppData): AppData {
     },
     statuses,
     departmentDecisions: normalizeDepartmentDecisions(data.departmentDecisions),
+    escalationSchedules,
     escalationTemplates: (data.escalationTemplates || [])
-      .map((template) => ({
-        ...template,
-        daysToNotify: Number(template.daysToNotify) || 1,
-        enabled: template.enabled === true,
-        sortOrder: Number(template.sortOrder) || 0,
-        toRecipients: template.toRecipients || [],
-        ccRecipients: template.ccRecipients || [],
-        bccRecipients: template.bccRecipients || [],
-        createdAt: template.createdAt || new Date().toISOString(),
-        updatedAt: template.updatedAt || new Date().toISOString(),
-      }))
+      .map((template) => {
+        const legacy = template as unknown as {
+          daysToNotify?: number;
+          toRecipients?: { type: string; customEmail?: string }[];
+          ccRecipients?: { type: string; customEmail?: string }[];
+          bccRecipients?: { type: string; customEmail?: string }[];
+        };
+        const scheduleIds =
+          template.scheduleIds && template.scheduleIds.length > 0
+            ? template.scheduleIds
+            : legacy.daysToNotify !== undefined
+              ? [scheduleByDays.get(Math.max(Number(legacy.daysToNotify) || 0, 0)) || ""].filter(Boolean)
+              : [];
+        const legacyTo = legacy.toRecipients || [];
+        const legacyCc = legacy.ccRecipients || [];
+        const legacyBcc = legacy.bccRecipients || [];
+        const recipientConfig = template.recipientConfig || {
+          ...defaultRecipientConfig(),
+          includeDepartmentEmail: legacyTo.some((item) => item.type === "departmentEmail"),
+          includeDepartmentHeadEmail: legacyTo.some((item) => item.type === "departmentHeadEmail"),
+          includeDepartmentEscalationEmail: legacyTo.some((item) => item.type === "departmentEscalationEmail"),
+          customToEmails: legacyTo
+            .filter((item) => item.type === "customEmail" && item.customEmail)
+            .map((item) => item.customEmail || ""),
+          customCcEmails: legacyCc
+            .filter((item) => item.type === "customEmail" && item.customEmail)
+            .map((item) => item.customEmail || ""),
+          customBccEmails: legacyBcc
+            .filter((item) => item.type === "customEmail" && item.customEmail)
+            .map((item) => item.customEmail || ""),
+        };
+        return {
+          id: template.id || createId("escalation-template"),
+          name: template.name || "Escalation Template",
+          enabled: template.enabled === true,
+          scheduleIds,
+          recipientConfig: {
+            ...defaultRecipientConfig(),
+            ...recipientConfig,
+            specificOrganizationContactIds:
+              recipientConfig.specificOrganizationContactIds || [],
+            customToEmails: normalizeEmailList(recipientConfig.customToEmails),
+            customCcEmails: normalizeEmailList(recipientConfig.customCcEmails),
+            customBccEmails: normalizeEmailList(recipientConfig.customBccEmails),
+          },
+          sortOrder: Number(template.sortOrder) || 0,
+          subject: template.subject || "",
+          body: template.body || "",
+          createdAt: template.createdAt || new Date().toISOString(),
+          updatedAt: template.updatedAt || new Date().toISOString(),
+        };
+      })
       .sort((left, right) => left.sortOrder - right.sortOrder),
     escalationScheduler: normalizeEscalationScheduler(data.escalationScheduler),
     holidays: (data.holidays || []).map((holiday) => ({
@@ -250,10 +398,9 @@ function normalizeData(data: AppData): AppData {
       enabled: holiday.enabled !== false,
       notes: holiday.notes || "",
     })),
-    organizationEscalationContacts: {
-      ...defaultOrganizationEscalationContacts(),
-      ...(data.organizationEscalationContacts || {}),
-    },
+    organizationEscalationContacts: normalizeOrganizationEscalationContacts(
+      data.organizationEscalationContacts,
+    ),
     escalationRunSummaries: data.escalationRunSummaries || [],
     escalationContacts: normalizeEscalationContacts(data.escalationContacts),
   };
@@ -464,10 +611,11 @@ function seedData(): AppData {
       },
     ],
     notificationTemplate: defaultNotificationTemplate(),
+    escalationSchedules: [],
     escalationTemplates: [],
     escalationScheduler: defaultEscalationScheduler(),
     holidays: [],
-    organizationEscalationContacts: defaultOrganizationEscalationContacts(),
+    organizationEscalationContacts: [],
     escalationRunSummaries: [],
     paymentFile: defaultPaymentFile(),
     branding: defaultBranding(),

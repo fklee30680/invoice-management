@@ -7,6 +7,10 @@ import { TopMenuDropdown } from "./top-menu-dropdown";
 
 const setupLinks = [
   { href: "/settings/email", label: "Email Templates" },
+  { href: "/settings/escalation-schedules", label: "Escalation Schedules" },
+  { href: "/settings/organization-escalation-contacts", label: "Organization Escalation Contacts" },
+  { href: "/settings/holidays-business-days", label: "Holidays And Business Days" },
+  { href: "/settings/scheduler", label: "Scheduler Runtime" },
   { href: "/settings/departments", label: "Department Emails" },
   { href: "/settings/statuses", label: "Statuses" },
   { href: "/settings/decisions", label: "Decision Types" },

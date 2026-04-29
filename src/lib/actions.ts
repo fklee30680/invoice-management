@@ -45,8 +45,6 @@ import {
 import type {
   BrandingLogo,
   DecisionWorkflowAction,
-  EscalationRecipientConfig,
-  EscalationRecipientType,
   Invoice,
   StatusTone,
 } from "./types";
@@ -105,16 +103,31 @@ function fillTemplate(template: string, values: Record<string, string>) {
   });
 }
 
-function recipientConfigs(formData: FormData, key: string): EscalationRecipientConfig[] {
-  const recipientTypes = formData
-    .getAll(key)
-    .map((item) => String(item))
-    .filter(Boolean) as EscalationRecipientType[];
-  const configs = recipientTypes.map((type) => ({
-    type,
-    customEmail: type === "customEmail" ? value(formData, `${key}Custom`) : undefined,
-  }));
-  return configs.filter((config) => config.type !== "customEmail" || config.customEmail);
+function idList(formData: FormData, key: string) {
+  return formData.getAll(key).map(String).filter(Boolean);
+}
+
+function emailList(formData: FormData, key: string) {
+  return value(formData, key)
+    .split(/[,\n;]/)
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function escalationRecipientConfig(formData: FormData) {
+  return {
+    includeDepartmentEmail: checkbox(formData, "includeDepartmentEmail"),
+    includeDepartmentHeadEmail: checkbox(formData, "includeDepartmentHeadEmail"),
+    includeDepartmentEscalationEmail: checkbox(formData, "includeDepartmentEscalationEmail"),
+    includeOrganizationContactsForTriggeredSchedule: checkbox(
+      formData,
+      "includeOrganizationContactsForTriggeredSchedule",
+    ),
+    specificOrganizationContactIds: idList(formData, "specificOrganizationContactIds"),
+    customToEmails: emailList(formData, "customToEmails"),
+    customCcEmails: emailList(formData, "customCcEmails"),
+    customBccEmails: emailList(formData, "customBccEmails"),
+  };
 }
 
 function setInvoiceStatus(invoice: Invoice, status: string, now = new Date()) {
@@ -662,24 +675,20 @@ export async function updateNotificationTemplate(formData: FormData) {
 export async function addEscalationTemplate(formData: FormData) {
   await requireApUser();
   const name = value(formData, "name");
-  const escalationLevel = value(formData, "escalationLevel");
   const subject = value(formData, "subject");
   const body = value(formData, "body");
-  if (!name || !escalationLevel || !subject || !body) return;
+  if (!name || !subject || !body) return;
 
   await mutateData((data) => {
     data.escalationTemplates.push({
       id: createId("escalation-template"),
       name,
-      escalationLevel,
-      daysToNotify: Math.max(numberValue(formData, "daysToNotify", 1), 1),
       enabled: checkbox(formData, "enabled"),
+      scheduleIds: idList(formData, "scheduleIds"),
+      recipientConfig: escalationRecipientConfig(formData),
       sortOrder: numberValue(formData, "sortOrder", data.escalationTemplates.length + 1),
       subject,
       body,
-      toRecipients: recipientConfigs(formData, "toRecipients"),
-      ccRecipients: recipientConfigs(formData, "ccRecipients"),
-      bccRecipients: recipientConfigs(formData, "bccRecipients"),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
@@ -690,6 +699,9 @@ export async function addEscalationTemplate(formData: FormData) {
     });
   });
 
+  revalidatePath("/settings/holidays-business-days");
+  revalidatePath("/settings/scheduler");
+  revalidatePath("/settings/holidays-business-days");
   revalidatePath("/settings/email");
 }
 
@@ -697,24 +709,20 @@ export async function updateEscalationTemplate(formData: FormData) {
   await requireApUser();
   const templateId = value(formData, "templateId");
   const name = value(formData, "name");
-  const escalationLevel = value(formData, "escalationLevel");
   const subject = value(formData, "subject");
   const body = value(formData, "body");
-  if (!templateId || !name || !escalationLevel || !subject || !body) return;
+  if (!templateId || !name || !subject || !body) return;
 
   await mutateData((data) => {
     const template = data.escalationTemplates.find((item) => item.id === templateId);
     if (!template) return;
     template.name = name;
-    template.escalationLevel = escalationLevel;
-    template.daysToNotify = Math.max(numberValue(formData, "daysToNotify", 1), 1);
     template.enabled = checkbox(formData, "enabled");
+    template.scheduleIds = idList(formData, "scheduleIds");
+    template.recipientConfig = escalationRecipientConfig(formData);
     template.sortOrder = numberValue(formData, "sortOrder", template.sortOrder);
     template.subject = subject;
     template.body = body;
-    template.toRecipients = recipientConfigs(formData, "toRecipients");
-    template.ccRecipients = recipientConfigs(formData, "ccRecipients");
-    template.bccRecipients = recipientConfigs(formData, "bccRecipients");
     template.updatedAt = new Date().toISOString();
     addAudit(data, {
       actor: "AP",
@@ -723,6 +731,8 @@ export async function updateEscalationTemplate(formData: FormData) {
     });
   });
 
+  revalidatePath("/settings/holidays-business-days");
+  revalidatePath("/settings/holidays-business-days");
   revalidatePath("/settings/email");
 }
 
@@ -743,6 +753,214 @@ export async function deleteEscalationTemplate(formData: FormData) {
     });
   });
 
+  revalidatePath("/settings/holidays-business-days");
+  revalidatePath("/settings/holidays-business-days");
+  revalidatePath("/settings/email");
+}
+
+export async function addEscalationSchedule(formData: FormData) {
+  await requireApUser();
+  const name = value(formData, "name");
+  if (!name) return;
+
+  await mutateData((data) => {
+    data.escalationSchedules.push({
+      id: createId("schedule"),
+      name,
+      description: value(formData, "description"),
+      enabled: checkbox(formData, "enabled"),
+      daysToNotify: Math.max(numberValue(formData, "daysToNotify", 0), 0),
+      businessDayRuleId: value(formData, "businessDayRuleId"),
+      sortOrder: numberValue(formData, "sortOrder", data.escalationSchedules.length + 1),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    addAudit(data, {
+      actor: "AP",
+      type: "escalation_schedule_added",
+      message: `Added escalation schedule ${name}.`,
+    });
+  });
+
+  revalidatePath("/settings/escalation-schedules");
+  revalidatePath("/settings/holidays-business-days");
+  revalidatePath("/settings/email");
+}
+
+export async function updateEscalationSchedule(formData: FormData) {
+  await requireApUser();
+  const scheduleId = value(formData, "scheduleId");
+  const name = value(formData, "name");
+  if (!scheduleId || !name) return;
+
+  await mutateData((data) => {
+    const schedule = data.escalationSchedules.find((item) => item.id === scheduleId);
+    if (!schedule) return;
+    schedule.name = name;
+    schedule.description = value(formData, "description");
+    schedule.enabled = checkbox(formData, "enabled");
+    schedule.daysToNotify = Math.max(numberValue(formData, "daysToNotify", 0), 0);
+    schedule.businessDayRuleId = value(formData, "businessDayRuleId");
+    schedule.sortOrder = numberValue(formData, "sortOrder", schedule.sortOrder);
+    schedule.updatedAt = new Date().toISOString();
+    addAudit(data, {
+      actor: "AP",
+      type: "escalation_schedule_updated",
+      message: `Updated escalation schedule ${name}.`,
+    });
+  });
+
+  revalidatePath("/settings/escalation-schedules");
+  revalidatePath("/settings/email");
+}
+
+export async function deleteEscalationSchedule(formData: FormData) {
+  await requireApUser();
+  const scheduleId = value(formData, "scheduleId");
+  if (!scheduleId) return;
+
+  await mutateData((data) => {
+    const schedule = data.escalationSchedules.find((item) => item.id === scheduleId);
+    const hasHistory = data.invoices.some((invoice) =>
+      invoice.escalations.some((event) => event.scheduleId === scheduleId),
+    );
+    if (hasHistory && schedule) {
+      schedule.enabled = false;
+      schedule.updatedAt = new Date().toISOString();
+      addAudit(data, {
+        actor: "AP",
+        type: "escalation_schedule_disabled",
+        message: `Disabled escalation schedule ${schedule.name}; historical events exist.`,
+      });
+      return;
+    }
+    data.escalationSchedules = data.escalationSchedules.filter(
+      (item) => item.id !== scheduleId,
+    );
+    for (const template of data.escalationTemplates) {
+      template.scheduleIds = template.scheduleIds.filter((id) => id !== scheduleId);
+    }
+    for (const contact of data.organizationEscalationContacts) {
+      contact.assignedScheduleIds = contact.assignedScheduleIds.filter(
+        (id) => id !== scheduleId,
+      );
+    }
+    addAudit(data, {
+      actor: "AP",
+      type: "escalation_schedule_deleted",
+      message: `Deleted escalation schedule ${schedule?.name || scheduleId}.`,
+    });
+  });
+
+  revalidatePath("/settings/escalation-schedules");
+  revalidatePath("/settings/organization-escalation-contacts");
+  revalidatePath("/settings/email");
+}
+
+export async function addOrganizationEscalationContact(formData: FormData) {
+  await requireApUser();
+  const title = value(formData, "title");
+  const name = value(formData, "name");
+  const email = value(formData, "email").toLowerCase();
+  if (!title || !name || !email) return;
+
+  await mutateData((data) => {
+    data.organizationEscalationContacts.push({
+      id: createId("org-contact"),
+      title,
+      name,
+      email,
+      enabled: checkbox(formData, "enabled"),
+      assignedScheduleIds: idList(formData, "assignedScheduleIds"),
+      departmentScope: idList(formData, "departmentScope"),
+      notes: value(formData, "notes"),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    addAudit(data, {
+      actor: "AP",
+      type: "organization_escalation_contact_added",
+      message: `Added organization escalation contact ${title}.`,
+    });
+  });
+
+  revalidatePath("/settings/organization-escalation-contacts");
+  revalidatePath("/settings/email");
+}
+
+export async function updateOrganizationEscalationContact(formData: FormData) {
+  await requireApUser();
+  const contactId = value(formData, "contactId");
+  const title = value(formData, "title");
+  const name = value(formData, "name");
+  const email = value(formData, "email").toLowerCase();
+  if (!contactId || !title || !name || !email) return;
+
+  await mutateData((data) => {
+    const contact = data.organizationEscalationContacts.find(
+      (item) => item.id === contactId,
+    );
+    if (!contact) return;
+    contact.title = title;
+    contact.name = name;
+    contact.email = email;
+    contact.enabled = checkbox(formData, "enabled");
+    contact.assignedScheduleIds = idList(formData, "assignedScheduleIds");
+    contact.departmentScope = idList(formData, "departmentScope");
+    contact.notes = value(formData, "notes");
+    contact.updatedAt = new Date().toISOString();
+    addAudit(data, {
+      actor: "AP",
+      type: "organization_escalation_contact_updated",
+      message: `Updated organization escalation contact ${title}.`,
+    });
+  });
+
+  revalidatePath("/settings/organization-escalation-contacts");
+  revalidatePath("/settings/email");
+}
+
+export async function deleteOrganizationEscalationContact(formData: FormData) {
+  await requireApUser();
+  const contactId = value(formData, "contactId");
+  if (!contactId) return;
+
+  await mutateData((data) => {
+    const contact = data.organizationEscalationContacts.find(
+      (item) => item.id === contactId,
+    );
+    const hasHistory = data.invoices.some((invoice) =>
+      invoice.escalations.some((event) =>
+        event.recipients.includes(contact?.email || ""),
+      ),
+    );
+    if (hasHistory && contact) {
+      contact.enabled = false;
+      contact.updatedAt = new Date().toISOString();
+      addAudit(data, {
+        actor: "AP",
+        type: "organization_escalation_contact_disabled",
+        message: `Disabled organization escalation contact ${contact.title}; historical events exist.`,
+      });
+      return;
+    }
+    data.organizationEscalationContacts = data.organizationEscalationContacts.filter(
+      (item) => item.id !== contactId,
+    );
+    for (const template of data.escalationTemplates) {
+      template.recipientConfig.specificOrganizationContactIds =
+        template.recipientConfig.specificOrganizationContactIds.filter(
+          (id) => id !== contactId,
+        );
+    }
+    addAudit(data, {
+      actor: "AP",
+      type: "organization_escalation_contact_deleted",
+      message: `Deleted organization escalation contact ${contact?.title || contactId}.`,
+    });
+  });
+
+  revalidatePath("/settings/organization-escalation-contacts");
   revalidatePath("/settings/email");
 }
 
@@ -758,21 +976,10 @@ export async function updateEscalationSchedulerSettings(formData: FormData) {
       excludeHolidays: checkbox(formData, "excludeHolidays"),
       countRoutedDateAsDayOne: checkbox(formData, "countRoutedDateAsDayOne"),
     };
-    data.organizationEscalationContacts = {
-      apSupervisorTitle: value(formData, "apSupervisorTitle") || "AP Supervisor",
-      apSupervisorName: value(formData, "apSupervisorName"),
-      apSupervisorEmail: value(formData, "apSupervisorEmail").toLowerCase(),
-      cfoTitle: value(formData, "cfoTitle") || "CFO",
-      cfoName: value(formData, "cfoName"),
-      cfoEmail: value(formData, "cfoEmail").toLowerCase(),
-      executiveTitle: value(formData, "executiveTitle") || "Executive",
-      executiveName: value(formData, "executiveName"),
-      executiveEmail: value(formData, "executiveEmail").toLowerCase(),
-    };
     addAudit(data, {
       actor: "AP",
       type: "escalation_scheduler_updated",
-      message: "Updated escalation scheduler and organization escalation contacts.",
+      message: "Updated escalation scheduler runtime settings.",
     });
   });
 
@@ -847,6 +1054,7 @@ export async function runEscalationsNow() {
   await requireApUser();
   await runEscalationCheck({ dryRun: false, ignoreSchedule: true });
   revalidatePath("/settings/email");
+  revalidatePath("/settings/scheduler");
 }
 
 export async function sendTestEscalationEmail(formData: FormData) {
@@ -865,16 +1073,18 @@ export async function sendTestEscalationEmail(formData: FormData) {
     amount: "$1,250.00",
     department_name: "Sample Department",
     review_link: `${baseUrl()}/review/sample`,
-    escalation_level: template.escalationLevel,
-    days_waiting: String(template.daysToNotify),
-    business_days_waiting: String(template.daysToNotify),
+    escalation_schedule_name: "Sample Schedule",
+    escalation_schedule_days: "3",
+    escalation_template_name: template.name,
+    business_days_waiting: "3",
     routed_at: new Date().toISOString().slice(0, 10),
     notification_sent_at: new Date().toISOString().slice(0, 10),
-    department_head_name: "Department Head",
-    department_escalation_name: "Department Escalation",
-    ap_supervisor_name: data.organizationEscalationContacts.apSupervisorName,
-    cfo_name: data.organizationEscalationContacts.cfoName,
-    executive_name: data.organizationEscalationContacts.executiveName,
+    organization_contact_titles: data.organizationEscalationContacts
+      .map((contact) => contact.title)
+      .join(", "),
+    organization_contact_names: data.organizationEscalationContacts
+      .map((contact) => contact.name)
+      .join(", "),
   });
 
   await sendEscalationNotification({
@@ -883,7 +1093,7 @@ export async function sendTestEscalationEmail(formData: FormData) {
     body: rendered.body,
     link: `${baseUrl()}/review/sample`,
     to: [testEmail],
-    escalationLevel: template.escalationLevel,
+    escalationLevel: template.name,
     templateId: template.id,
   });
 
