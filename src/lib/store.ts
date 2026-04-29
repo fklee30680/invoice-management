@@ -14,6 +14,7 @@ import type {
   User,
   Vendor,
 } from "./types";
+import { defaultDepartmentDecisions } from "./constants";
 import {
   clearDatabaseIssue,
   getDatabaseConfig,
@@ -78,6 +79,50 @@ function defaultPaymentFile(): PaymentFileSettings {
   return defaultPaymentFileSettings();
 }
 
+function normalizeDepartmentDecisions(
+  decisions:
+    | AppData["departmentDecisions"]
+    | string[]
+    | undefined,
+): AppData["departmentDecisions"] {
+  const defaults = defaultDepartmentDecisions();
+  if (!Array.isArray(decisions)) return defaults;
+
+  const normalized = decisions
+    .map((decision) => {
+      if (typeof decision === "string") {
+        const defaultDecision = defaults.find((item) => item.label === decision);
+        return {
+          id: defaultDecision?.id || createId("decision"),
+          label: decision,
+          workflowAction: defaultDecision?.workflowAction || "complete",
+          requireComment: defaultDecision?.requireComment || false,
+          active: true,
+        };
+      }
+
+      const defaultDecision = defaults.find(
+        (item) => item.id === decision.id || item.label === decision.label,
+      );
+      return {
+        id: decision.id || defaultDecision?.id || createId("decision"),
+        label: decision.label || defaultDecision?.label || "",
+        workflowAction: decision.workflowAction || defaultDecision?.workflowAction || "complete",
+        requireComment: decision.requireComment === true,
+        active: decision.active !== false,
+      };
+    })
+    .filter((decision) => decision.label);
+
+  for (const defaultDecision of defaults) {
+    if (!normalized.some((decision) => decision.label === defaultDecision.label)) {
+      normalized.push(defaultDecision);
+    }
+  }
+
+  return normalized;
+}
+
 function normalizeData(data: AppData): AppData {
   const defaultBrand = defaultBranding();
   const defaultStatusList = defaultStatuses();
@@ -128,6 +173,7 @@ function normalizeData(data: AppData): AppData {
       logo: data.branding?.logo || null,
     },
     statuses,
+    departmentDecisions: normalizeDepartmentDecisions(data.departmentDecisions),
     escalationContacts: normalizeEscalationContacts(data.escalationContacts),
   };
 }
@@ -333,6 +379,7 @@ function seedData(): AppData {
     paymentFile: defaultPaymentFile(),
     branding: defaultBranding(),
     statuses: defaultStatuses(),
+    departmentDecisions: defaultDepartmentDecisions(),
     escalationContacts: defaultEscalationContacts(),
   };
 }

@@ -5,7 +5,6 @@ import {
   submitDepartmentDecision,
   updateInvoicePaymentProcessed,
 } from "@/lib/actions";
-import { DEPARTMENT_DECISIONS } from "@/lib/constants";
 import { canAccessInvoice, requireUser } from "@/lib/session";
 import { statusBadgeClass } from "@/lib/status-config";
 import { readData } from "@/lib/store";
@@ -34,6 +33,10 @@ export default async function ReviewPage({
 
   const department = data.departments.find((item) => item.id === invoice.departmentId);
   const error = Array.isArray(query.error) ? query.error[0] : query.error;
+  const activeDecisions = data.departmentDecisions.filter((decision) => decision.active);
+  const currentDecisionIsInactive =
+    invoice.departmentDecision &&
+    !activeDecisions.some((decision) => decision.label === invoice.departmentDecision);
 
   return (
     <main className="min-h-screen px-4 py-6 sm:px-6 lg:px-8">
@@ -166,9 +169,14 @@ export default async function ReviewPage({
                   required
                 >
                   <option value="">Select decision</option>
-                  {DEPARTMENT_DECISIONS.map((decision) => (
-                    <option key={decision} value={decision}>
-                      {decision}
+                  {currentDecisionIsInactive ? (
+                    <option value={invoice.departmentDecision}>
+                      {invoice.departmentDecision}
+                    </option>
+                  ) : null}
+                  {activeDecisions.map((decision) => (
+                    <option key={decision.id} value={decision.label}>
+                      {decision.label}
                     </option>
                   ))}
                 </select>

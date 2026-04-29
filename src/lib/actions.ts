@@ -3,7 +3,6 @@
 import path from "node:path";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { DEPARTMENT_DECISIONS } from "./constants";
 import { sendDepartmentNotification } from "./email";
 import {
   deleteStoredBrandingLogo,
@@ -27,6 +26,7 @@ import {
   getInvoice,
   getInvoiceFile,
   mutateData,
+  readData,
   upsertDepartment,
   upsertPurchaseOrder,
   upsertVendor,
@@ -39,7 +39,7 @@ import {
 } from "./status-config";
 import type {
   BrandingLogo,
-  DepartmentDecision,
+  DecisionWorkflowAction,
   Invoice,
   StatusTone,
 } from "./types";
@@ -74,6 +74,13 @@ function checkbox(formData: FormData, key: string) {
 function toneValue(formData: FormData) {
   const selected = value(formData, "tone") as StatusTone;
   return STATUS_TONES.includes(selected) ? selected : "slate";
+}
+
+function decisionWorkflowActionValue(formData: FormData) {
+  const selected = value(formData, "workflowAction") as DecisionWorkflowAction;
+  return ["complete", "reject", "hold", "apRework"].includes(selected)
+    ? selected
+    : "complete";
 }
 
 function baseUrl() {
@@ -754,6 +761,132 @@ export async function deleteInvoiceStatus(formData: FormData) {
   revalidatePath("/settings/statuses");
 }
 
+export async function addDepartmentDecision(formData: FormData) {
+  await requireApUser();
+  const label = value(formData, "label");
+  if (!label) return;
+
+  await mutateData((data) => {
+    const exists = data.departmentDecisions.some(
+      (decision) => decision.label.toLowerCase() === label.toLowerCase(),
+    );
+    if (exists) return;
+
+    data.departmentDecisions.push({
+      id: createId("decision"),
+      label,
+      workflowAction: decisionWorkflowActionValue(formData),
+      requireComment: checkbox(formData, "requireComment"),
+      active: checkbox(formData, "active"),
+    });
+    addAudit(data, {
+      actor: "AP",
+      type: "decision_added",
+      message: `Added department decision ${label}.`,
+    });
+  });
+
+  revalidatePath("/review", "layout");
+  revalidatePath("/settings/decisions");
+}
+
+export async function updateDepartmentDecision(formData: FormData) {
+  await requireApUser();
+  const decisionId = value(formData, "decisionId");
+  const label = value(formData, "label");
+  if (!decisionId || !label) return;
+
+  await mutateData((data) => {
+    const decision = data.departmentDecisions.find((item) => item.id === decisionId);
+    if (!decision) return;
+    const duplicate = data.departmentDecisions.some(
+      (item) =>
+        item.id !== decisionId && item.label.toLowerCase() === label.toLowerCase(),
+    );
+    if (duplicate) return;
+
+    const oldLabel = decision.label;
+    decision.label = label;
+    decision.workflowAction = decisionWorkflowActionValue(formData);
+    decision.requireComment = checkbox(formData, "requireComment");
+    decision.active = checkbox(formData, "active");
+
+    if (oldLabel !== label) {
+      for (const invoice of data.invoices) {
+        if (invoice.departmentDecision === oldLabel) {
+          invoice.departmentDecision = label;
+          invoice.updatedAt = new Date().toISOString();
+        }
+      }
+    }
+
+    addAudit(data, {
+      actor: "AP",
+      type: "decision_updated",
+      message: `Updated department decision ${oldLabel} to ${label}.`,
+    });
+  });
+
+  revalidatePath("/");
+  revalidatePath("/department");
+  revalidatePath("/invoices", "layout");
+  revalidatePath("/review", "layout");
+  revalidatePath("/settings/decisions");
+}
+
+export async function deleteDepartmentDecision(formData: FormData) {
+  await requireApUser();
+  const decisionId = value(formData, "decisionId");
+  const replacementDecisionId = value(formData, "replacementDecisionId");
+  if (!decisionId) return;
+
+  await mutateData((data) => {
+    const decision = data.departmentDecisions.find((item) => item.id === decisionId);
+    if (!decision) return;
+    const replacement = data.departmentDecisions.find(
+      (item) => item.id === replacementDecisionId && item.id !== decisionId,
+    );
+    const inUseCount = data.invoices.filter(
+      (invoice) => invoice.departmentDecision === decision.label,
+    ).length;
+
+    if (inUseCount > 0 && !replacement) {
+      addAudit(data, {
+        actor: "AP",
+        type: "decision_delete_blocked",
+        message: `Could not delete ${decision.label}; choose a replacement decision first.`,
+      });
+      return;
+    }
+
+    if (replacement) {
+      for (const invoice of data.invoices) {
+        if (invoice.departmentDecision === decision.label) {
+          invoice.departmentDecision = replacement.label;
+          invoice.updatedAt = new Date().toISOString();
+        }
+      }
+    }
+
+    data.departmentDecisions = data.departmentDecisions.filter(
+      (item) => item.id !== decisionId,
+    );
+    addAudit(data, {
+      actor: "AP",
+      type: "decision_deleted",
+      message: replacement
+        ? `Deleted department decision ${decision.label}; moved ${inUseCount} invoices to ${replacement.label}.`
+        : `Deleted department decision ${decision.label}.`,
+    });
+  });
+
+  revalidatePath("/");
+  revalidatePath("/department");
+  revalidatePath("/invoices", "layout");
+  revalidatePath("/review", "layout");
+  revalidatePath("/settings/decisions");
+}
+
 export async function updateBrandingSettings(formData: FormData) {
   await mutateData((data) => {
     data.branding.appTitle = value(formData, "appTitle") || "Invoice Management";
@@ -981,14 +1114,18 @@ export async function deleteInvoice(formData: FormData) {
 
 export async function submitDepartmentDecision(formData: FormData) {
   const invoiceId = value(formData, "invoiceId");
-  const decision = value(formData, "decision") as DepartmentDecision;
+  const decision = value(formData, "decision");
   const comment = value(formData, "comment");
+  const currentData = await readData();
+  const decisionDefinition = currentData.departmentDecisions.find(
+    (item) => item.active && item.label === decision,
+  );
 
-  if (!DEPARTMENT_DECISIONS.includes(decision)) {
+  if (!decisionDefinition) {
     return;
   }
 
-  if (decision === "Not our Department Invoice" && !comment) {
+  if (decisionDefinition.requireComment && !comment) {
     redirect(`/review/${invoiceId}?error=comment-required`);
   }
 
@@ -1015,21 +1152,21 @@ export async function submitDepartmentDecision(formData: FormData) {
       });
     }
 
-    if (decision === "Not our Department Invoice") {
+    if (decisionDefinition.workflowAction === "apRework") {
       setInvoiceStatus(invoice, statusLabelForRole(data, "apRework"), new Date(now));
       invoice.dateApproved = "";
       addAudit(data, {
         invoiceId,
         actor: "Department Reviewer",
         type: "rework_returned",
-        message: "Department returned the invoice to AP rework as not their department.",
+        message: `Department returned the invoice to AP rework: ${decision}.`,
       });
       return;
     }
 
-    if (decision === "Reject") {
+    if (decisionDefinition.workflowAction === "reject") {
       setInvoiceStatus(invoice, statusLabelForRole(data, "rejected"), new Date(now));
-    } else if (decision === "Hold") {
+    } else if (decisionDefinition.workflowAction === "hold") {
       setInvoiceStatus(invoice, statusLabelForRole(data, "hold"), new Date(now));
     } else {
       setInvoiceStatus(invoice, statusLabelForRole(data, "completed"), new Date(now));

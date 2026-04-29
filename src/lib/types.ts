@@ -33,13 +33,15 @@ export type InvoiceStatusDefinition = {
   systemRoles?: StatusSystemRole[];
 };
 
-export type DepartmentDecision =
-  | "Receiving Record"
-  | "P-Card"
-  | "Request for Check"
-  | "Reject"
-  | "Hold"
-  | "Not our Department Invoice";
+export type DecisionWorkflowAction = "complete" | "reject" | "hold" | "apRework";
+
+export type DepartmentDecisionDefinition = {
+  id: string;
+  label: string;
+  workflowAction: DecisionWorkflowAction;
+  requireComment: boolean;
+  active: boolean;
+};
 
 export type Department = {
   id: string;
@@ -189,7 +191,7 @@ export type Invoice = {
   statusDate: string;
   status: WorkflowStatus;
   departmentId: string;
-  departmentDecision: DepartmentDecision | "";
+  departmentDecision: string;
   paymentProcessed: boolean;
   comments: InvoiceComment[];
   fileId: string;
@@ -211,6 +213,7 @@ export type AppData = {
   paymentFile: PaymentFileSettings;
   branding: BrandingSettings;
   statuses: InvoiceStatusDefinition[];
+  departmentDecisions: DepartmentDecisionDefinition[];
   escalationContacts: EscalationContact[];
 };
 

@@ -10,6 +10,7 @@ const setupLinks = [
   { href: "/settings/departments", label: "Department Emails" },
   { href: "/settings/escalation", label: "Escalation Emails" },
   { href: "/settings/statuses", label: "Statuses" },
+  { href: "/settings/decisions", label: "Decision Types" },
   { href: "/settings/branding", label: "Branding" },
   { href: "/settings/environment", label: "Environment" },
 ];
