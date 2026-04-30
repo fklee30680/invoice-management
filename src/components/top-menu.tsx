@@ -3,7 +3,7 @@ import Link from "next/link";
 import { signOut } from "@/lib/auth-actions";
 import { INVOICE_SUMMARY_VIEWS, summaryViewPath } from "@/lib/invoice-views";
 import type { BrandingSettings, User } from "@/lib/types";
-import { TOP_MENU_ITEM_CLASS } from "./menu-styles";
+import { TOP_MENU_ITEM_CLASS, TOP_MENU_PRIMARY_ACTION_CLASS } from "./menu-styles";
 import { TopMenuDropdown } from "./top-menu-dropdown";
 
 const setupLinks = [
@@ -80,7 +80,7 @@ export function TopMenu({
 
           {user ? (
             <form action={signOut}>
-              <button className={TOP_MENU_ITEM_CLASS}>
+              <button className={TOP_MENU_PRIMARY_ACTION_CLASS}>
                 Sign Out
               </button>
             </form>
