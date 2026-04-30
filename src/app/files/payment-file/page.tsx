@@ -34,7 +34,7 @@ export default async function PaymentFilePage() {
           <div>
             <h2 className="text-base font-semibold">Payment File Columns</h2>
             <p className="mt-1 text-sm text-[var(--muted)]">
-              Included columns are exported in the order shown below.
+              Order controls the left-to-right order of columns in the export.
             </p>
           </div>
 
@@ -45,12 +45,18 @@ export default async function PaymentFilePage() {
                 key={column.id}
               >
                 <input name="columnId" type="hidden" value={column.id} />
-                <div className="text-xs font-semibold uppercase text-[var(--muted)]">
+                <label className="text-xs font-semibold uppercase text-[var(--muted)]">
                   Order
-                  <div className="mt-2 text-base text-[var(--foreground)]">
-                    {index + 1}
-                  </div>
-                </div>
+                  <input
+                    className="focus-ring mt-1 min-h-10 w-16 border border-[var(--line)] px-2 text-sm font-normal normal-case text-[var(--foreground)]"
+                    defaultValue={index + 1}
+                    inputMode="numeric"
+                    min={1}
+                    name={`order-${column.id}`}
+                    step={1}
+                    type="number"
+                  />
+                </label>
                 <label className="text-xs font-semibold uppercase text-[var(--muted)]">
                   Header
                   <input

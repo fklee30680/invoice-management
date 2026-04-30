@@ -261,17 +261,27 @@ export async function updatePaymentFileSettings(formData: FormData) {
 
   await mutateData((data) => {
     data.paymentFile.columns = columnIds
-      .map((columnId) => {
+      .map((columnId, index) => {
         const source = value(formData, `source-${columnId}`);
         if (!isPaymentFileFieldSource(source)) return null;
+        const submittedOrder = Number(value(formData, `order-${columnId}`));
         return {
-          id: columnId,
-          header: value(formData, `header-${columnId}`) || sourceLabel(source),
-          source,
-          included: checkbox(formData, `included-${columnId}`),
+          column: {
+            id: columnId,
+            header: value(formData, `header-${columnId}`) || sourceLabel(source),
+            source,
+            included: checkbox(formData, `included-${columnId}`),
+          },
+          index,
+          order:
+            Number.isInteger(submittedOrder) && submittedOrder >= 1
+              ? submittedOrder
+              : index + 1,
         };
       })
-      .filter((column) => column !== null);
+      .filter((item) => item !== null)
+      .sort((a, b) => a.order - b.order || a.index - b.index)
+      .map((item) => item.column);
 
     addAudit(data, {
       actor: "AP",
