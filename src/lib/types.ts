@@ -2,6 +2,36 @@ export type Role = "AP" | "DEPARTMENT";
 
 export type WorkflowStatus = string;
 
+export type MenuItemType = "link" | "group";
+
+export type MenuRole = Role;
+
+export type MenuLinkTarget = {
+  id: string;
+  label: string;
+  href: string;
+  roles: MenuRole[];
+  locked?: boolean;
+  category?: string;
+  description?: string;
+};
+
+export type MenuConfigItem = {
+  id: string;
+  type: MenuItemType;
+  label: string;
+  href?: string;
+  enabled: boolean;
+  order: number;
+  roles: MenuRole[];
+  locked?: boolean;
+  children?: MenuConfigItem[];
+};
+
+export type MenuSettings = {
+  items: MenuConfigItem[];
+};
+
 export type StatusTone =
   | "slate"
   | "amber"
@@ -351,6 +381,7 @@ export type AppData = {
   branding: BrandingSettings;
   statuses: InvoiceStatusDefinition[];
   invoiceFields: InvoiceFieldConfig[];
+  menuSettings: MenuSettings;
   departmentDecisions: DepartmentDecisionDefinition[];
   escalationContacts: EscalationContact[];
 };

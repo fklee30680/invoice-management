@@ -22,9 +22,6 @@ export function TopMenuDropdown({
   const pathname = usePathname();
   const menuRef = useRef<HTMLDivElement>(null);
   const isOpen = open && openedPath === pathname;
-  const sortedLinks = [...links].sort((a, b) =>
-    a.label.localeCompare(b.label, undefined, { sensitivity: "base" }),
-  );
 
   useEffect(() => {
     function closeOnOutsideClick(event: MouseEvent) {
@@ -55,7 +52,7 @@ export function TopMenuDropdown({
       </button>
       {isOpen ? (
         <div className="absolute left-0 z-20 mt-1 min-w-56 border border-[var(--line)] bg-white py-1 shadow-lg">
-          {sortedLinks.map((link) => (
+          {links.map((link) => (
             <Link
               className={SUBMENU_ITEM_CLASS}
               href={link.href}

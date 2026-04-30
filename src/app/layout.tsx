@@ -36,7 +36,7 @@ export default async function RootLayout({
   return (
     <html lang="en" className="h-full antialiased">
       <body className="min-h-full flex flex-col" style={brandStyle}>
-        <TopMenu branding={branding} user={user} />
+        <TopMenu branding={branding} menuSettings={data.menuSettings} user={user} />
         {children}
       </body>
     </html>

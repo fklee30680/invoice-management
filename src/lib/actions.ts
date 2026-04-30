@@ -23,6 +23,11 @@ import {
   invoiceFieldEnabled,
   normalizeInvoiceFields,
 } from "./invoice-fields";
+import {
+  defaultMenuSettings,
+  menuTargetByHref,
+  normalizeMenuSettings,
+} from "./menu-registry";
 import { parsePoUpload } from "./po-parser";
 import { canAccessInvoice, requireApUser, requireUser } from "./session";
 import { parseVendorUpload } from "./vendor-parser";
@@ -52,6 +57,8 @@ import type {
   BrandingLogo,
   DecisionWorkflowAction,
   Invoice,
+  MenuConfigItem,
+  MenuRole,
   StatusTone,
 } from "./types";
 
@@ -111,6 +118,14 @@ function fillTemplate(template: string, values: Record<string, string>) {
 
 function idList(formData: FormData, key: string) {
   return formData.getAll(key).map(String).filter(Boolean);
+}
+
+function roleList(formData: FormData, key: string): MenuRole[] {
+  const roles = formData
+    .getAll(key)
+    .map(String)
+    .filter((role): role is MenuRole => role === "AP" || role === "DEPARTMENT");
+  return roles.length > 0 ? roles : ["AP"];
 }
 
 function escalationRecipientConfig(formData: FormData) {
@@ -1583,6 +1598,202 @@ export async function updateInvoiceFields(formData: FormData) {
   revalidatePath("/review", "layout");
   revalidatePath("/settings/invoice-fields");
   revalidatePath("/settings/decisions");
+}
+
+export async function updateMenuSettings(formData: FormData) {
+  await requireApUser();
+  const topItemIds = idList(formData, "menuItemId");
+
+  await mutateData((data) => {
+    const current = normalizeMenuSettings(data.menuSettings);
+    const currentById = new Map(
+      current.items.flatMap((item) => [item, ...(item.children || [])]).map((item) => [item.id, item]),
+    );
+
+    data.menuSettings = normalizeMenuSettings({
+      items: topItemIds.map((itemId, index) =>
+        menuItemFromForm(formData, itemId, index, currentById.get(itemId)),
+      ),
+    });
+    addAudit(data, {
+      actor: "AP",
+      type: "menu_settings_updated",
+      message: "Updated top navigation menu setup.",
+    });
+  });
+
+  revalidatePath("/", "layout");
+  revalidatePath("/settings/menu");
+}
+
+export async function addMenuItem(formData: FormData) {
+  await requireApUser();
+  const itemType = value(formData, "itemType") === "group" ? "group" : "link";
+  const target = menuTargetByHref(value(formData, "href"));
+  if (itemType === "link" && !target) return;
+  const label = value(formData, "label") || target?.label || "New Menu Item";
+
+  await mutateData((data) => {
+    const menuSettings = normalizeMenuSettings(data.menuSettings);
+    menuSettings.items.push(
+      itemType === "group"
+        ? {
+            id: createId("menu-group"),
+            type: "group",
+            label,
+            enabled: true,
+            order: menuSettings.items.length + 1,
+            roles: roleList(formData, "roles"),
+            children: [],
+          }
+        : {
+            id: uniqueMenuItemId(menuSettings.items, target?.id || createId("menu-link")),
+            type: "link",
+            label,
+            href: target?.href || "",
+            enabled: true,
+            order: menuSettings.items.length + 1,
+            roles: target?.roles || roleList(formData, "roles"),
+            locked: target?.locked === true,
+          },
+    );
+    data.menuSettings = normalizeMenuSettings(menuSettings);
+    addAudit(data, {
+      actor: "AP",
+      type: "menu_item_added",
+      message: `Added ${label} to the top navigation menu.`,
+    });
+  });
+
+  revalidatePath("/", "layout");
+  revalidatePath("/settings/menu");
+}
+
+export async function addSubmenuItem(formData: FormData) {
+  await requireApUser();
+  const groupId = value(formData, "groupId");
+  const target = menuTargetByHref(value(formData, "href"));
+  if (!groupId || !target) return;
+
+  await mutateData((data) => {
+    const menuSettings = normalizeMenuSettings(data.menuSettings);
+    const group = menuSettings.items.find(
+      (item) => item.id === groupId && item.type === "group",
+    );
+    if (!group) return;
+    const children = group.children || [];
+    const label = value(formData, "label") || target.label;
+    children.push({
+      id: uniqueMenuItemId(menuSettings.items, target.id),
+      type: "link",
+      label,
+      href: target.href,
+      enabled: true,
+      order: children.length + 1,
+      roles: target.roles,
+      locked: target.locked === true,
+    });
+    group.children = children;
+    data.menuSettings = normalizeMenuSettings(menuSettings);
+    addAudit(data, {
+      actor: "AP",
+      type: "submenu_item_added",
+      message: `Added ${label} to ${group.label}.`,
+    });
+  });
+
+  revalidatePath("/", "layout");
+  revalidatePath("/settings/menu");
+}
+
+export async function deleteMenuItem(formData: FormData) {
+  await requireApUser();
+  const itemId = value(formData, "itemId");
+  const parentId = value(formData, "parentId");
+  if (!itemId) return;
+
+  await mutateData((data) => {
+    const menuSettings = normalizeMenuSettings(data.menuSettings);
+    if (parentId) {
+      const parent = menuSettings.items.find((item) => item.id === parentId);
+      const child = parent?.children?.find((item) => item.id === itemId);
+      if (!parent || !child || child.locked) return;
+      parent.children = (parent.children || []).filter((item) => item.id !== itemId);
+    } else {
+      const item = menuSettings.items.find((entry) => entry.id === itemId);
+      if (!item || item.locked || (item.children || []).some((child) => child.locked)) {
+        return;
+      }
+      menuSettings.items = menuSettings.items.filter((entry) => entry.id !== itemId);
+    }
+    data.menuSettings = normalizeMenuSettings(menuSettings);
+    addAudit(data, {
+      actor: "AP",
+      type: "menu_item_deleted",
+      message: "Deleted a top navigation menu item.",
+    });
+  });
+
+  revalidatePath("/", "layout");
+  revalidatePath("/settings/menu");
+}
+
+export async function resetMenuSettings() {
+  await requireApUser();
+
+  await mutateData((data) => {
+    data.menuSettings = defaultMenuSettings();
+    addAudit(data, {
+      actor: "AP",
+      type: "menu_settings_reset",
+      message: "Reset top navigation menu setup to the default layout.",
+    });
+  });
+
+  revalidatePath("/", "layout");
+  revalidatePath("/settings/menu");
+}
+
+function menuItemFromForm(
+  formData: FormData,
+  itemId: string,
+  index: number,
+  currentItem: MenuConfigItem | undefined,
+): MenuConfigItem {
+  const requestedType = value(formData, `type-${itemId}`) === "group" ? "group" : "link";
+  const type = currentItem?.locked ? currentItem.type : requestedType;
+  const target = menuTargetByHref(value(formData, `href-${itemId}`));
+  const locked = currentItem?.locked === true || target?.locked === true;
+  const item: MenuConfigItem = {
+    id: itemId,
+    type,
+    label: value(formData, `label-${itemId}`) || currentItem?.label || target?.label || "Menu Item",
+    href: type === "link" ? target?.href || currentItem?.href || "" : undefined,
+    enabled: locked ? true : checkbox(formData, `enabled-${itemId}`),
+    order: positiveOrder(formData, `order-${itemId}`, index + 1),
+    roles: locked ? currentItem?.roles || target?.roles || ["AP"] : roleList(formData, `roles-${itemId}`),
+    locked,
+  };
+
+  if (type === "group") {
+    const childIds = idList(formData, `childId-${itemId}`);
+    item.children = childIds.map((childId, childIndex) =>
+      menuItemFromForm(formData, childId, childIndex, currentItem?.children?.find((child) => child.id === childId)),
+    );
+  }
+
+  return item;
+}
+
+function positiveOrder(formData: FormData, key: string, fallback: number) {
+  const parsed = Number(value(formData, key));
+  return Number.isInteger(parsed) && parsed >= 1 ? parsed : fallback;
+}
+
+function uniqueMenuItemId(items: MenuConfigItem[], preferredId: string) {
+  const existing = new Set(items.flatMap((item) => [item.id, ...(item.children || []).map((child) => child.id)]));
+  if (!existing.has(preferredId)) return preferredId;
+  return `${preferredId}-${Date.now()}`;
 }
 
 export async function uploadBrandingLogo(formData: FormData) {

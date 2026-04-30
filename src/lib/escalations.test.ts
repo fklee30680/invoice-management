@@ -5,6 +5,7 @@ import {
   findEscalationCandidates,
 } from "./escalations";
 import { normalizeInvoiceFields } from "./invoice-fields";
+import { defaultMenuSettings } from "./menu-registry";
 import { normalizeOrganizationDepartmentScope } from "./store";
 import type { AppData, EscalationSchedulerSettings } from "./types";
 
@@ -72,6 +73,7 @@ function baseData(): AppData {
     invoiceFiles: [],
     auditEvents: [],
     invoiceFields: normalizeInvoiceFields(undefined),
+    menuSettings: defaultMenuSettings(),
     notificationTemplate: {
       departmentSubject: "",
       departmentBody: "",

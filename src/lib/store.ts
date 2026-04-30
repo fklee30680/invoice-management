@@ -10,6 +10,7 @@ import type {
   Invoice,
   InvoiceFieldConfig,
   InvoiceFile,
+  MenuSettings,
   NotificationTemplate,
   PaymentFileSettings,
   PurchaseOrder,
@@ -26,6 +27,7 @@ import {
   defaultPaymentFileSettings,
   normalizePaymentFileSettings,
 } from "./payment-file";
+import { defaultMenuSettings, normalizeMenuSettings } from "./menu-registry";
 import { defaultStatuses, statusRoles } from "./status-config";
 import { normalizeInvoiceFields } from "./invoice-fields";
 import { normalizePoNumber, normalizeVendorName, slugify } from "./utils";
@@ -369,6 +371,9 @@ function normalizeData(data: AppData): AppData {
     invoiceFields: normalizeInvoiceFields(
       (data as AppData & { invoiceFields?: InvoiceFieldConfig[] }).invoiceFields,
     ),
+    menuSettings: normalizeMenuSettings(
+      (data as AppData & { menuSettings?: MenuSettings }).menuSettings,
+    ),
     departmentDecisions: normalizeDepartmentDecisions(data.departmentDecisions),
     escalationSchedules,
     escalationTemplates: (data.escalationTemplates || [])
@@ -638,6 +643,7 @@ function seedData(): AppData {
     branding: defaultBranding(),
     statuses: defaultStatuses(),
     invoiceFields: normalizeInvoiceFields(undefined),
+    menuSettings: defaultMenuSettings(),
     departmentDecisions: defaultDepartmentDecisions(),
     escalationContacts: defaultEscalationContacts(),
   };
