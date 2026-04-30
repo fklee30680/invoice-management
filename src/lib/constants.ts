@@ -8,6 +8,7 @@ export function defaultDepartmentDecisions(): DepartmentDecisionDefinition[] {
       workflowAction: "complete",
       requireComment: false,
       requirePoNumber: true,
+      includeInPaymentFile: true,
       active: true,
     },
     {
@@ -16,6 +17,7 @@ export function defaultDepartmentDecisions(): DepartmentDecisionDefinition[] {
       workflowAction: "complete",
       requireComment: false,
       requirePoNumber: false,
+      includeInPaymentFile: false,
       active: true,
     },
     {
@@ -24,6 +26,7 @@ export function defaultDepartmentDecisions(): DepartmentDecisionDefinition[] {
       workflowAction: "complete",
       requireComment: false,
       requirePoNumber: false,
+      includeInPaymentFile: true,
       active: true,
     },
     {
@@ -32,6 +35,7 @@ export function defaultDepartmentDecisions(): DepartmentDecisionDefinition[] {
       workflowAction: "reject",
       requireComment: false,
       requirePoNumber: false,
+      includeInPaymentFile: false,
       active: true,
     },
     {
@@ -40,6 +44,7 @@ export function defaultDepartmentDecisions(): DepartmentDecisionDefinition[] {
       workflowAction: "hold",
       requireComment: false,
       requirePoNumber: false,
+      includeInPaymentFile: false,
       active: true,
     },
     {
@@ -48,6 +53,7 @@ export function defaultDepartmentDecisions(): DepartmentDecisionDefinition[] {
       workflowAction: "apRework",
       requireComment: true,
       requirePoNumber: false,
+      includeInPaymentFile: false,
       active: true,
     },
   ];

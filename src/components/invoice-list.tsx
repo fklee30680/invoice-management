@@ -8,6 +8,7 @@ import { currencyDisplay, formatDate } from "@/lib/utils";
 export type InvoiceFilters = {
   statuses: string[];
   department: string;
+  decisionType: string;
   search: string;
   sort: InvoiceSortKey;
   direction: InvoiceSortDirection;
@@ -101,6 +102,8 @@ export function filterInvoices(
       filters.statuses.length === 0 || filters.statuses.includes(invoice.status);
     const matchesDepartment =
       !filters.department || invoice.departmentId === filters.department;
+    const matchesDecision =
+      !filters.decisionType || invoice.departmentDecision === filters.decisionType;
     const haystack = [
       invoice.vendorName,
       invoice.invoiceNumber,
@@ -113,7 +116,12 @@ export function filterInvoices(
     ]
       .join(" ")
       .toLowerCase();
-    return matchesStatus && matchesDepartment && haystack.includes(filters.search.toLowerCase());
+    return (
+      matchesStatus &&
+      matchesDepartment &&
+      matchesDecision &&
+      haystack.includes(filters.search.toLowerCase())
+    );
   });
 
   if (!filters.sort) return filtered;
@@ -139,6 +147,7 @@ function sortHref({
   const params = new URLSearchParams();
   if (filters.search) params.set("search", filters.search);
   if (filters.department) params.set("department", filters.department);
+  if (filters.decisionType) params.set("decisionType", filters.decisionType);
   filters.statuses.forEach((status) => params.append("status", status));
   params.set("sort", sort);
   params.set(
@@ -181,14 +190,17 @@ export function FilterBar({
   data,
   filters,
   clearHref,
+  showDecisionTypeFilter = false,
 }: {
   data: AppData;
   filters: InvoiceFilters;
   clearHref: string;
+  showDecisionTypeFilter?: boolean;
 }) {
   const filterKey = [
     filters.search,
     filters.department,
+    filters.decisionType,
     filters.sort,
     filters.direction,
     ...filters.statuses,
@@ -201,7 +213,11 @@ export function FilterBar({
 
   return (
     <form
-      className="grid gap-4 border border-[var(--line)] bg-[var(--panel)] p-4 xl:grid-cols-[1fr_2fr_220px_auto_auto]"
+      className={`grid gap-4 border border-[var(--line)] bg-[var(--panel)] p-4 ${
+        showDecisionTypeFilter
+          ? "xl:grid-cols-[1fr_2fr_220px_220px_auto_auto]"
+          : "xl:grid-cols-[1fr_2fr_220px_auto_auto]"
+      }`}
       key={filterKey || "clear"}
     >
       <input name="sort" type="hidden" value={filters.sort} />
@@ -247,6 +263,24 @@ export function FilterBar({
           ))}
         </select>
       </label>
+      {showDecisionTypeFilter ? (
+        <label className="text-xs font-semibold uppercase text-[var(--muted)]">
+          Decision Type
+          <select
+            className="focus-ring mt-1 min-h-10 w-full border border-[var(--line)] bg-white px-3 text-sm font-normal normal-case text-[var(--foreground)]"
+            defaultValue={filters.decisionType}
+            name="decisionType"
+          >
+            <option value="">All Decision Types</option>
+            {data.departmentDecisions.map((decision) => (
+              <option key={decision.id} value={decision.label}>
+                {decision.label}
+                {decision.active ? "" : " (inactive)"}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
       <button className="focus-ring bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700">
         Filter
       </button>

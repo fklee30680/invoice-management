@@ -95,6 +95,33 @@ export function isPaymentFileFieldSource(
   return validSources.has(value as PaymentFileFieldSource);
 }
 
+export function paymentFileEligibleStatuses(data: AppData) {
+  return data.statuses
+    .filter((status) => status.includeInPaymentFile)
+    .map((status) => status.label);
+}
+
+export function paymentFileEligibleDecisionLabels(data: AppData) {
+  return data.departmentDecisions
+    .filter((decision) => decision.active && decision.includeInPaymentFile)
+    .map((decision) => decision.label);
+}
+
+export function invoiceEligibleForPaymentFile(invoice: Invoice, data: AppData) {
+  if (invoice.paymentProcessed) return false;
+  if (!invoice.departmentDecision) return false;
+
+  const status = data.statuses.find((item) => item.label === invoice.status);
+  if (!status?.includeInPaymentFile) return false;
+
+  const decision = data.departmentDecisions.find(
+    (item) => item.label === invoice.departmentDecision,
+  );
+  if (!decision?.active || !decision.includeInPaymentFile) return false;
+
+  return true;
+}
+
 function departmentName(data: AppData, departmentId: string) {
   return data.departments.find((department) => department.id === departmentId)?.name || "";
 }

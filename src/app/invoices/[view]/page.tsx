@@ -38,6 +38,7 @@ export default async function InvoiceViewPage({
   const filters = {
     statuses: many(query.status),
     department: one(query.department),
+    decisionType: one(query.decisionType),
     search: one(query.search),
     sort: sortKey(query.sort),
     direction: sortDirection(query.direction),
@@ -74,7 +75,9 @@ export default async function InvoiceViewPage({
             <div>
               <h2 className="text-base font-semibold">Payment File Actions</h2>
               <p className="mt-1 text-sm text-[var(--muted)]">
-                Create a payment file or mark the visible invoices as paid.
+                Create a payment file from invoices that match the payment-file
+                rules and current filters, or mark the visible eligible invoices
+                as paid.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -118,6 +121,7 @@ export default async function InvoiceViewPage({
           clearHref={summaryViewPath(view)}
           data={data}
           filters={filters}
+          showDecisionTypeFilter={isManualPaymentView}
         />
         <InvoiceTable
           baseHref={summaryViewPath(view)}

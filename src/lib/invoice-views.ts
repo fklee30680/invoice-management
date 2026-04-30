@@ -1,4 +1,5 @@
 import { statusesForApWorkQueue, statusesForCompleted } from "./status-config";
+import { invoiceEligibleForPaymentFile } from "./payment-file";
 import type { AppData, Invoice } from "./types";
 
 export type InvoiceSummaryView =
@@ -30,7 +31,7 @@ export const INVOICE_SUMMARY_VIEWS: Record<
   },
   "manual-payment": {
     label: "Invoices to be paid manually",
-    description: "Completed invoices that have not been marked payment processed.",
+    description: "Invoices that meet payment-file status and decision rules.",
   },
 };
 
@@ -58,10 +59,7 @@ export function invoicesForSummaryView(
   }
 
   if (view === "manual-payment") {
-    const statuses = data ? statusesForCompleted(data) : ["Approved/Completed"];
-    return invoices.filter(
-      (invoice) => statuses.includes(invoice.status) && !invoice.paymentProcessed,
-    );
+    return data ? invoices.filter((invoice) => invoiceEligibleForPaymentFile(invoice, data)) : [];
   }
 
   return invoices;

@@ -60,6 +60,7 @@ export type InvoiceStatusDefinition = {
   showInDepartmentWork: boolean;
   showInCompleted: boolean;
   includeInEscalation: boolean;
+  includeInPaymentFile: boolean;
   systemRole?: StatusSystemRole;
   systemRoles?: StatusSystemRole[];
 };
@@ -169,6 +170,7 @@ export type DepartmentDecisionDefinition = {
   workflowAction: DecisionWorkflowAction;
   requireComment: boolean;
   requirePoNumber: boolean;
+  includeInPaymentFile: boolean;
   active: boolean;
 };
 
@@ -389,5 +391,6 @@ export type AppData = {
 export type InvoiceFilter = {
   status?: string;
   department?: string;
+  decisionType?: string;
   search?: string;
 };

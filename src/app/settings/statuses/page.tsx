@@ -58,6 +58,10 @@ export default async function StatusSettingsPage() {
           choose a replacement status. Any workflow behavior assigned to the
           deleted status will move to the replacement.
         </p>
+        <p className="mt-2 max-w-3xl text-sm text-[var(--muted)]">
+          Include in Payment File allows invoices in that status to be exported
+          only when their department decision type is also payment-file eligible.
+        </p>
       </div>
 
       <form
@@ -96,6 +100,7 @@ export default async function StatusSettingsPage() {
           <Checkbox label="Department work area" name="showInDepartmentWork" />
           <Checkbox label="Completed list" name="showInCompleted" />
           <Checkbox label="Escalation processing" name="includeInEscalation" />
+          <Checkbox label="Include in Payment File" name="includeInPaymentFile" />
         </fieldset>
         <button className="focus-ring self-end bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--accent-strong)]">
           Add Status
@@ -202,6 +207,12 @@ export default async function StatusSettingsPage() {
                         form={formId}
                         label="Escalation processing"
                         name="includeInEscalation"
+                      />
+                      <Checkbox
+                        defaultChecked={status.includeInPaymentFile}
+                        form={formId}
+                        label="Include in Payment File"
+                        name="includeInPaymentFile"
                       />
                     </div>
                   </td>

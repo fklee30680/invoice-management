@@ -39,6 +39,7 @@ export function defaultStatuses(): InvoiceStatusDefinition[] {
       showInDepartmentWork: false,
       showInCompleted: false,
       includeInEscalation: false,
+      includeInPaymentFile: false,
       systemRole: "uploaded",
     },
     {
@@ -50,6 +51,7 @@ export function defaultStatuses(): InvoiceStatusDefinition[] {
       showInDepartmentWork: false,
       showInCompleted: false,
       includeInEscalation: false,
+      includeInPaymentFile: false,
       systemRole: "apReview",
     },
     {
@@ -61,6 +63,7 @@ export function defaultStatuses(): InvoiceStatusDefinition[] {
       showInDepartmentWork: false,
       showInCompleted: false,
       includeInEscalation: false,
+      includeInPaymentFile: false,
       systemRole: "apRework",
     },
     {
@@ -72,6 +75,7 @@ export function defaultStatuses(): InvoiceStatusDefinition[] {
       showInDepartmentWork: true,
       showInCompleted: false,
       includeInEscalation: true,
+      includeInPaymentFile: false,
       systemRole: "routed",
     },
     {
@@ -83,6 +87,7 @@ export function defaultStatuses(): InvoiceStatusDefinition[] {
       showInDepartmentWork: false,
       showInCompleted: true,
       includeInEscalation: false,
+      includeInPaymentFile: true,
       systemRole: "completed",
     },
     {
@@ -94,6 +99,7 @@ export function defaultStatuses(): InvoiceStatusDefinition[] {
       showInDepartmentWork: false,
       showInCompleted: false,
       includeInEscalation: false,
+      includeInPaymentFile: false,
       systemRole: "rejected",
     },
     {
@@ -105,6 +111,7 @@ export function defaultStatuses(): InvoiceStatusDefinition[] {
       showInDepartmentWork: false,
       showInCompleted: false,
       includeInEscalation: false,
+      includeInPaymentFile: false,
       systemRole: "hold",
     },
   ];
@@ -149,6 +156,12 @@ export function statusesForCompleted(data: AppData) {
 export function statusesForEscalation(data: AppData) {
   return data.statuses
     .filter((status) => status.includeInEscalation)
+    .map((status) => status.label);
+}
+
+export function statusesForPaymentFile(data: AppData) {
+  return data.statuses
+    .filter((status) => status.includeInPaymentFile)
     .map((status) => status.label);
 }
 

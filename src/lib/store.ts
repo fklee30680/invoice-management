@@ -273,6 +273,7 @@ function normalizeDepartmentDecisions(
           workflowAction: defaultDecision?.workflowAction || "complete",
           requireComment: defaultDecision?.requireComment || false,
           requirePoNumber: defaultDecision?.requirePoNumber || false,
+          includeInPaymentFile: defaultDecision?.includeInPaymentFile || false,
           active: true,
         };
       }
@@ -285,10 +286,14 @@ function normalizeDepartmentDecisions(
         label: decision.label || defaultDecision?.label || "",
         workflowAction: decision.workflowAction || defaultDecision?.workflowAction || "complete",
         requireComment: decision.requireComment === true,
-        requirePoNumber:
-          typeof decision.requirePoNumber === "boolean"
-            ? decision.requirePoNumber
-            : defaultDecision?.requirePoNumber || false,
+          requirePoNumber:
+            typeof decision.requirePoNumber === "boolean"
+              ? decision.requirePoNumber
+              : defaultDecision?.requirePoNumber || false,
+          includeInPaymentFile:
+            typeof decision.includeInPaymentFile === "boolean"
+              ? decision.includeInPaymentFile
+              : defaultDecision?.includeInPaymentFile || false,
         active: decision.active !== false,
       };
     })
@@ -512,6 +517,7 @@ function mergeStatuses(
         showInDepartmentWork: false,
         showInCompleted: false,
         includeInEscalation: false,
+        includeInPaymentFile: false,
       },
     );
   }
@@ -522,6 +528,10 @@ function mergeStatuses(
       typeof status.includeInEscalation === "boolean"
         ? status.includeInEscalation
         : statusRoles(status).includes("routed"),
+    includeInPaymentFile:
+      typeof status.includeInPaymentFile === "boolean"
+        ? status.includeInPaymentFile
+        : statusRoles(status).includes("completed"),
   }));
 }
 

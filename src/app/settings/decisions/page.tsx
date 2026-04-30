@@ -86,6 +86,10 @@ export default async function DecisionSettingsPage() {
             enabled.
           </div>
         ) : null}
+        <p className="mt-2 max-w-3xl text-sm text-[var(--muted)]">
+          Include in Payment File allows invoices with that decision to be
+          exported only when the invoice status is also payment-file eligible.
+        </p>
       </div>
 
       <form
@@ -126,6 +130,7 @@ export default async function DecisionSettingsPage() {
           ) : (
             <span className="text-xs text-[var(--muted)]">Require PO unavailable</span>
           )}
+          <Checkbox label="Include in Payment File" name="includeInPaymentFile" />
         </fieldset>
         <button className="focus-ring self-end bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--accent-strong)]">
           Add Decision
@@ -222,6 +227,12 @@ export default async function DecisionSettingsPage() {
                           Require PO unavailable
                         </span>
                       )}
+                      <Checkbox
+                        defaultChecked={decision.includeInPaymentFile}
+                        form={formId}
+                        label="Include in Payment File"
+                        name="includeInPaymentFile"
+                      />
                     </div>
                   </td>
                   <td className="border-b border-[var(--line)] px-3 py-3">

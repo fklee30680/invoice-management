@@ -141,6 +141,7 @@ function baseData(): AppData {
         showInDepartmentWork: true,
         showInCompleted: false,
         includeInEscalation: true,
+        includeInPaymentFile: false,
         systemRole: "routed",
       },
     ],

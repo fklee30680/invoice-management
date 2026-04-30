@@ -17,7 +17,11 @@ import {
   stageFileForProcessing,
 } from "./file-storage";
 import { extractInvoiceMetadata } from "./ocr";
-import { isPaymentFileFieldSource, sourceLabel } from "./payment-file";
+import {
+  invoiceEligibleForPaymentFile,
+  isPaymentFileFieldSource,
+  sourceLabel,
+} from "./payment-file";
 import {
   DEFAULT_INVOICE_FIELDS,
   invoiceFieldEnabled,
@@ -358,12 +362,9 @@ export async function markManualPaymentInvoicesPaid(formData: FormData) {
 
   await mutateData((data) => {
     let count = 0;
-    const completedStatuses = statusesForCompleted(data);
     for (const invoice of data.invoices) {
       if (!invoiceIds.has(invoice.id)) continue;
-      if (!completedStatuses.includes(invoice.status) || invoice.paymentProcessed) {
-        continue;
-      }
+      if (!invoiceEligibleForPaymentFile(invoice, data)) continue;
       invoice.paymentProcessed = true;
       invoice.updatedAt = new Date().toISOString();
       count += 1;
@@ -1264,6 +1265,7 @@ export async function addInvoiceStatus(formData: FormData) {
       showInDepartmentWork: checkbox(formData, "showInDepartmentWork"),
       showInCompleted: checkbox(formData, "showInCompleted"),
       includeInEscalation: checkbox(formData, "includeInEscalation"),
+      includeInPaymentFile: checkbox(formData, "includeInPaymentFile"),
     });
     addAudit(data, {
       actor: "AP",
@@ -1299,6 +1301,7 @@ export async function updateInvoiceStatus(formData: FormData) {
     status.showInDepartmentWork = checkbox(formData, "showInDepartmentWork");
     status.showInCompleted = checkbox(formData, "showInCompleted");
     status.includeInEscalation = checkbox(formData, "includeInEscalation");
+    status.includeInPaymentFile = checkbox(formData, "includeInPaymentFile");
 
     if (oldLabel !== label) {
       for (const invoice of data.invoices) {
@@ -1399,6 +1402,7 @@ export async function addDepartmentDecision(formData: FormData) {
       requireComment: checkbox(formData, "requireComment"),
       requirePoNumber:
         invoiceFieldEnabled(data, "poNumber") && checkbox(formData, "requirePoNumber"),
+      includeInPaymentFile: checkbox(formData, "includeInPaymentFile"),
       active: checkbox(formData, "active"),
     });
     addAudit(data, {
@@ -1433,6 +1437,7 @@ export async function updateDepartmentDecision(formData: FormData) {
     decision.requireComment = checkbox(formData, "requireComment");
     decision.requirePoNumber =
       invoiceFieldEnabled(data, "poNumber") && checkbox(formData, "requirePoNumber");
+    decision.includeInPaymentFile = checkbox(formData, "includeInPaymentFile");
     decision.active = checkbox(formData, "active");
 
     if (oldLabel !== label) {
