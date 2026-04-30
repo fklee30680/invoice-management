@@ -4,6 +4,7 @@ import {
   updateDepartmentDecision,
 } from "@/lib/actions";
 import type { DecisionWorkflowAction } from "@/lib/types";
+import { invoiceFieldEnabled } from "@/lib/invoice-fields";
 import { readData } from "@/lib/store";
 
 export const runtime = "nodejs";
@@ -68,6 +69,7 @@ function Checkbox({
 
 export default async function DecisionSettingsPage() {
   const data = await readData();
+  const poNumberEnabled = invoiceFieldEnabled(data, "poNumber");
 
   return (
     <section className="space-y-4">
@@ -77,6 +79,13 @@ export default async function DecisionSettingsPage() {
           Configure the choices department users see when reviewing invoices. The
           workflow action controls what happens after the decision is submitted.
         </p>
+        {!poNumberEnabled ? (
+          <div className="mt-3 border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            PO Number is currently disabled in Invoice Fields. PO-required
+            decisions will not require users to enter a PO until PO Number is
+            enabled.
+          </div>
+        ) : null}
       </div>
 
       <form
@@ -112,7 +121,11 @@ export default async function DecisionSettingsPage() {
           </legend>
           <Checkbox defaultChecked label="Active" name="active" />
           <Checkbox label="Require comment" name="requireComment" />
-          <Checkbox label="Require PO" name="requirePoNumber" />
+          {poNumberEnabled ? (
+            <Checkbox label="Require PO" name="requirePoNumber" />
+          ) : (
+            <span className="text-xs text-[var(--muted)]">Require PO unavailable</span>
+          )}
         </fieldset>
         <button className="focus-ring self-end bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--accent-strong)]">
           Add Decision
@@ -197,12 +210,18 @@ export default async function DecisionSettingsPage() {
                         label="Require comment"
                         name="requireComment"
                       />
-                      <Checkbox
-                        defaultChecked={decision.requirePoNumber}
-                        form={formId}
-                        label="Require PO"
-                        name="requirePoNumber"
-                      />
+                      {poNumberEnabled ? (
+                        <Checkbox
+                          defaultChecked={decision.requirePoNumber}
+                          form={formId}
+                          label="Require PO"
+                          name="requirePoNumber"
+                        />
+                      ) : (
+                        <span className="text-xs text-[var(--muted)]">
+                          Require PO unavailable
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td className="border-b border-[var(--line)] px-3 py-3">

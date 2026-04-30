@@ -5,6 +5,7 @@ import {
   updateInvoicePaymentProcessed,
 } from "@/lib/actions";
 import { DepartmentDecisionForm } from "@/components/department-decision-form";
+import { invoiceFieldEnabled } from "@/lib/invoice-fields";
 import { canAccessInvoice, requireUser } from "@/lib/session";
 import { statusBadgeClass } from "@/lib/status-config";
 import { readData } from "@/lib/store";
@@ -35,6 +36,7 @@ export default async function ReviewPage({
   if (!canAccessInvoice(user, invoice)) redirect("/login");
 
   const department = data.departments.find((item) => item.id === invoice.departmentId);
+  const poNumberEnabled = invoiceFieldEnabled(data, "poNumber");
   const error = Array.isArray(query.error) ? query.error[0] : query.error;
   const selectedDecision = Array.isArray(query.decision) ? query.decision[0] : query.decision;
   const activeDecisions = data.departmentDecisions.filter((decision) => decision.active);
@@ -57,6 +59,60 @@ export default async function ReviewPage({
     label: decision.label,
     requirePoNumber: decision.requirePoNumber,
   }));
+  const detailRows = [
+    invoiceFieldEnabled(data, "vendorName")
+      ? ["Vendor Name", invoice.vendorName || "Unknown Vendor"]
+      : null,
+    invoiceFieldEnabled(data, "vendorName")
+      ? ["Vendor Record", invoice.vendorValidationStatus || "Not Checked"]
+      : null,
+    invoiceFieldEnabled(data, "invoiceNumber")
+      ? ["Invoice Number", invoice.invoiceNumber || "Not set"]
+      : null,
+    invoiceFieldEnabled(data, "invoiceDate")
+      ? ["Invoice Date", formatDate(invoice.invoiceDate)]
+      : null,
+    invoiceFieldEnabled(data, "amount")
+      ? ["Amount", currencyDisplay(invoice.amount)]
+      : null,
+    poNumberEnabled ? ["PO Number", invoice.poNumber || "Missing"] : null,
+    invoiceFieldEnabled(data, "departmentId")
+      ? ["Department", department?.name || "Unassigned"]
+      : null,
+    invoiceFieldEnabled(data, "dateReceived")
+      ? ["Date Received", formatDate(invoice.dateReceived)]
+      : null,
+    invoiceFieldEnabled(data, "dateApproved")
+      ? ["Date Approved", formatDate(invoice.dateApproved)]
+      : null,
+    invoiceFieldEnabled(data, "dateUploaded")
+      ? ["Date Uploaded", formatDate(invoice.dateUploaded)]
+      : null,
+    invoiceFieldEnabled(data, "routedAt")
+      ? ["Routed Date", formatDateTime(invoice.routedAt)]
+      : null,
+    invoiceFieldEnabled(data, "notificationSentAt")
+      ? ["Notification Sent", formatDateTime(invoice.notificationSentAt)]
+      : null,
+    invoiceFieldEnabled(data, "status") ? ["Status Date", formatDate(invoice.statusDate)] : null,
+    ["Payment Processed", invoice.paymentProcessed ? "Yes" : "No"],
+  ].filter((row): row is [string, string] => Boolean(row));
+  const systemRows = [
+    invoiceFieldEnabled(data, "status") ? ["Current Status", invoice.status] : null,
+    invoiceFieldEnabled(data, "departmentId")
+      ? ["Current Department", department?.name || "Unassigned"]
+      : null,
+    invoiceFieldEnabled(data, "routedAt")
+      ? ["Routed Date", formatDateTime(invoice.routedAt)]
+      : null,
+    invoiceFieldEnabled(data, "notificationSentAt")
+      ? ["Notification Sent", formatDateTime(invoice.notificationSentAt)]
+      : null,
+    invoiceFieldEnabled(data, "status") ? ["Status Date", formatDate(invoice.statusDate)] : null,
+    invoiceFieldEnabled(data, "vendorName")
+      ? ["Vendor Record", invoice.vendorValidationStatus || "Not Checked"]
+      : null,
+  ].filter((row): row is [string, string] => Boolean(row));
 
   return (
     <main className="min-h-screen px-4 py-6 sm:px-6 lg:px-8">
@@ -68,7 +124,7 @@ export default async function ReviewPage({
             </h1>
             <p className="mt-2 text-sm text-[var(--muted)]">
               {user.role === "AP"
-                ? `Signed in as ${user.name}. Update metadata, routing, and payment status.`
+                ? `Signed in as ${user.name}. Update invoice information, routing, and payment status.`
                 : `Signed in as ${user.name}. Review the invoice file, add comments, and send the decision back to AP.`}
             </p>
           </div>
@@ -100,7 +156,7 @@ export default async function ReviewPage({
               <input name="invoiceId" type="hidden" value={invoice.id} />
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <h2 className="font-semibold">AP Metadata</h2>
+                  <h2 className="font-semibold">Invoice Information</h2>
                   <p className="mt-1 text-sm text-[var(--muted)]">
                     Update invoice details and department routing from this review screen.
                   </p>
@@ -116,32 +172,42 @@ export default async function ReviewPage({
                 <legend className="mb-1 text-xs font-semibold uppercase text-[var(--muted)] sm:col-span-2">
                   Vendor And Invoice
                 </legend>
-                <label className={labelClass}>
-                  Vendor Name
-                  <input className={inputClass} name="vendorName" defaultValue={invoice.vendorName} />
-                </label>
-                <label className={labelClass}>
-                  Invoice Number
-                  <input className={inputClass} name="invoiceNumber" defaultValue={invoice.invoiceNumber} />
-                </label>
-                <label className={labelClass}>
-                  Invoice Date
-                  <input className={inputClass} name="invoiceDate" type="date" defaultValue={invoice.invoiceDate} />
-                </label>
-                <label className={labelClass}>
-                  Amount
-                  <input className={inputClass} name="amount" defaultValue={invoice.amount} />
-                </label>
+                {invoiceFieldEnabled(data, "vendorName") ? (
+                  <label className={labelClass}>
+                    Vendor Name
+                    <input className={inputClass} name="vendorName" defaultValue={invoice.vendorName} />
+                  </label>
+                ) : null}
+                {invoiceFieldEnabled(data, "invoiceNumber") ? (
+                  <label className={labelClass}>
+                    Invoice Number
+                    <input className={inputClass} name="invoiceNumber" defaultValue={invoice.invoiceNumber} />
+                  </label>
+                ) : null}
+                {invoiceFieldEnabled(data, "invoiceDate") ? (
+                  <label className={labelClass}>
+                    Invoice Date
+                    <input className={inputClass} name="invoiceDate" type="date" defaultValue={invoice.invoiceDate} />
+                  </label>
+                ) : null}
+                {invoiceFieldEnabled(data, "amount") ? (
+                  <label className={labelClass}>
+                    Amount
+                    <input className={inputClass} name="amount" defaultValue={invoice.amount} />
+                  </label>
+                ) : null}
               </fieldset>
 
               <fieldset className="mt-4 grid gap-3 sm:grid-cols-2">
                 <legend className="mb-1 text-xs font-semibold uppercase text-[var(--muted)] sm:col-span-2">
                   Purchasing And Routing
                 </legend>
-                <label className={labelClass}>
-                  PO Number
-                  <input className={inputClass} name="poNumber" defaultValue={invoice.poNumber} />
-                </label>
+                {poNumberEnabled ? (
+                  <label className={labelClass}>
+                    PO Number
+                    <input className={inputClass} name="poNumber" defaultValue={invoice.poNumber} />
+                  </label>
+                ) : null}
                 <label className={labelClass}>
                   Department
                   <select
@@ -157,25 +223,22 @@ export default async function ReviewPage({
                     ))}
                   </select>
                 </label>
-                <label className={labelClass}>
-                  Date Received
-                  <input className={inputClass} name="dateReceived" type="date" defaultValue={invoice.dateReceived} />
-                </label>
-                <label className={labelClass}>
-                  Date Uploaded
-                  <input className={inputClass} name="dateUploaded" type="date" defaultValue={invoice.dateUploaded} />
-                </label>
+                {invoiceFieldEnabled(data, "dateReceived") ? (
+                  <label className={labelClass}>
+                    Date Received
+                    <input className={inputClass} name="dateReceived" type="date" defaultValue={invoice.dateReceived} />
+                  </label>
+                ) : null}
+                {invoiceFieldEnabled(data, "dateUploaded") ? (
+                  <label className={labelClass}>
+                    Date Uploaded
+                    <input className={inputClass} name="dateUploaded" type="date" defaultValue={invoice.dateUploaded} />
+                  </label>
+                ) : null}
               </fieldset>
 
               <div className="mt-4 grid gap-3 bg-white p-3 text-sm sm:grid-cols-2">
-                {[
-                  ["Current Status", invoice.status],
-                  ["Current Department", department?.name || "Unassigned"],
-                  ["Routed Date", formatDateTime(invoice.routedAt)],
-                  ["Notification Sent", formatDateTime(invoice.notificationSentAt)],
-                  ["Status Date", formatDate(invoice.statusDate)],
-                  ["Vendor Record", invoice.vendorValidationStatus || "Not Checked"],
-                ].map(([label, content]) => (
+                {systemRows.map(([label, content]) => (
                   <div key={label}>
                     <div className="text-xs font-semibold uppercase text-[var(--muted)]">
                       {label}
@@ -185,7 +248,7 @@ export default async function ReviewPage({
                 ))}
               </div>
 
-              {invoice.ocrSummary ? (
+              {invoiceFieldEnabled(data, "ocrSummary") && invoice.ocrSummary ? (
                 <div className="mt-4 border-t border-[var(--line)] pt-4 text-sm text-[var(--muted)]">
                   {invoice.ocrSummary}
                 </div>
@@ -193,36 +256,17 @@ export default async function ReviewPage({
 
               <div className="mt-4 flex justify-end">
                 <button className="focus-ring bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--accent-strong)]">
-                  Save Metadata
+                  Save
                 </button>
               </div>
             </form>
           ) : (
             <div className="border border-[var(--line)] bg-[var(--panel)]">
               <div className="border-b border-[var(--line)] px-4 py-3">
-                <h2 className="font-semibold">Invoice Metadata</h2>
+                <h2 className="font-semibold">Invoice Information</h2>
               </div>
               <dl className="grid gap-px bg-[var(--line)] text-sm sm:grid-cols-2">
-                {[
-                  ["Vendor Name", invoice.vendorName || "Unknown Vendor"],
-                  ["Vendor Record", invoice.vendorValidationStatus || "Not Checked"],
-                  ["Invoice Number", invoice.invoiceNumber || "Not set"],
-                  ["Invoice Date", formatDate(invoice.invoiceDate)],
-                  ["Amount", currencyDisplay(invoice.amount)],
-                  ["PO Number", invoice.poNumber || "Missing"],
-                  ["Department", department?.name || "Unassigned"],
-                  ["Date Received", formatDate(invoice.dateReceived)],
-                  ["Date Approved", formatDate(invoice.dateApproved)],
-                  ["Date Uploaded", formatDate(invoice.dateUploaded)],
-                  [
-                    "Date Submitted To Department",
-                    formatDate(invoice.dateSubmittedToDepartment),
-                  ],
-                  ["Routed Date", formatDateTime(invoice.routedAt)],
-                  ["Notification Sent", formatDateTime(invoice.notificationSentAt)],
-                  ["Status Date", formatDate(invoice.statusDate)],
-                  ["Payment Processed", invoice.paymentProcessed ? "Yes" : "No"],
-                ].map(([label, content]) => (
+                {detailRows.map(([label, content]) => (
                   <div className="bg-white p-4" key={label}>
                     <dt className="text-xs font-semibold uppercase text-[var(--muted)]">
                       {label}
@@ -231,9 +275,11 @@ export default async function ReviewPage({
                   </div>
                 ))}
               </dl>
-              <div className="border-t border-[var(--line)] p-4 text-sm text-[var(--muted)]">
-                {invoice.ocrSummary}
-              </div>
+              {invoiceFieldEnabled(data, "ocrSummary") ? (
+                <div className="border-t border-[var(--line)] p-4 text-sm text-[var(--muted)]">
+                  {invoice.ocrSummary}
+                </div>
+              ) : null}
             </div>
           )}
 
@@ -285,6 +331,7 @@ export default async function ReviewPage({
                 hasPoNumber={Boolean(invoice.poNumber.trim())}
                 initialDecision={selectedDecision || invoice.departmentDecision}
                 invoiceId={invoice.id}
+                poNumberEnabled={poNumberEnabled}
                 poRequiredError={error === "po-required"}
               />
             ) : null}

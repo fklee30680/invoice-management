@@ -14,6 +14,7 @@ const setupLinks = [
   { href: "/settings/environment", label: "Environment" },
   { href: "/settings/escalation-schedules", label: "Escalation Schedules" },
   { href: "/settings/holidays-business-days", label: "Holidays And Business Days" },
+  { href: "/settings/invoice-fields", label: "Invoice Fields" },
   { href: "/settings/organization-escalation-contacts", label: "Organization Escalation Contacts" },
   { href: "/settings/scheduler", label: "Scheduler Runtime" },
   { href: "/settings/statuses", label: "Statuses" },

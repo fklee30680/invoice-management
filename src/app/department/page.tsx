@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { invoiceFieldEnabled } from "@/lib/invoice-fields";
 import { requireUser } from "@/lib/session";
 import { statusBadgeClass, statusesForDepartmentWork } from "@/lib/status-config";
 import { readData } from "@/lib/store";
@@ -24,6 +25,25 @@ function InvoiceList({
   invoices: Invoice[];
   data: AppData;
 }) {
+  const showStatus = invoiceFieldEnabled(data, "status");
+  const showVendor = invoiceFieldEnabled(data, "vendorName");
+  const showInvoice =
+    invoiceFieldEnabled(data, "invoiceNumber") || invoiceFieldEnabled(data, "invoiceDate");
+  const showPo = invoiceFieldEnabled(data, "poNumber");
+  const showAmount = invoiceFieldEnabled(data, "amount");
+  const showDepartment = invoiceFieldEnabled(data, "departmentId");
+  const visibleColumnCount =
+    [
+      showStatus,
+      showVendor,
+      showInvoice,
+      showPo,
+      showAmount,
+      showDepartment,
+      true,
+      true,
+    ].filter(Boolean).length || 1;
+
   return (
     <section className="space-y-3">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
@@ -38,12 +58,12 @@ function InvoiceList({
         <table className="w-full min-w-[900px] border-collapse text-left text-sm">
           <thead className="bg-[var(--panel-strong)] text-xs uppercase text-[var(--muted)]">
             <tr>
-              <th className="border-b border-[var(--line)] px-3 py-3">Status</th>
-              <th className="border-b border-[var(--line)] px-3 py-3">Vendor</th>
-              <th className="border-b border-[var(--line)] px-3 py-3">Invoice</th>
-              <th className="border-b border-[var(--line)] px-3 py-3">PO</th>
-              <th className="border-b border-[var(--line)] px-3 py-3">Amount</th>
-              <th className="border-b border-[var(--line)] px-3 py-3">Department</th>
+              {showStatus ? <th className="border-b border-[var(--line)] px-3 py-3">Status</th> : null}
+              {showVendor ? <th className="border-b border-[var(--line)] px-3 py-3">Vendor</th> : null}
+              {showInvoice ? <th className="border-b border-[var(--line)] px-3 py-3">Invoice</th> : null}
+              {showPo ? <th className="border-b border-[var(--line)] px-3 py-3">PO</th> : null}
+              {showAmount ? <th className="border-b border-[var(--line)] px-3 py-3">Amount</th> : null}
+              {showDepartment ? <th className="border-b border-[var(--line)] px-3 py-3">Department</th> : null}
               <th className="border-b border-[var(--line)] px-3 py-3">Decision</th>
               <th className="border-b border-[var(--line)] px-3 py-3">Actions</th>
             </tr>
@@ -51,31 +71,45 @@ function InvoiceList({
           <tbody>
             {invoices.map((invoice) => (
               <tr className="align-top hover:bg-slate-50" key={invoice.id}>
-                <td className="border-b border-[var(--line)] px-3 py-3">
+                {showStatus ? (
+                  <td className="border-b border-[var(--line)] px-3 py-3">
                   <span
                     className={`inline-flex border px-2 py-1 text-xs font-semibold ${statusBadgeClass(data, invoice.status)}`}
                   >
                     {invoice.status}
                   </span>
                 </td>
-                <td className="border-b border-[var(--line)] px-3 py-3 font-medium">
+                ) : null}
+                {showVendor ? (
+                  <td className="border-b border-[var(--line)] px-3 py-3 font-medium">
                   {invoice.vendorName || "Unknown Vendor"}
                 </td>
-                <td className="border-b border-[var(--line)] px-3 py-3">
-                  {invoice.invoiceNumber || "Not set"}
-                  <div className="mt-1 text-xs text-[var(--muted)]">
-                    {formatDate(invoice.invoiceDate)}
-                  </div>
-                </td>
-                <td className="border-b border-[var(--line)] px-3 py-3 font-mono text-xs">
+                ) : null}
+                {showInvoice ? (
+                  <td className="border-b border-[var(--line)] px-3 py-3">
+                    {invoiceFieldEnabled(data, "invoiceNumber") ? invoice.invoiceNumber || "Not set" : null}
+                    {invoiceFieldEnabled(data, "invoiceDate") ? (
+                      <div className="mt-1 text-xs text-[var(--muted)]">
+                        {formatDate(invoice.invoiceDate)}
+                      </div>
+                    ) : null}
+                  </td>
+                ) : null}
+                {showPo ? (
+                  <td className="border-b border-[var(--line)] px-3 py-3 font-mono text-xs">
                   {invoice.poNumber || "Missing"}
                 </td>
-                <td className="border-b border-[var(--line)] px-3 py-3">
+                ) : null}
+                {showAmount ? (
+                  <td className="border-b border-[var(--line)] px-3 py-3">
                   {currencyDisplay(invoice.amount)}
                 </td>
-                <td className="border-b border-[var(--line)] px-3 py-3">
+                ) : null}
+                {showDepartment ? (
+                  <td className="border-b border-[var(--line)] px-3 py-3">
                   {departmentName(data, invoice.departmentId)}
                 </td>
+                ) : null}
                 <td className="border-b border-[var(--line)] px-3 py-3">
                   {invoice.departmentDecision || "Waiting"}
                 </td>
@@ -99,7 +133,7 @@ function InvoiceList({
             ))}
             {invoices.length === 0 ? (
               <tr>
-                <td className="px-3 py-8 text-center text-[var(--muted)]" colSpan={8}>
+                <td className="px-3 py-8 text-center text-[var(--muted)]" colSpan={visibleColumnCount}>
                   No invoices in this section.
                 </td>
               </tr>

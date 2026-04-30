@@ -16,6 +16,7 @@ export function DepartmentDecisionForm({
   invoiceId,
   poRequiredError,
   hasPoNumber,
+  poNumberEnabled,
 }: {
   currentDecision: string;
   decisionOptions: DecisionOption[];
@@ -23,6 +24,7 @@ export function DepartmentDecisionForm({
   invoiceId: string;
   poRequiredError: boolean;
   hasPoNumber: boolean;
+  poNumberEnabled: boolean;
 }) {
   const [decision, setDecision] = useState(initialDecision || currentDecision);
   const poInputRef = useRef<HTMLInputElement>(null);
@@ -30,7 +32,7 @@ export function DepartmentDecisionForm({
     () => decisionOptions.some((option) => option.label === decision && option.requirePoNumber),
     [decision, decisionOptions],
   );
-  const showPoInput = requiresPo && !hasPoNumber;
+  const showPoInput = poNumberEnabled && requiresPo && !hasPoNumber;
 
   useEffect(() => {
     if (showPoInput) {

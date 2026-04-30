@@ -44,7 +44,7 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
             Reports
           </h1>
           <p className="mt-2 max-w-3xl text-sm text-[var(--muted)]">
-            Run branded PDF reports using invoice metadata filters.
+            Run branded PDF reports using invoice information filters.
           </p>
         </header>
 

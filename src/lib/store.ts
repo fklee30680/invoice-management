@@ -8,6 +8,7 @@ import type {
   Department,
   EscalationSchedulerSettings,
   Invoice,
+  InvoiceFieldConfig,
   InvoiceFile,
   NotificationTemplate,
   PaymentFileSettings,
@@ -26,6 +27,7 @@ import {
   normalizePaymentFileSettings,
 } from "./payment-file";
 import { defaultStatuses, statusRoles } from "./status-config";
+import { normalizeInvoiceFields } from "./invoice-fields";
 import { normalizePoNumber, normalizeVendorName, slugify } from "./utils";
 
 const RUNTIME_ROOT = process.env.VERCEL
@@ -364,6 +366,9 @@ function normalizeData(data: AppData): AppData {
       logo: data.branding?.logo || null,
     },
     statuses,
+    invoiceFields: normalizeInvoiceFields(
+      (data as AppData & { invoiceFields?: InvoiceFieldConfig[] }).invoiceFields,
+    ),
     departmentDecisions: normalizeDepartmentDecisions(data.departmentDecisions),
     escalationSchedules,
     escalationTemplates: (data.escalationTemplates || [])
@@ -632,6 +637,7 @@ function seedData(): AppData {
     paymentFile: defaultPaymentFile(),
     branding: defaultBranding(),
     statuses: defaultStatuses(),
+    invoiceFields: normalizeInvoiceFields(undefined),
     departmentDecisions: defaultDepartmentDecisions(),
     escalationContacts: defaultEscalationContacts(),
   };

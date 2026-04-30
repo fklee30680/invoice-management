@@ -306,6 +306,32 @@ export type Invoice = {
   updatedAt: string;
 };
 
+export type InvoiceFieldKey =
+  | "vendorName"
+  | "invoiceNumber"
+  | "invoiceDate"
+  | "amount"
+  | "poNumber"
+  | "dateReceived"
+  | "dateUploaded"
+  | "departmentId"
+  | "status"
+  | "dateApproved"
+  | "routedAt"
+  | "notificationSentAt"
+  | "ocrSummary";
+
+export type InvoiceFieldConfig = {
+  key: InvoiceFieldKey;
+  label: string;
+  enabled: boolean;
+  requiredForAp?: boolean;
+  readOnly?: boolean;
+  systemControlled?: boolean;
+  locked?: boolean;
+  sortOrder: number;
+};
+
 export type AppData = {
   departments: Department[];
   users: User[];
@@ -324,6 +350,7 @@ export type AppData = {
   paymentFile: PaymentFileSettings;
   branding: BrandingSettings;
   statuses: InvoiceStatusDefinition[];
+  invoiceFields: InvoiceFieldConfig[];
   departmentDecisions: DepartmentDecisionDefinition[];
   escalationContacts: EscalationContact[];
 };

@@ -18,6 +18,11 @@ import {
 } from "./file-storage";
 import { extractInvoiceMetadata } from "./ocr";
 import { isPaymentFileFieldSource, sourceLabel } from "./payment-file";
+import {
+  DEFAULT_INVOICE_FIELDS,
+  invoiceFieldEnabled,
+  normalizeInvoiceFields,
+} from "./invoice-fields";
 import { parsePoUpload } from "./po-parser";
 import { canAccessInvoice, requireApUser, requireUser } from "./session";
 import { parseVendorUpload } from "./vendor-parser";
@@ -486,16 +491,30 @@ function applyApInvoiceMetadataUpdate(
   const now = new Date();
   const nowIso = now.toISOString();
 
-  invoice.vendorName = value(formData, "vendorName");
-  invoice.invoiceNumber = value(formData, "invoiceNumber");
-  invoice.invoiceDate = value(formData, "invoiceDate");
-  invoice.amount = value(formData, "amount");
-  invoice.poNumber = value(formData, "poNumber");
-  invoice.dateReceived = value(formData, "dateReceived");
-  if (formData.has("dateUploaded")) {
+  if (invoiceFieldEnabled(data, "vendorName") && formData.has("vendorName")) {
+    invoice.vendorName = value(formData, "vendorName");
+  }
+  if (invoiceFieldEnabled(data, "invoiceNumber") && formData.has("invoiceNumber")) {
+    invoice.invoiceNumber = value(formData, "invoiceNumber");
+  }
+  if (invoiceFieldEnabled(data, "invoiceDate") && formData.has("invoiceDate")) {
+    invoice.invoiceDate = value(formData, "invoiceDate");
+  }
+  if (invoiceFieldEnabled(data, "amount") && formData.has("amount")) {
+    invoice.amount = value(formData, "amount");
+  }
+  if (invoiceFieldEnabled(data, "poNumber") && formData.has("poNumber")) {
+    invoice.poNumber = value(formData, "poNumber");
+  }
+  if (invoiceFieldEnabled(data, "dateReceived") && formData.has("dateReceived")) {
+    invoice.dateReceived = value(formData, "dateReceived");
+  }
+  if (invoiceFieldEnabled(data, "dateUploaded") && formData.has("dateUploaded")) {
     invoice.dateUploaded = value(formData, "dateUploaded");
   }
-  invoice.departmentId = value(formData, "departmentId");
+  if (invoiceFieldEnabled(data, "departmentId") && formData.has("departmentId")) {
+    invoice.departmentId = value(formData, "departmentId");
+  }
 
   const purchaseOrder = findPurchaseOrder(data, invoice.poNumber);
   const vendorRecord = purchaseOrder
@@ -550,10 +569,10 @@ function applyApInvoiceMetadataUpdate(
   addAudit(data, {
     invoiceId: invoice.id,
     actor: "AP",
-    type: departmentChanged ? "rerouted" : "ap_metadata_updated",
+    type: departmentChanged ? "rerouted" : "ap_invoice_information_updated",
     message: departmentChanged
       ? `AP changed department from ${previousDepartment?.name || "Unassigned"} to ${nextDepartment?.name || "Unassigned"}${invoice.departmentId ? " and rerouted the invoice. Routed date was reset." : " and returned the invoice to AP review."}`
-      : "AP updated invoice metadata.",
+      : "AP updated invoice information.",
   });
 
   return { shouldNotify };
@@ -1353,7 +1372,8 @@ export async function addDepartmentDecision(formData: FormData) {
       label,
       workflowAction: decisionWorkflowActionValue(formData),
       requireComment: checkbox(formData, "requireComment"),
-      requirePoNumber: checkbox(formData, "requirePoNumber"),
+      requirePoNumber:
+        invoiceFieldEnabled(data, "poNumber") && checkbox(formData, "requirePoNumber"),
       active: checkbox(formData, "active"),
     });
     addAudit(data, {
@@ -1386,7 +1406,8 @@ export async function updateDepartmentDecision(formData: FormData) {
     decision.label = label;
     decision.workflowAction = decisionWorkflowActionValue(formData);
     decision.requireComment = checkbox(formData, "requireComment");
-    decision.requirePoNumber = checkbox(formData, "requirePoNumber");
+    decision.requirePoNumber =
+      invoiceFieldEnabled(data, "poNumber") && checkbox(formData, "requirePoNumber");
     decision.active = checkbox(formData, "active");
 
     if (oldLabel !== label) {
@@ -1514,6 +1535,44 @@ export async function updateBrandingSettings(formData: FormData) {
   revalidatePath("/login");
   revalidatePath("/review", "layout");
   revalidatePath("/settings", "layout");
+}
+
+export async function updateInvoiceFields(formData: FormData) {
+  await requireApUser();
+
+  await mutateData((data) => {
+    const poRequiredInUse = data.departmentDecisions.some(
+      (decision) => decision.requirePoNumber,
+    );
+    data.invoiceFields = normalizeInvoiceFields(data.invoiceFields).map((field) => {
+      const defaultField = DEFAULT_INVOICE_FIELDS.find((item) => item.key === field.key);
+      const locked = defaultField?.locked === true;
+      const requestedEnabled = formData.get(`enabled:${field.key}`) === "on";
+      const enabled =
+        locked || (field.key === "poNumber" && poRequiredInUse)
+          ? true
+          : requestedEnabled;
+      return {
+        ...field,
+        enabled,
+        requiredForAp:
+          field.locked || formData.get(`requiredForAp:${field.key}`) === "on",
+      };
+    });
+
+    addAudit(data, {
+      actor: "AP",
+      type: "invoice_fields_updated",
+      message: "Updated invoice field settings.",
+    });
+  });
+
+  revalidatePath("/");
+  revalidatePath("/department");
+  revalidatePath("/invoices", "layout");
+  revalidatePath("/review", "layout");
+  revalidatePath("/settings/invoice-fields");
+  revalidatePath("/settings/decisions");
 }
 
 export async function uploadBrandingLogo(formData: FormData) {
@@ -1725,8 +1784,9 @@ export async function submitDepartmentDecision(formData: FormData) {
   }
 
   const currentPoNumber = currentInvoice.poNumber.trim();
+  const poEnabled = invoiceFieldEnabled(currentData, "poNumber");
   const poNumberForDecision = currentPoNumber || submittedPoNumber;
-  if (decisionDefinition.requirePoNumber && !poNumberForDecision) {
+  if (poEnabled && decisionDefinition.requirePoNumber && !poNumberForDecision) {
     redirect(`/review/${invoiceId}?error=po-required&decision=${encodeURIComponent(decision)}`);
   }
 
@@ -1736,7 +1796,12 @@ export async function submitDepartmentDecision(formData: FormData) {
 
     const now = new Date().toISOString();
     const existingPoNumber = invoice.poNumber.trim();
-    if (decisionDefinition.requirePoNumber && !existingPoNumber && submittedPoNumber) {
+    if (
+      invoiceFieldEnabled(data, "poNumber") &&
+      decisionDefinition.requirePoNumber &&
+      !existingPoNumber &&
+      submittedPoNumber
+    ) {
       invoice.poNumber = submittedPoNumber;
       addAudit(data, {
         invoiceId,

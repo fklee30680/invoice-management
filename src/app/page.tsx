@@ -8,6 +8,7 @@ import {
   summaryViewPath,
   type InvoiceSummaryView,
 } from "@/lib/invoice-views";
+import { invoiceFieldEnabled } from "@/lib/invoice-fields";
 import { requireApUser } from "@/lib/session";
 import { statusBadgeClass, statusesForApWorkQueue } from "@/lib/status-config";
 import { readData } from "@/lib/store";
@@ -83,7 +84,7 @@ function ApWorkQueue({ data }: { data: AppData }) {
         <div>
           <h2 className="text-xl font-semibold">AP Review And Rework</h2>
           <p className="mt-1 text-sm text-[var(--muted)]">
-            Update metadata, assign or correct the department, and resend notification.
+            Update invoice information, assign or correct the department, and resend notification.
           </p>
         </div>
         <span className="text-sm text-[var(--muted)]">{queue.length} active</span>
@@ -105,10 +106,15 @@ function ApWorkQueue({ data }: { data: AppData }) {
                   {invoice.status}
                 </span>
                 <h3 className="mt-2 font-semibold">
-                  {invoice.vendorName || "Unknown Vendor"}{" "}
-                  <span className="font-normal text-[var(--muted)]">
-                    {invoice.invoiceNumber || "No invoice number"}
-                  </span>
+                  {invoiceFieldEnabled(data, "vendorName")
+                    ? invoice.vendorName || "Unknown Vendor"
+                    : "Invoice"}
+                  {invoiceFieldEnabled(data, "invoiceNumber") ? (
+                    <span className="font-normal text-[var(--muted)]">
+                      {" "}
+                      {invoice.invoiceNumber || "No invoice number"}
+                    </span>
+                  ) : null}
                 </h3>
                 <p className="mt-1 text-xs text-[var(--muted)]">
                   Vendor record: {invoice.vendorValidationStatus || "Not Checked"}
@@ -122,56 +128,68 @@ function ApWorkQueue({ data }: { data: AppData }) {
               </Link>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
-              <label className="text-xs font-semibold uppercase text-[var(--muted)]">
-                Vendor
-                <input
-                  className="focus-ring mt-1 min-h-10 w-full border border-[var(--line)] px-3 text-sm font-normal normal-case text-[var(--foreground)]"
-                  name="vendorName"
-                  defaultValue={invoice.vendorName}
-                />
-              </label>
-              <label className="text-xs font-semibold uppercase text-[var(--muted)]">
-                Invoice Number
-                <input
-                  className="focus-ring mt-1 min-h-10 w-full border border-[var(--line)] px-3 text-sm font-normal normal-case text-[var(--foreground)]"
-                  name="invoiceNumber"
-                  defaultValue={invoice.invoiceNumber}
-                />
-              </label>
-              <label className="text-xs font-semibold uppercase text-[var(--muted)]">
-                Invoice Date
-                <input
-                  className="focus-ring mt-1 min-h-10 w-full border border-[var(--line)] px-3 text-sm font-normal normal-case text-[var(--foreground)]"
-                  name="invoiceDate"
-                  type="date"
-                  defaultValue={invoice.invoiceDate}
-                />
-              </label>
-              <label className="text-xs font-semibold uppercase text-[var(--muted)]">
-                Amount
-                <input
-                  className="focus-ring mt-1 min-h-10 w-full border border-[var(--line)] px-3 text-sm font-normal normal-case text-[var(--foreground)]"
-                  name="amount"
-                  defaultValue={invoice.amount}
-                />
-              </label>
-              <label className="text-xs font-semibold uppercase text-[var(--muted)]">
-                PO Number
-                <input
-                  className="focus-ring mt-1 min-h-10 w-full border border-[var(--line)] px-3 text-sm font-normal normal-case text-[var(--foreground)]"
-                  name="poNumber"
-                  defaultValue={invoice.poNumber}
-                />
-              </label>
-              <label className="text-xs font-semibold uppercase text-[var(--muted)]">
-                Date Received
-                <input
-                  className="focus-ring mt-1 min-h-10 w-full border border-[var(--line)] px-3 text-sm font-normal normal-case text-[var(--foreground)]"
-                  name="dateReceived"
-                  type="date"
-                  defaultValue={invoice.dateReceived}
-                />
-              </label>
+              {invoiceFieldEnabled(data, "vendorName") ? (
+                <label className="text-xs font-semibold uppercase text-[var(--muted)]">
+                  Vendor
+                  <input
+                    className="focus-ring mt-1 min-h-10 w-full border border-[var(--line)] px-3 text-sm font-normal normal-case text-[var(--foreground)]"
+                    name="vendorName"
+                    defaultValue={invoice.vendorName}
+                  />
+                </label>
+              ) : null}
+              {invoiceFieldEnabled(data, "invoiceNumber") ? (
+                <label className="text-xs font-semibold uppercase text-[var(--muted)]">
+                  Invoice Number
+                  <input
+                    className="focus-ring mt-1 min-h-10 w-full border border-[var(--line)] px-3 text-sm font-normal normal-case text-[var(--foreground)]"
+                    name="invoiceNumber"
+                    defaultValue={invoice.invoiceNumber}
+                  />
+                </label>
+              ) : null}
+              {invoiceFieldEnabled(data, "invoiceDate") ? (
+                <label className="text-xs font-semibold uppercase text-[var(--muted)]">
+                  Invoice Date
+                  <input
+                    className="focus-ring mt-1 min-h-10 w-full border border-[var(--line)] px-3 text-sm font-normal normal-case text-[var(--foreground)]"
+                    name="invoiceDate"
+                    type="date"
+                    defaultValue={invoice.invoiceDate}
+                  />
+                </label>
+              ) : null}
+              {invoiceFieldEnabled(data, "amount") ? (
+                <label className="text-xs font-semibold uppercase text-[var(--muted)]">
+                  Amount
+                  <input
+                    className="focus-ring mt-1 min-h-10 w-full border border-[var(--line)] px-3 text-sm font-normal normal-case text-[var(--foreground)]"
+                    name="amount"
+                    defaultValue={invoice.amount}
+                  />
+                </label>
+              ) : null}
+              {invoiceFieldEnabled(data, "poNumber") ? (
+                <label className="text-xs font-semibold uppercase text-[var(--muted)]">
+                  PO Number
+                  <input
+                    className="focus-ring mt-1 min-h-10 w-full border border-[var(--line)] px-3 text-sm font-normal normal-case text-[var(--foreground)]"
+                    name="poNumber"
+                    defaultValue={invoice.poNumber}
+                  />
+                </label>
+              ) : null}
+              {invoiceFieldEnabled(data, "dateReceived") ? (
+                <label className="text-xs font-semibold uppercase text-[var(--muted)]">
+                  Date Received
+                  <input
+                    className="focus-ring mt-1 min-h-10 w-full border border-[var(--line)] px-3 text-sm font-normal normal-case text-[var(--foreground)]"
+                    name="dateReceived"
+                    type="date"
+                    defaultValue={invoice.dateReceived}
+                  />
+                </label>
+              ) : null}
               <label className="text-xs font-semibold uppercase text-[var(--muted)] sm:col-span-2">
                 Department
                 <select

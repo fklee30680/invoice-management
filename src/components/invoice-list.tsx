@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { DeleteInvoiceConfirmation } from "@/components/delete-invoice-confirmation";
+import { invoiceFieldEnabled } from "@/lib/invoice-fields";
 import { filterableStatuses, statusBadgeClass } from "@/lib/status-config";
 import type { AppData, Invoice } from "@/lib/types";
 import { currencyDisplay, formatDate } from "@/lib/utils";
@@ -272,27 +273,50 @@ export function InvoiceTable({
   filters: InvoiceFilters;
   invoices: Invoice[];
 }) {
+  const showStatus = invoiceFieldEnabled(data, "status");
+  const showVendor = invoiceFieldEnabled(data, "vendorName");
+  const showInvoice =
+    invoiceFieldEnabled(data, "invoiceNumber") || invoiceFieldEnabled(data, "invoiceDate");
+  const showPo = invoiceFieldEnabled(data, "poNumber");
+  const showAmount = invoiceFieldEnabled(data, "amount");
+  const showDepartment = invoiceFieldEnabled(data, "departmentId");
+  const showReceived = invoiceFieldEnabled(data, "dateReceived");
+  const visibleColumnCount =
+    [
+      showStatus,
+      showVendor,
+      showInvoice,
+      showPo,
+      showAmount,
+      showDepartment,
+      true,
+      true,
+      showReceived,
+      true,
+    ].filter(Boolean).length || 1;
+
   return (
     <div className="overflow-x-auto border border-[var(--line)] bg-[var(--panel)]">
       <table className="w-full min-w-[1100px] border-collapse text-left text-sm">
         <thead className="bg-[var(--panel-strong)] text-xs uppercase text-[var(--muted)]">
           <tr>
-            <SortHeader baseHref={baseHref} filters={filters} label="Status" sort="status" />
-            <SortHeader baseHref={baseHref} filters={filters} label="Vendor" sort="vendor" />
-            <SortHeader baseHref={baseHref} filters={filters} label="Invoice" sort="invoice" />
-            <SortHeader baseHref={baseHref} filters={filters} label="PO" sort="po" />
-            <SortHeader baseHref={baseHref} filters={filters} label="Amount" sort="amount" />
-            <SortHeader baseHref={baseHref} filters={filters} label="Department" sort="department" />
+            {showStatus ? <SortHeader baseHref={baseHref} filters={filters} label="Status" sort="status" /> : null}
+            {showVendor ? <SortHeader baseHref={baseHref} filters={filters} label="Vendor" sort="vendor" /> : null}
+            {showInvoice ? <SortHeader baseHref={baseHref} filters={filters} label="Invoice" sort="invoice" /> : null}
+            {showPo ? <SortHeader baseHref={baseHref} filters={filters} label="PO" sort="po" /> : null}
+            {showAmount ? <SortHeader baseHref={baseHref} filters={filters} label="Amount" sort="amount" /> : null}
+            {showDepartment ? <SortHeader baseHref={baseHref} filters={filters} label="Department" sort="department" /> : null}
             <SortHeader baseHref={baseHref} filters={filters} label="Decision" sort="decision" />
             <SortHeader baseHref={baseHref} filters={filters} label="Payment" sort="payment" />
-            <SortHeader baseHref={baseHref} filters={filters} label="Received" sort="received" />
+            {showReceived ? <SortHeader baseHref={baseHref} filters={filters} label="Received" sort="received" /> : null}
             <th className="border-b border-[var(--line)] px-3 py-3">Actions</th>
           </tr>
         </thead>
         <tbody>
           {invoices.map((invoice) => (
             <tr key={invoice.id} className="align-top hover:bg-slate-50">
-              <td className="border-b border-[var(--line)] px-3 py-3">
+              {showStatus ? (
+                <td className="border-b border-[var(--line)] px-3 py-3">
                 <span
                   className={`inline-flex border px-2 py-1 text-xs font-semibold ${statusBadgeClass(data, invoice.status)}`}
                 >
@@ -302,39 +326,56 @@ export function InvoiceTable({
                   {formatDate(invoice.statusDate)}
                 </div>
               </td>
-              <td className="border-b border-[var(--line)] px-3 py-3 font-medium">
+              ) : null}
+              {showVendor ? (
+                <td className="border-b border-[var(--line)] px-3 py-3 font-medium">
                 {invoice.vendorName || "Unknown Vendor"}
                 <div className="mt-1 text-xs font-normal text-[var(--muted)]">
                   Vendor record: {invoice.vendorValidationStatus || "Not Checked"}
                 </div>
-                <div className="mt-1 text-xs font-normal text-[var(--muted)]">
+                {invoiceFieldEnabled(data, "ocrSummary") ? (
+                  <div className="mt-1 text-xs font-normal text-[var(--muted)]">
                   {invoice.ocrSummary}
                 </div>
+                ) : null}
               </td>
-              <td className="border-b border-[var(--line)] px-3 py-3">
-                {invoice.invoiceNumber || "Not set"}
-                <div className="mt-1 text-xs text-[var(--muted)]">
-                  {formatDate(invoice.invoiceDate)}
-                </div>
-              </td>
-              <td className="border-b border-[var(--line)] px-3 py-3 font-mono text-xs">
+              ) : null}
+              {showInvoice ? (
+                <td className="border-b border-[var(--line)] px-3 py-3">
+                  {invoiceFieldEnabled(data, "invoiceNumber") ? invoice.invoiceNumber || "Not set" : null}
+                  {invoiceFieldEnabled(data, "invoiceDate") ? (
+                    <div className="mt-1 text-xs text-[var(--muted)]">
+                      {formatDate(invoice.invoiceDate)}
+                    </div>
+                  ) : null}
+                </td>
+              ) : null}
+              {showPo ? (
+                <td className="border-b border-[var(--line)] px-3 py-3 font-mono text-xs">
                 {invoice.poNumber || "Missing"}
               </td>
-              <td className="border-b border-[var(--line)] px-3 py-3">
+              ) : null}
+              {showAmount ? (
+                <td className="border-b border-[var(--line)] px-3 py-3">
                 {currencyDisplay(invoice.amount)}
               </td>
-              <td className="border-b border-[var(--line)] px-3 py-3">
+              ) : null}
+              {showDepartment ? (
+                <td className="border-b border-[var(--line)] px-3 py-3">
                 {departmentName(data, invoice.departmentId)}
               </td>
+              ) : null}
               <td className="border-b border-[var(--line)] px-3 py-3">
                 {invoice.departmentDecision || "Waiting"}
               </td>
               <td className="border-b border-[var(--line)] px-3 py-3">
                 {invoice.paymentProcessed ? "Processed" : "Not processed"}
               </td>
-              <td className="border-b border-[var(--line)] px-3 py-3">
+              {showReceived ? (
+                <td className="border-b border-[var(--line)] px-3 py-3">
                 {formatDate(invoice.dateReceived)}
               </td>
+              ) : null}
               <td className="border-b border-[var(--line)] px-3 py-3">
                 <div className="flex flex-wrap gap-2">
                   <Link
@@ -356,7 +397,7 @@ export function InvoiceTable({
           ))}
           {invoices.length === 0 ? (
             <tr>
-              <td className="px-3 py-8 text-center text-[var(--muted)]" colSpan={10}>
+              <td className="px-3 py-8 text-center text-[var(--muted)]" colSpan={visibleColumnCount}>
                 No invoices match the current view.
               </td>
             </tr>
