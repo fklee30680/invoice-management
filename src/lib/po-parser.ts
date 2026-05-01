@@ -26,6 +26,7 @@ export function defaultPoImportSettings(): PoImportSettings {
     vendorNumberColumn: "Vendor Number",
     departmentColumn: "Department",
     updateExisting: true,
+    fillMissingData: true,
   };
 }
 
@@ -40,6 +41,7 @@ export function normalizePoImportSettings(
     vendorNumberColumn: settings?.vendorNumberColumn || defaults.vendorNumberColumn,
     departmentColumn: settings?.departmentColumn || defaults.departmentColumn,
     updateExisting: settings?.updateExisting !== false,
+    fillMissingData: settings?.fillMissingData !== false,
   };
 }
 

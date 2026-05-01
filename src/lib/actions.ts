@@ -62,6 +62,7 @@ import {
   addInvoice,
   addInvoiceFile,
   createId,
+  findDepartmentByName,
   findPurchaseOrder,
   getInvoice,
   getInvoiceFile,
@@ -69,9 +70,9 @@ import {
   normalizeOrganizationDepartmentScope,
   readData,
   upsertDepartment,
-  upsertPurchaseOrder,
   upsertVendor,
 } from "./store";
+import { normalizePoNumber } from "./utils";
 import {
   STATUS_TONES,
   statusLabelForRole,
@@ -114,6 +115,15 @@ function fontValue(formData: FormData) {
 
 function checkbox(formData: FormData, key: string) {
   return formData.get(key) === "on";
+}
+
+function poListRedirect(params: Record<string, string | number>) {
+  const query = new URLSearchParams();
+  for (const [key, rawValue] of Object.entries(params)) {
+    const item = String(rawValue);
+    if (item) query.set(key, item);
+  }
+  redirect(`/uploads/po-list?${query.toString()}`);
 }
 
 function numberValue(formData: FormData, key: string, fallback = 0) {
@@ -299,10 +309,12 @@ export async function uploadPoList(formData: FormData) {
     vendorNumberColumn: value(formData, "vendorNumberColumn") || "Vendor Number",
     departmentColumn: value(formData, "departmentColumn") || "Department",
     updateExisting: checkbox(formData, "updateExisting"),
+    fillMissingData: checkbox(formData, "fillMissingData"),
   };
   const result = await parsePoUpload(file, settings);
   let imported = 0;
   let updated = 0;
+  let filled = 0;
   let skipped = 0;
   const warnings = [...result.warnings];
 
@@ -344,34 +356,85 @@ export async function uploadPoList(formData: FormData) {
           `Row ${row.rowNumber}: Vendor Number '${row.vendorNumber}' was not found in the vendor file.`,
         );
       }
-      if (existing && !settings.updateExisting) {
-        skipped += 1;
-        warnings.push(
-          `Row ${row.rowNumber}: PO ${row.poNumber} already exists and was skipped.`,
-        );
-        continue;
-      }
+      if (existing) {
+        let changed = false;
+        let rowFilled = false;
+        let rowUpdated = false;
+        const applyField = (
+          currentValue: string,
+          incomingValue: string,
+          setter: (value: string) => void,
+        ) => {
+          const nextValue = incomingValue.trim();
+          if (!nextValue) return;
+          const current = currentValue.trim();
+          if (settings.updateExisting) {
+            if (current !== nextValue) {
+              setter(nextValue);
+              changed = true;
+              if (current) rowUpdated = true;
+              else rowFilled = true;
+            }
+            return;
+          }
+          if (settings.fillMissingData && !current) {
+            setter(nextValue);
+            changed = true;
+            rowFilled = true;
+          }
+        };
 
-      const saved = upsertPurchaseOrder(
-        data,
-        row.poNumber,
-        row.vendorName,
-        row.departmentName,
-        row.vendorNumber,
-        { updateExisting: settings.updateExisting, nowIso },
-      );
-      if (!saved) {
-        skipped += 1;
-      } else if (existing) {
-        updated += 1;
+        applyField(existing.poNumber, row.poNumber, (next) => {
+          existing.poNumber = next;
+          existing.normalizedPoNumber = normalizePoNumber(next);
+        });
+        applyField(existing.vendorName, row.vendorName, (next) => {
+          existing.vendorName = next;
+        });
+        applyField(existing.vendorNumber, row.vendorNumber, (next) => {
+          existing.vendorNumber = next;
+        });
+        applyField(existing.departmentName || "", department?.name || row.departmentName, (next) => {
+          existing.departmentName = next;
+          existing.departmentId = department?.id || "";
+        });
+        if (department && !existing.departmentId) {
+          existing.departmentId = department.id;
+          changed = true;
+          rowFilled = true;
+        }
+
+        if (changed) {
+          existing.updatedAt = nowIso;
+          if (rowUpdated) updated += 1;
+          if (rowFilled) filled += 1;
+        } else {
+          skipped += 1;
+          if (!settings.updateExisting && !settings.fillMissingData) {
+            warnings.push(
+              `Row ${row.rowNumber}: PO ${row.poNumber} already exists and was skipped.`,
+            );
+          }
+        }
       } else {
+        data.purchaseOrders.push({
+          id: createId("po"),
+          poNumber: row.poNumber.trim(),
+          normalizedPoNumber: row.normalizedPoNumber,
+          vendorName: row.vendorName.trim(),
+          vendorNumber: row.vendorNumber.trim(),
+          departmentId: department?.id || "",
+          departmentName: department?.name || row.departmentName.trim(),
+          uploadedAt: nowIso,
+          updatedAt: nowIso,
+        });
         imported += 1;
       }
     }
     addAudit(data, {
       actor: "AP",
       type: "po_upload",
-      message: `Imported ${imported} purchase orders from ${file.name}. Updated ${updated}. Skipped ${skipped}. Warnings: ${warnings.length}.`,
+      message: `Imported ${imported} purchase orders from ${file.name}. Updated ${updated}. Filled missing data on ${filled}. Skipped ${skipped}. Warnings: ${warnings.length}.`,
     });
     if (warnings.length > 0) {
       addAudit(data, {
@@ -388,11 +451,150 @@ export async function uploadPoList(formData: FormData) {
   const params = new URLSearchParams({
     imported: String(imported),
     updated: String(updated),
+    filled: String(filled),
     skipped: String(skipped),
     warnings: String(warnings.length),
     errors: String(result.errors.length),
   });
   redirect(`/uploads/po-list?${params.toString()}`);
+}
+
+export async function updatePurchaseOrder(formData: FormData) {
+  await requireApUser();
+  const purchaseOrderId = value(formData, "purchaseOrderId");
+  const poNumber = value(formData, "poNumber");
+  const vendorName = value(formData, "vendorName");
+  const vendorNumber = value(formData, "vendorNumber");
+  const departmentName = value(formData, "departmentName");
+  if (!purchaseOrderId || !poNumber || !vendorName || !departmentName) {
+    poListRedirect({
+      message: "PO Number, Vendor Name, and Department are required.",
+      messageType: "error",
+    });
+  }
+
+  const normalizedPoNumber = normalizePoNumber(poNumber);
+  let warning = "";
+  let resultType = "success";
+
+  await mutateData((data) => {
+    const purchaseOrder = data.purchaseOrders.find(
+      (item) => item.id === purchaseOrderId,
+    );
+    if (!purchaseOrder) {
+      warning = "PO was not found.";
+      resultType = "error";
+      return;
+    }
+    const duplicate = data.purchaseOrders.find(
+      (item) =>
+        item.id !== purchaseOrderId &&
+        item.normalizedPoNumber === normalizedPoNumber,
+    );
+    if (duplicate) {
+      warning = `PO ${poNumber} already exists.`;
+      resultType = "error";
+      return;
+    }
+
+    const department = findDepartmentByName(data, departmentName);
+    const vendor = vendorNumber ? findVendorByNumber(data, vendorNumber) : undefined;
+    if (!department) {
+      warning = `Department '${departmentName}' was not found in department setup.`;
+      resultType = "warning";
+    } else if (!vendorNumber) {
+      warning = "Vendor Number is blank.";
+      resultType = "warning";
+    } else if (!vendor) {
+      warning = `Vendor Number '${vendorNumber}' was not found in the vendor file.`;
+      resultType = "warning";
+    } else if (
+      vendor.vendorName.trim().toLowerCase() !== vendorName.trim().toLowerCase()
+    ) {
+      warning = `Vendor Number '${vendorNumber}' belongs to ${vendor.vendorName} in the vendor file.`;
+      resultType = "warning";
+    }
+
+    purchaseOrder.poNumber = poNumber;
+    purchaseOrder.normalizedPoNumber = normalizedPoNumber;
+    purchaseOrder.vendorName = vendorName;
+    purchaseOrder.vendorNumber = vendorNumber;
+    purchaseOrder.departmentId = department?.id || "";
+    purchaseOrder.departmentName = department?.name || departmentName;
+    purchaseOrder.updatedAt = new Date().toISOString();
+    addAudit(data, {
+      actor: "AP",
+      type: "po_updated",
+      message: `AP updated PO ${poNumber}.`,
+    });
+  });
+
+  revalidatePath("/uploads/po-list");
+  poListRedirect({
+    message: warning || `Updated PO ${poNumber}.`,
+    messageType: resultType,
+  });
+}
+
+export async function deletePurchaseOrder(formData: FormData) {
+  await requireApUser();
+  const purchaseOrderId = value(formData, "purchaseOrderId");
+  if (!purchaseOrderId || value(formData, "confirmDelete") !== "yes") {
+    poListRedirect({
+      message: "PO delete confirmation was missing.",
+      messageType: "error",
+    });
+  }
+
+  let deletedPo = "";
+  await mutateData((data) => {
+    const purchaseOrder = data.purchaseOrders.find(
+      (item) => item.id === purchaseOrderId,
+    );
+    if (!purchaseOrder) return;
+    deletedPo = purchaseOrder.poNumber;
+    data.purchaseOrders = data.purchaseOrders.filter(
+      (item) => item.id !== purchaseOrderId,
+    );
+    addAudit(data, {
+      actor: "AP",
+      type: "po_deleted",
+      message: `AP deleted PO ${purchaseOrder.poNumber}.`,
+    });
+  });
+
+  revalidatePath("/uploads/po-list");
+  poListRedirect({
+    message: deletedPo ? `Deleted PO ${deletedPo}.` : "PO was not found.",
+    messageType: deletedPo ? "success" : "error",
+  });
+}
+
+export async function deleteAllPurchaseOrders(formData: FormData) {
+  await requireApUser();
+  if (value(formData, "confirmPhrase") !== "DELETE") {
+    poListRedirect({
+      message: "Type DELETE to confirm deleting all POs.",
+      messageType: "error",
+    });
+  }
+
+  let deletedCount = 0;
+  await mutateData((data) => {
+    deletedCount = data.purchaseOrders.length;
+    data.purchaseOrders = [];
+    addAudit(data, {
+      actor: "AP",
+      type: "po_all_deleted",
+      message: `AP deleted all POs from the PO list. ${deletedCount} records removed.`,
+    });
+  });
+
+  revalidatePath("/uploads/po-list");
+  poListRedirect({
+    message: `Deleted all POs. ${deletedCount} records removed.`,
+    messageType: "success",
+  });
 }
 
 export async function uploadVendorList(formData: FormData) {

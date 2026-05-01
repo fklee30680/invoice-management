@@ -48,6 +48,7 @@ export type PoImportSettings = {
   vendorNumberColumn: string;
   departmentColumn: string;
   updateExisting: boolean;
+  fillMissingData: boolean;
 };
 
 export type DashboardBoxMetricType = "count" | "dollars" | "countAndDollars";

@@ -82,5 +82,6 @@ describe("parsePoUpload", () => {
       ...defaultPoImportSettings(),
       headerRow: 1,
     });
+    assert.equal(normalizePoImportSettings({}).fillMissingData, true);
   });
 });

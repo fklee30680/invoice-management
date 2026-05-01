@@ -1,7 +1,12 @@
-import { uploadPoList } from "@/lib/actions";
+import {
+  deleteAllPurchaseOrders,
+  updatePurchaseOrder,
+  uploadPoList,
+} from "@/lib/actions";
+import { DeletePoConfirmation } from "@/components/delete-po-confirmation";
 import { requireApUser } from "@/lib/session";
 import { readData } from "@/lib/store";
-import { formatDate } from "@/lib/utils";
+import { formatDate, normalizePoNumber } from "@/lib/utils";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -69,11 +74,21 @@ export default async function PoListUploadPage({
   const result = {
     imported: one(query.imported),
     updated: one(query.updated),
+    filled: one(query.filled),
     skipped: one(query.skipped),
     warnings: one(query.warnings),
     errors: one(query.errors),
   };
+  const message = one(query.message);
+  const messageType = one(query.messageType);
+  const search = one(query.search).toLowerCase();
   const hasResult = Object.values(result).some(Boolean);
+  const filteredPurchaseOrders = data.purchaseOrders.filter((po) =>
+    [po.poNumber, po.vendorName, po.vendorNumber, po.departmentName]
+      .join(" ")
+      .toLowerCase()
+      .includes(search),
+  );
 
   return (
     <main className="min-h-screen px-4 py-6 sm:px-6 lg:px-8">
@@ -96,8 +111,23 @@ export default async function PoListUploadPage({
             }`}
           >
             Imported {result.imported || "0"} POs. Updated {result.updated || "0"}.
-            Skipped {result.skipped || "0"}. Warnings {result.warnings || "0"}.
-            Errors {result.errors || "0"}.
+            Filled missing data on {result.filled || "0"}. Skipped{" "}
+            {result.skipped || "0"}. Warnings {result.warnings || "0"}. Errors{" "}
+            {result.errors || "0"}.
+          </section>
+        ) : null}
+
+        {message ? (
+          <section
+            className={`border px-4 py-3 text-sm ${
+              messageType === "error"
+                ? "border-red-300 bg-red-50 text-red-900"
+                : messageType === "warning"
+                  ? "border-amber-300 bg-amber-50 text-amber-900"
+                  : "border-emerald-300 bg-emerald-50 text-emerald-900"
+            }`}
+          >
+            {message}
           </section>
         ) : null}
 
@@ -162,7 +192,24 @@ export default async function PoListUploadPage({
                 <span>
                   <span className="block font-semibold">Update existing POs</span>
                   <span className="block text-xs text-[var(--muted)]">
-                    Rows with an existing PO number update the saved PO record.
+                    Imported nonblank values overwrite saved values.
+                  </span>
+                </span>
+              </label>
+              <label className="flex min-h-10 items-center gap-3 self-end border border-[var(--line)] bg-white px-3 py-2 text-sm">
+                <input
+                  className="h-4 w-4 accent-[var(--accent)]"
+                  defaultChecked={settings.fillMissingData}
+                  name="fillMissingData"
+                  type="checkbox"
+                />
+                <span>
+                  <span className="block font-semibold">
+                    Fill missing data on existing POs
+                  </span>
+                  <span className="block text-xs text-[var(--muted)]">
+                    Imported values fill blank fields without overwriting saved
+                    values.
                   </span>
                 </span>
               </label>
@@ -194,9 +241,20 @@ export default async function PoListUploadPage({
               routing.
             </p>
           </div>
+          <form className="flex max-w-lg gap-2" method="get">
+            <input
+              className="focus-ring min-h-10 flex-1 border border-[var(--line)] bg-white px-3 text-sm"
+              defaultValue={one(query.search)}
+              name="search"
+              placeholder="Search PO, vendor, vendor number, or department"
+            />
+            <button className="focus-ring border border-[var(--line)] px-4 py-2 text-sm font-semibold hover:bg-slate-100">
+              Search
+            </button>
+          </form>
 
           <div className="overflow-x-auto border border-[var(--line)] bg-[var(--panel)]">
-            <table className="w-full min-w-[920px] border-collapse text-left text-sm">
+            <table className="w-full min-w-[1120px] border-collapse text-left text-sm">
               <thead className="bg-[var(--panel-strong)] text-xs uppercase text-[var(--muted)]">
                 <tr>
                   <th className="border-b border-[var(--line)] px-3 py-3">PO</th>
@@ -215,46 +273,127 @@ export default async function PoListUploadPage({
                   <th className="border-b border-[var(--line)] px-3 py-3">
                     Last Updated
                   </th>
+                  <th className="border-b border-[var(--line)] px-3 py-3">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {data.purchaseOrders.map((po) => (
-                  <tr className="align-top hover:bg-slate-50" key={po.id}>
-                    <td className="border-b border-[var(--line)] px-3 py-3 font-mono text-xs">
-                      {po.poNumber}
-                    </td>
-                    <td className="border-b border-[var(--line)] px-3 py-3 font-medium">
-                      {po.vendorName}
-                    </td>
-                    <td className="border-b border-[var(--line)] px-3 py-3">
-                      {po.vendorNumber || "Not set"}
-                    </td>
-                    <td className="border-b border-[var(--line)] px-3 py-3">
-                      {po.departmentId
-                        ? departmentName(data, po.departmentId)
-                        : po.departmentName || "Unassigned"}
-                    </td>
-                    <td className="border-b border-[var(--line)] px-3 py-3">
-                      {formatDate(po.uploadedAt)}
-                    </td>
-                    <td className="border-b border-[var(--line)] px-3 py-3">
-                      {po.updatedAt ? formatDate(po.updatedAt) : "Not set"}
-                    </td>
-                  </tr>
-                ))}
-                {data.purchaseOrders.length === 0 ? (
+                {filteredPurchaseOrders.map((po) => {
+                  const rowFormId = `po-${po.id}`;
+                  const invoiceReferenceCount = data.invoices.filter(
+                    (invoice) =>
+                      normalizePoNumber(invoice.poNumber) === po.normalizedPoNumber,
+                  ).length;
+
+                  return (
+                    <tr className="align-top hover:bg-slate-50" key={po.id}>
+                      <td className="border-b border-[var(--line)] px-3 py-3 font-mono text-xs">
+                        <form action={updatePurchaseOrder} id={rowFormId}>
+                          <input
+                            name="purchaseOrderId"
+                            type="hidden"
+                            value={po.id}
+                          />
+                        </form>
+                        <input
+                          className="focus-ring min-h-9 w-full border border-[var(--line)] bg-white px-2 text-xs font-normal normal-case text-[var(--foreground)]"
+                          defaultValue={po.poNumber}
+                          form={rowFormId}
+                          name="poNumber"
+                          required
+                        />
+                      </td>
+                      <td className="border-b border-[var(--line)] px-3 py-3 font-medium">
+                        <input
+                          className="focus-ring min-h-9 w-full border border-[var(--line)] bg-white px-2 text-sm font-normal normal-case text-[var(--foreground)]"
+                          defaultValue={po.vendorName}
+                          form={rowFormId}
+                          name="vendorName"
+                          required
+                        />
+                      </td>
+                      <td className="border-b border-[var(--line)] px-3 py-3">
+                        <input
+                          className="focus-ring min-h-9 w-full border border-[var(--line)] bg-white px-2 text-sm font-normal normal-case text-[var(--foreground)]"
+                          defaultValue={po.vendorNumber}
+                          form={rowFormId}
+                          name="vendorNumber"
+                        />
+                      </td>
+                      <td className="border-b border-[var(--line)] px-3 py-3">
+                        <input
+                          className="focus-ring min-h-9 w-full border border-[var(--line)] bg-white px-2 text-sm font-normal normal-case text-[var(--foreground)]"
+                          defaultValue={
+                            po.departmentId
+                              ? departmentName(data, po.departmentId)
+                              : po.departmentName
+                          }
+                          form={rowFormId}
+                          name="departmentName"
+                          required
+                        />
+                      </td>
+                      <td className="border-b border-[var(--line)] px-3 py-3">
+                        {formatDate(po.uploadedAt)}
+                      </td>
+                      <td className="border-b border-[var(--line)] px-3 py-3">
+                        {po.updatedAt ? formatDate(po.updatedAt) : "Not set"}
+                      </td>
+                      <td className="border-b border-[var(--line)] px-3 py-3">
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            className="focus-ring border border-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-[var(--accent)] hover:bg-teal-50"
+                            form={rowFormId}
+                          >
+                            Save
+                          </button>
+                          <DeletePoConfirmation
+                            invoiceReferenceCount={invoiceReferenceCount}
+                            purchaseOrderId={po.id}
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {filteredPurchaseOrders.length === 0 ? (
                   <tr>
                     <td
                       className="px-3 py-8 text-center text-[var(--muted)]"
-                      colSpan={6}
+                      colSpan={7}
                     >
-                      No purchase orders have been imported.
+                      {data.purchaseOrders.length === 0
+                        ? "No purchase orders have been imported."
+                        : "No purchase orders match the current search."}
                     </td>
                   </tr>
                 ) : null}
               </tbody>
             </table>
           </div>
+        </section>
+
+        <section className="border border-red-200 bg-red-50 p-4">
+          <h2 className="text-base font-semibold text-red-900">Danger Zone</h2>
+          <p className="mt-1 max-w-3xl text-sm text-red-900">
+            Delete all POs? This removes the entire imported PO list. Existing
+            invoices will not be deleted, but PO validation will no longer find
+            these POs.
+          </p>
+          <form
+            action={deleteAllPurchaseOrders}
+            className="mt-3 flex flex-col gap-3 sm:flex-row"
+          >
+            <input
+              className="focus-ring min-h-10 border border-red-300 bg-white px-3 text-sm"
+              name="confirmPhrase"
+              placeholder="Type DELETE"
+            />
+            <button className="focus-ring bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800">
+              Delete All POs
+            </button>
+          </form>
         </section>
       </div>
     </main>
