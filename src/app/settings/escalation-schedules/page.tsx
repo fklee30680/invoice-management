@@ -3,6 +3,7 @@ import {
   deleteEscalationSchedule,
   updateEscalationSchedule,
 } from "@/lib/actions";
+import { StatusMultiSelect } from "@/components/status-multi-select";
 import { readData } from "@/lib/store";
 import { formatDateTime } from "@/lib/utils";
 
@@ -51,6 +52,30 @@ function usage(scheduleId: string, data: Awaited<ReturnType<typeof readData>>) {
   };
 }
 
+function statusSummary(
+  statusIds: string[],
+  statuses: Awaited<ReturnType<typeof readData>>["statuses"],
+) {
+  if (statusIds.length === 0) return "No statuses selected";
+  const labels = statusIds.map((id) => {
+    const status = statuses.find((item) => item.id === id);
+    if (!status) return `${id} (unavailable)`;
+    return status.includeInEscalation ? status.label : `${status.label} (inactive)`;
+  });
+  if (labels.length <= 2) return labels.join(", ");
+  return `${labels.length} statuses selected`;
+}
+
+function hasUnavailableStatus(
+  statusIds: string[],
+  statuses: Awaited<ReturnType<typeof readData>>["statuses"],
+) {
+  return statusIds.some((id) => {
+    const status = statuses.find((item) => item.id === id);
+    return !status || !status.includeInEscalation;
+  });
+}
+
 export default async function EscalationSchedulesPage() {
   const data = await readData();
 
@@ -66,7 +91,7 @@ export default async function EscalationSchedulesPage() {
 
       <form
         action={addEscalationSchedule}
-        className="grid gap-3 border border-[var(--line)] bg-[var(--panel)] p-4 lg:grid-cols-[1fr_1.5fr_150px_120px_auto]"
+        className="grid gap-3 border border-[var(--line)] bg-[var(--panel)] p-4 lg:grid-cols-[1fr_1.5fr_160px_170px_120px_auto]"
       >
         <label className="text-xs font-semibold uppercase text-[var(--muted)]">
           Schedule Name
@@ -79,6 +104,12 @@ export default async function EscalationSchedulesPage() {
         <label className="text-xs font-semibold uppercase text-[var(--muted)]">
           Days To Notify
           <input className="focus-ring mt-1 min-h-10 w-full border border-[var(--line)] bg-white px-3 text-sm font-normal normal-case text-[var(--foreground)]" min={0} name="daysToNotify" required type="number" />
+        </label>
+        <label className="text-xs font-semibold uppercase text-[var(--muted)]">
+          Statuses
+          <div className="mt-1">
+            <StatusMultiSelect statuses={data.statuses} />
+          </div>
         </label>
         <label className="text-xs font-semibold uppercase text-[var(--muted)]">
           Sort Order
@@ -98,6 +129,7 @@ export default async function EscalationSchedulesPage() {
             <tr>
               <th className="border-b border-[var(--line)] px-3 py-3">Schedule</th>
               <th className="border-b border-[var(--line)] px-3 py-3">Days</th>
+              <th className="border-b border-[var(--line)] px-3 py-3">Statuses</th>
               <th className="border-b border-[var(--line)] px-3 py-3">Assignments</th>
               <th className="border-b border-[var(--line)] px-3 py-3">Dates</th>
               <th className="border-b border-[var(--line)] px-3 py-3">Actions</th>
@@ -120,6 +152,20 @@ export default async function EscalationSchedulesPage() {
                   <td className="border-b border-[var(--line)] px-3 py-3">
                     <input className="focus-ring min-h-10 w-full border border-[var(--line)] bg-white px-3 text-sm" defaultValue={schedule.daysToNotify} form={formId} min={0} name="daysToNotify" required type="number" />
                     <input className="focus-ring mt-2 min-h-10 w-full border border-[var(--line)] bg-white px-3 text-sm" defaultValue={schedule.sortOrder} form={formId} name="sortOrder" placeholder="Sort order" type="number" />
+                  </td>
+                  <td className="border-b border-[var(--line)] px-3 py-3">
+                    <StatusMultiSelect
+                      initialSelected={schedule.statusIds || []}
+                      statuses={data.statuses}
+                    />
+                    <div className="mt-2 text-xs text-[var(--muted)]">
+                      {statusSummary(schedule.statusIds || [], data.statuses)}
+                    </div>
+                    {hasUnavailableStatus(schedule.statusIds || [], data.statuses) ? (
+                      <div className="mt-1 text-xs font-semibold text-amber-700">
+                        Some selected statuses are inactive or unavailable.
+                      </div>
+                    ) : null}
                   </td>
                   <td className="border-b border-[var(--line)] px-3 py-3">
                     <div>{counts.contacts} contacts</div>
@@ -153,7 +199,7 @@ export default async function EscalationSchedulesPage() {
             })}
             {data.escalationSchedules.length === 0 ? (
               <tr>
-                <td className="px-3 py-8 text-center text-[var(--muted)]" colSpan={5}>
+                <td className="px-3 py-8 text-center text-[var(--muted)]" colSpan={6}>
                   No escalation schedules have been configured.
                 </td>
               </tr>

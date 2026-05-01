@@ -1,5 +1,4 @@
 import { sendEscalationNotification } from "./email";
-import { statusesForEscalation } from "./status-config";
 import { addAudit, createId, mutateData, readData } from "./store";
 import type {
   AppData,
@@ -285,9 +284,15 @@ function placeholderValues(
 }
 
 function evaluateEscalations(data: AppData, now = new Date()) {
-  const eligibleStatuses = statusesForEscalation(data);
+  const eligibleStatuses = data.statuses.filter((status) => status.includeInEscalation);
+  const eligibleStatusLabels = eligibleStatuses.map((status) => status.label);
+  const eligibleStatusIds = new Set(eligibleStatuses.map((status) => status.id));
   const schedules = [...data.escalationSchedules]
-    .filter((schedule) => schedule.enabled)
+    .filter(
+      (schedule) =>
+        schedule.enabled &&
+        schedule.statusIds.some((statusId) => eligibleStatusIds.has(statusId)),
+    )
     .sort((left, right) => left.sortOrder - right.sortOrder);
   const templates = [...data.escalationTemplates]
     .filter((template) => template.enabled)
@@ -296,7 +301,9 @@ function evaluateEscalations(data: AppData, now = new Date()) {
   const skippedMessages: string[] = [];
 
   for (const invoice of data.invoices) {
-    if (!eligibleStatuses.includes(invoice.status)) continue;
+    if (!eligibleStatusLabels.includes(invoice.status)) continue;
+    const invoiceStatus = eligibleStatuses.find((status) => status.label === invoice.status);
+    if (!invoiceStatus) continue;
     const routedAt = invoice.routedAt || invoice.notificationSentAt || "";
     if (!routedAt) continue;
 
@@ -308,6 +315,7 @@ function evaluateEscalations(data: AppData, now = new Date()) {
     );
 
     for (const schedule of schedules) {
+      if (!schedule.statusIds.includes(invoiceStatus.id)) continue;
       if (businessDaysWaiting < schedule.daysToNotify) continue;
       for (const template of templates.filter((item) =>
         item.scheduleIds.includes(schedule.id),

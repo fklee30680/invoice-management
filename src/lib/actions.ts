@@ -1251,15 +1251,19 @@ export async function deleteEscalationTemplate(formData: FormData) {
 export async function addEscalationSchedule(formData: FormData) {
   await requireApUser();
   const name = value(formData, "name");
+  const enabled = checkbox(formData, "enabled");
+  const statusIds = idList(formData, "statusIds");
   if (!name) return;
+  if (enabled && statusIds.length === 0) return;
 
   await mutateData((data) => {
     data.escalationSchedules.push({
       id: createId("schedule"),
       name,
       description: value(formData, "description"),
-      enabled: checkbox(formData, "enabled"),
+      enabled,
       daysToNotify: Math.max(numberValue(formData, "daysToNotify", 0), 0),
+      statusIds,
       businessDayRuleId: value(formData, "businessDayRuleId"),
       sortOrder: numberValue(formData, "sortOrder", data.escalationSchedules.length + 1),
       createdAt: new Date().toISOString(),
@@ -1281,15 +1285,19 @@ export async function updateEscalationSchedule(formData: FormData) {
   await requireApUser();
   const scheduleId = value(formData, "scheduleId");
   const name = value(formData, "name");
+  const enabled = checkbox(formData, "enabled");
+  const statusIds = idList(formData, "statusIds");
   if (!scheduleId || !name) return;
+  if (enabled && statusIds.length === 0) return;
 
   await mutateData((data) => {
     const schedule = data.escalationSchedules.find((item) => item.id === scheduleId);
     if (!schedule) return;
     schedule.name = name;
     schedule.description = value(formData, "description");
-    schedule.enabled = checkbox(formData, "enabled");
+    schedule.enabled = enabled;
     schedule.daysToNotify = Math.max(numberValue(formData, "daysToNotify", 0), 0);
+    schedule.statusIds = statusIds;
     schedule.businessDayRuleId = value(formData, "businessDayRuleId");
     schedule.sortOrder = numberValue(formData, "sortOrder", schedule.sortOrder);
     schedule.updatedAt = new Date().toISOString();

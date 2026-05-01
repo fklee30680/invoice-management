@@ -177,12 +177,19 @@ function normalizeEscalationSchedules(data: AppData) {
   const schedules = Array.isArray(data.escalationSchedules)
     ? data.escalationSchedules
     : [];
+  const escalationStatusIds = (data.statuses || defaultStatuses())
+    .filter((status) => status.includeInEscalation)
+    .map((status) => status.id);
   const normalized = schedules.map((schedule) => ({
     id: schedule.id || createId("schedule"),
     name: schedule.name || "Escalation Schedule",
     description: schedule.description || "",
     enabled: schedule.enabled !== false,
     daysToNotify: Math.max(Number(schedule.daysToNotify) || 0, 0),
+    statusIds:
+      Array.isArray(schedule.statusIds) && schedule.statusIds.length > 0
+        ? schedule.statusIds.filter(Boolean)
+        : escalationStatusIds,
     businessDayRuleId: schedule.businessDayRuleId || "",
     sortOrder: Number(schedule.sortOrder) || 0,
     createdAt: schedule.createdAt || new Date().toISOString(),
@@ -201,6 +208,7 @@ function normalizeEscalationSchedules(data: AppData) {
       description: "Migrated from template Days to Notify.",
       enabled: true,
       daysToNotify,
+      statusIds: escalationStatusIds,
       businessDayRuleId: "",
       sortOrder: normalized.length + 1,
       createdAt: new Date().toISOString(),

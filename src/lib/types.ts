@@ -97,6 +97,7 @@ export type EscalationSchedule = {
   description?: string;
   enabled: boolean;
   daysToNotify: number;
+  statusIds: string[];
   businessDayRuleId?: string;
   sortOrder: number;
   createdAt: string;

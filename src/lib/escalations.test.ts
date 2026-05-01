@@ -91,6 +91,7 @@ function baseData(): AppData {
         description: "",
         enabled: true,
         daysToNotify: 1,
+        statusIds: ["status-routed"],
         sortOrder: 1,
         createdAt: "2026-04-24T19:00:00.000Z",
         updatedAt: "2026-04-24T19:00:00.000Z",
@@ -184,6 +185,18 @@ describe("findEscalationCandidates", () => {
   it("requires status escalation eligibility", () => {
     const data = baseData();
     data.statuses[0].includeInEscalation = false;
+    assert.equal(findEscalationCandidates(data, new Date("2026-04-27T13:00:00.000Z")).length, 0);
+  });
+
+  it("requires the invoice status to be selected on the schedule", () => {
+    const data = baseData();
+    data.escalationSchedules[0].statusIds = ["status-other"];
+    assert.equal(findEscalationCandidates(data, new Date("2026-04-27T13:00:00.000Z")).length, 0);
+  });
+
+  it("does not run a schedule with no selected statuses", () => {
+    const data = baseData();
+    data.escalationSchedules[0].statusIds = [];
     assert.equal(findEscalationCandidates(data, new Date("2026-04-27T13:00:00.000Z")).length, 0);
   });
 
