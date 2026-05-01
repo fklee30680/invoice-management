@@ -28,6 +28,7 @@ import {
   defaultPaymentFileSettings,
   normalizePaymentFileSettings,
 } from "./payment-file";
+import { normalizeInvoiceDuplicateState } from "./duplicate-invoices";
 import { defaultMenuSettings, normalizeMenuSettings } from "./menu-registry";
 import {
   normalizePoValidationSettings,
@@ -332,18 +333,26 @@ function normalizeData(data: AppData): AppData {
     const legacyStatus = String(invoice.status);
     const notificationSentAt = invoice.notificationSentAt || "";
     const routedAt = invoice.routedAt || notificationSentAt || "";
-    const normalizedInvoice = normalizeVendorValidationState(normalizePoValidationStatus({
-      ...invoice,
-      paymentProcessed: invoice.paymentProcessed === true,
-      dateUploaded:
-        invoice.dateUploaded || invoice.createdAt?.slice(0, 10) || invoice.dateReceived || "",
-      dateSubmittedToDepartment:
-        invoice.dateSubmittedToDepartment || notificationSentAt.slice(0, 10) || "",
-      statusDate: invoice.statusDate || invoice.updatedAt?.slice(0, 10) || "",
-      routedAt,
-      escalations: invoice.escalations || [],
-      notificationSentAt,
-    }), vendorData);
+    const normalizedInvoice = normalizeInvoiceDuplicateState(
+      normalizeVendorValidationState(
+        normalizePoValidationStatus({
+          ...invoice,
+          paymentProcessed: invoice.paymentProcessed === true,
+          dateUploaded:
+            invoice.dateUploaded ||
+            invoice.createdAt?.slice(0, 10) ||
+            invoice.dateReceived ||
+            "",
+          dateSubmittedToDepartment:
+            invoice.dateSubmittedToDepartment || notificationSentAt.slice(0, 10) || "",
+          statusDate: invoice.statusDate || invoice.updatedAt?.slice(0, 10) || "",
+          routedAt,
+          escalations: invoice.escalations || [],
+          notificationSentAt,
+        }),
+        vendorData,
+      ),
+    );
     if (legacyStatus === "OCR Processing") {
       return { ...normalizedInvoice, status: "Needs AP Review" as const };
     }

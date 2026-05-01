@@ -23,6 +23,10 @@ import {
   sourceLabel,
 } from "./payment-file";
 import {
+  DUPLICATE_ATTENTION_REASON,
+  findDuplicateInvoices,
+} from "./duplicate-invoices";
+import {
   DEFAULT_INVOICE_FIELDS,
   invoiceFieldEnabled,
   normalizeInvoiceFields,
@@ -170,6 +174,52 @@ function setInvoiceStatus(invoice: Invoice, status: string, now = new Date()) {
     invoice.status = status;
     invoice.statusDate = now.toISOString().slice(0, 10);
   }
+}
+
+function appendAttentionReason(invoice: Invoice, reason: string) {
+  const reasons = (invoice.apAttentionReason || "")
+    .split(";")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (!reasons.includes(reason)) reasons.push(reason);
+  invoice.requiresApAttention = true;
+  invoice.apAttentionReason = reasons.join("; ");
+}
+
+function clearAttentionReason(invoice: Invoice, reason: string) {
+  const reasons = (invoice.apAttentionReason || "")
+    .split(";")
+    .map((item) => item.trim())
+    .filter((item) => item && item !== reason);
+  invoice.apAttentionReason = reasons.join("; ");
+  invoice.requiresApAttention = reasons.length > 0;
+}
+
+function duplicateKey(invoice: Invoice) {
+  return [
+    invoice.vendorNumber || invoice.vendorName || "",
+    invoice.invoiceNumber || "",
+  ]
+    .map((item) => item.trim().toUpperCase())
+    .join("|");
+}
+
+function applyDuplicateCheck(
+  data: Awaited<ReturnType<typeof readData>>,
+  invoice: Invoice,
+  nowIso: string,
+) {
+  const result = findDuplicateInvoices(invoice, data.invoices);
+  invoice.duplicateCheckStatus = result.status;
+  invoice.duplicateCheckMessage = result.message;
+  invoice.duplicateCheckCheckedAt = nowIso;
+  invoice.duplicateMatchedInvoiceIds = result.matchedInvoices.map((match) => match.invoiceId);
+  if (result.status === "Potential Duplicate") {
+    appendAttentionReason(invoice, DUPLICATE_ATTENTION_REASON);
+  } else {
+    clearAttentionReason(invoice, DUPLICATE_ATTENTION_REASON);
+  }
+  return result;
 }
 
 async function notifyDepartment(invoice: Invoice) {
@@ -481,6 +531,14 @@ export async function uploadInvoices(formData: FormData) {
           applyVendorValidationWarning(invoice, vendorValidation, "OCR", now);
         }
 
+        const duplicateResult = applyDuplicateCheck(data, invoice, now);
+        if (duplicateResult.status === "Potential Duplicate" && canNotify) {
+          setInvoiceStatus(invoice, statusLabelForRole(data, "apReview"), new Date(now));
+          invoice.routedAt = "";
+          invoice.dateSubmittedToDepartment = "";
+          invoice.notificationSentAt = "";
+        }
+
         addInvoice(data, invoice);
         addAudit(data, {
           invoiceId,
@@ -507,6 +565,14 @@ export async function uploadInvoices(formData: FormData) {
               ? `Vendor validated from vendor file: ${vendorValidation.vendor.vendorName} (${vendorValidation.vendor.vendorNumber || "No number"}).`
               : "Vendor could not be validated from the vendor file.",
         });
+        if (duplicateResult.status === "Potential Duplicate") {
+          addAudit(data, {
+            invoiceId,
+            actor: "System",
+            type: "duplicate_detected_upload",
+            message: `Potential duplicate invoice detected for vendor ${invoice.vendorNumber || invoice.vendorName || "Unknown"} and invoice number ${invoice.invoiceNumber || "Not set"}.`,
+          });
+        }
       });
 
       const data = await mutateData((current) => current);
@@ -533,6 +599,8 @@ function applyApInvoiceMetadataUpdate(
   );
   const previousStatus = invoice.status;
   const previousRoutedAt = invoice.routedAt;
+  const previousDuplicateStatus = invoice.duplicateCheckStatus || "Not Checked";
+  const previousDuplicateKey = duplicateKey(invoice);
   const now = new Date();
   const nowIso = now.toISOString();
   const poValidation = validatePoCandidate(data, invoice, formData);
@@ -592,6 +660,37 @@ function applyApInvoiceMetadataUpdate(
   if (invoiceFieldEnabled(data, "departmentId") && formData.has("departmentId")) {
     invoice.departmentId = value(formData, "departmentId");
   }
+  const duplicateKeyChanged = previousDuplicateKey !== duplicateKey(invoice);
+  if (duplicateKeyChanged && previousDuplicateStatus === "Reviewed Not Duplicate") {
+    addAudit(data, {
+      invoiceId: invoice.id,
+      actor: "AP",
+      type: "duplicate_check_reset",
+      message: "Duplicate check was reset because vendor or invoice number changed.",
+    });
+  }
+  const shouldRunDuplicateCheck =
+    previousDuplicateStatus !== "Reviewed Not Duplicate" || duplicateKeyChanged;
+  if (shouldRunDuplicateCheck) {
+    const duplicateResult = applyDuplicateCheck(data, invoice, nowIso);
+    if (duplicateResult.status === "Potential Duplicate") {
+      if (previousDuplicateStatus !== "Potential Duplicate" || duplicateKeyChanged) {
+        addAudit(data, {
+          invoiceId: invoice.id,
+          actor: "AP",
+          type: "duplicate_detected_update",
+          message: "Potential duplicate invoice detected after vendor or invoice number update.",
+        });
+      }
+    } else if (previousDuplicateStatus === "Potential Duplicate") {
+      addAudit(data, {
+        invoiceId: invoice.id,
+        actor: "AP",
+        type: "duplicate_resolved",
+        message: "Duplicate check resolved. No duplicate found.",
+      });
+    }
+  }
   if (invoice.departmentId && !invoiceVendorValidated(invoice)) {
     invoice.departmentId = previousDepartmentId;
     invoice.requiresApAttention = true;
@@ -604,6 +703,17 @@ function applyApInvoiceMetadataUpdate(
       message: "Routing blocked because the invoice vendor was not validated from the vendor file.",
     });
     return { shouldNotify: false, blocked: "vendor-required" };
+  }
+  if (invoice.departmentId && invoice.duplicateCheckStatus === "Potential Duplicate") {
+    invoice.departmentId = previousDepartmentId;
+    invoice.updatedAt = nowIso;
+    addAudit(data, {
+      invoiceId: invoice.id,
+      actor: "AP",
+      type: "routing_blocked_duplicate",
+      message: "Routing blocked because potential duplicate invoice has not been reviewed.",
+    });
+    return { shouldNotify: false, blocked: "duplicate-review-required" };
   }
 
   const routedStatus = statusLabelForRole(data, "routed");
@@ -2157,6 +2267,15 @@ export async function updateInvoicePaymentProcessed(formData: FormData) {
   await mutateData((data) => {
     const invoice = getInvoice(data, invoiceId);
     if (!invoice) return;
+    if (paymentProcessed && invoice.duplicateCheckStatus === "Potential Duplicate") {
+      addAudit(data, {
+        invoiceId,
+        actor: "AP",
+        type: "payment_processed_blocked",
+        message: "Payment processed update blocked by unresolved potential duplicate.",
+      });
+      return;
+    }
     if (paymentProcessed && invoiceHasBlockingPoValidation(invoice, data)) {
       addAudit(data, {
         invoiceId,
@@ -2180,6 +2299,41 @@ export async function updateInvoicePaymentProcessed(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/invoices", "layout");
+  revalidatePath(`/review/${invoiceId}`);
+}
+
+export async function markInvoiceDuplicateReviewed(formData: FormData) {
+  const user = await requireApUser();
+  const invoiceId = value(formData, "invoiceId");
+  const note = value(formData, "duplicateReviewNote");
+  if (!invoiceId) return;
+
+  await mutateData((data) => {
+    const invoice = getInvoice(data, invoiceId);
+    if (!invoice) return;
+    const now = new Date().toISOString();
+    invoice.duplicateCheckStatus = "Reviewed Not Duplicate";
+    invoice.duplicateCheckMessage = "Reviewed by AP and marked not a duplicate.";
+    invoice.duplicateReviewedAt = now;
+    invoice.duplicateReviewedBy = user.email || user.name || user.id;
+    invoice.duplicateReviewNote = note;
+    invoice.updatedAt = now;
+    clearAttentionReason(invoice, DUPLICATE_ATTENTION_REASON);
+    addAudit(data, {
+      invoiceId,
+      actor: "AP",
+      type: "duplicate_reviewed",
+      message: note
+        ? `AP reviewed potential duplicate and marked it as not a duplicate. Note: ${note}`
+        : "AP reviewed potential duplicate and marked it as not a duplicate.",
+    });
+  });
+
+  revalidatePath("/");
+  revalidatePath("/department");
+  revalidatePath("/invoices", "layout");
+  revalidatePath("/reports");
+  revalidatePath("/files/payment-file");
   revalidatePath(`/review/${invoiceId}`);
 }
 
@@ -2309,6 +2463,8 @@ export async function submitDepartmentDecision(formData: FormData) {
     const now = new Date().toISOString();
     const existingPoNumber = invoice.poNumber.trim();
     const previousVendor = invoice.vendorName || "Not set";
+    const previousDuplicateStatus = invoice.duplicateCheckStatus || "Not Checked";
+    const previousDuplicateKey = duplicateKey(invoice);
     if (
       invoiceFieldEnabled(data, "poNumber") &&
       decisionDefinition.requirePoNumber &&
@@ -2344,6 +2500,33 @@ export async function submitDepartmentDecision(formData: FormData) {
         type: "po_vendor_updated",
         message: `Vendor updated from ${previousVendor} to ${poVendorFileMatch.vendor.vendorName} (${poVendorFileMatch.vendor.vendorNumber || "No number"}) based on PO ${poNumberForDecision}. Invoice flagged for AP review.`,
       });
+      const duplicateResult = applyDuplicateCheck(data, invoice, now);
+      if (
+        previousDuplicateKey !== duplicateKey(invoice) &&
+        previousDuplicateStatus === "Reviewed Not Duplicate"
+      ) {
+        addAudit(data, {
+          invoiceId,
+          actor: "Department Reviewer",
+          type: "duplicate_check_reset",
+          message: "Duplicate check was reset because vendor or invoice number changed.",
+        });
+      }
+      if (duplicateResult.status === "Potential Duplicate") {
+        addAudit(data, {
+          invoiceId,
+          actor: "Department Reviewer",
+          type: "duplicate_detected_update",
+          message: "Potential duplicate invoice detected after vendor or invoice number update.",
+        });
+      } else if (previousDuplicateStatus === "Potential Duplicate") {
+        addAudit(data, {
+          invoiceId,
+          actor: "Department Reviewer",
+          type: "duplicate_resolved",
+          message: "Duplicate check resolved. No duplicate found.",
+        });
+      }
     }
     if (decisionDefinition.workflowAction !== "apRework" && !invoiceVendorValidated(invoice)) {
       invoice.requiresApAttention = true;

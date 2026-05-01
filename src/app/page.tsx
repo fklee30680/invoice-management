@@ -130,6 +130,11 @@ function ApWorkQueue({ data }: { data: AppData }) {
                     Vendor not validated
                   </div>
                 ) : null}
+                {invoice.duplicateCheckStatus === "Potential Duplicate" ? (
+                  <div className="mt-2 inline-flex border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-900">
+                    Potential Duplicate
+                  </div>
+                ) : null}
               </div>
               {invoice.requiresApAttention ? (
                 <div className="border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">

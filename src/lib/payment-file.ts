@@ -110,6 +110,7 @@ export function paymentFileEligibleDecisionLabels(data: AppData) {
 
 export function invoiceEligibleForPaymentFile(invoice: Invoice, data: AppData) {
   if (invoice.paymentProcessed) return false;
+  if (invoice.duplicateCheckStatus === "Potential Duplicate") return false;
   if (!invoice.departmentDecision) return false;
 
   const status = data.statuses.find((item) => item.label === invoice.status);

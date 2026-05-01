@@ -360,6 +360,17 @@ export type Invoice = {
   poValidationCheckedAt?: string;
   poValidationPurchaseOrderId?: string;
   poVendorName?: string;
+  duplicateCheckStatus?:
+    | "Not Checked"
+    | "No Duplicate"
+    | "Potential Duplicate"
+    | "Reviewed Not Duplicate";
+  duplicateCheckMessage?: string;
+  duplicateCheckCheckedAt?: string;
+  duplicateMatchedInvoiceIds?: string[];
+  duplicateReviewedAt?: string;
+  duplicateReviewedBy?: string;
+  duplicateReviewNote?: string;
   requiresApAttention?: boolean;
   apAttentionReason?: string;
   createdAt: string;

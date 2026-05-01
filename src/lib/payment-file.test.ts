@@ -118,4 +118,21 @@ describe("invoiceEligibleForPaymentFile", () => {
       false,
     );
   });
+
+  it("rejects unresolved potential duplicates", () => {
+    assert.equal(
+      invoiceEligibleForPaymentFile(
+        baseInvoice({ duplicateCheckStatus: "Potential Duplicate" }),
+        baseData(),
+      ),
+      false,
+    );
+    assert.equal(
+      invoiceEligibleForPaymentFile(
+        baseInvoice({ duplicateCheckStatus: "Reviewed Not Duplicate" }),
+        baseData(),
+      ),
+      true,
+    );
+  });
 });

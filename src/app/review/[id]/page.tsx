@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import {
   clearInvoiceAttentionFlag,
+  markInvoiceDuplicateReviewed,
   updateAndRouteInvoice,
   updateInvoicePaymentProcessed,
 } from "@/lib/actions";
@@ -45,6 +46,9 @@ export default async function ReviewPage({
   const selectedDecision = Array.isArray(query.decision) ? query.decision[0] : query.decision;
   const activeDecisions = data.departmentDecisions.filter((decision) => decision.active);
   const vendorOptions = vendorDropdownOptions(data);
+  const duplicateMatches = (invoice.duplicateMatchedInvoiceIds || [])
+    .map((matchId) => data.invoices.find((item) => item.id === matchId))
+    .filter(Boolean) as typeof data.invoices;
   const currentDecisionIsInactive =
     invoice.departmentDecision &&
     !activeDecisions.some((decision) => decision.label === invoice.departmentDecision);
@@ -184,6 +188,84 @@ export default async function ReviewPage({
           <div className="border border-red-300 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
             Select a valid vendor from the vendor file before routing this invoice.
           </div>
+        ) : null}
+        {error === "duplicate-review-required" ? (
+          <div className="border border-red-300 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
+            Potential duplicate invoice must be reviewed before routing.
+          </div>
+        ) : null}
+        {invoice.duplicateCheckStatus === "Potential Duplicate" ? (
+          <section className="border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <h2 className="font-semibold">Potential Duplicate</h2>
+                <p className="mt-1">
+                  Potential duplicate invoice found for this vendor and invoice number.
+                </p>
+              </div>
+              {user.role === "AP" ? (
+                <form
+                  action={markInvoiceDuplicateReviewed}
+                  className="flex flex-col gap-2 sm:min-w-80"
+                >
+                  <input name="invoiceId" type="hidden" value={invoice.id} />
+                  <input
+                    className="focus-ring min-h-10 border border-amber-300 bg-white px-3 text-sm text-[var(--foreground)]"
+                    name="duplicateReviewNote"
+                    placeholder="Review note, optional"
+                  />
+                  <button className="focus-ring border border-amber-600 bg-white px-3 py-2 text-sm font-semibold text-amber-950 hover:bg-amber-100">
+                    Mark Reviewed / Not a Duplicate
+                  </button>
+                </form>
+              ) : null}
+            </div>
+            <div className="mt-4 grid gap-3">
+              {duplicateMatches.length > 0 ? (
+                duplicateMatches.map((match) => {
+                  const canOpenMatch = canAccessInvoice(user, match);
+                  return (
+                    <div className="border border-amber-200 bg-white p-3" key={match.id}>
+                      <div className="font-semibold">
+                        {match.vendorName || "Unknown Vendor"} -{" "}
+                        {match.invoiceNumber || "No invoice number"}
+                      </div>
+                      <div className="mt-1 text-xs text-[var(--muted)]">
+                        Uploaded {formatDate(match.dateUploaded)} | Amount{" "}
+                        {currencyDisplay(match.amount)} | Status {match.status}
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {canOpenMatch ? (
+                          <Link
+                            className="focus-ring border border-[var(--line)] px-3 py-1.5 text-xs font-semibold hover:bg-slate-100"
+                            href={`/review/${match.id}`}
+                          >
+                            Open Prior Invoice
+                          </Link>
+                        ) : null}
+                        {canOpenMatch && match.fileId ? (
+                          <Link
+                            className="focus-ring border border-[var(--line)] px-3 py-1.5 text-xs font-semibold hover:bg-slate-100"
+                            href={`/files/${match.fileId}`}
+                          >
+                            Download Prior Invoice
+                          </Link>
+                        ) : (
+                          <span className="px-3 py-1.5 text-xs text-[var(--muted)]">
+                            {canOpenMatch ? "No file available" : "Prior invoice restricted"}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="border border-amber-200 bg-white p-3">
+                  Matched invoice details are not available.
+                </div>
+              )}
+            </div>
+          </section>
         ) : null}
         {invoice.requiresApAttention ? (
           <div className="flex flex-col gap-3 border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between">
