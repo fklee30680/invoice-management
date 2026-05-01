@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { DeleteInvoiceConfirmation } from "@/components/delete-invoice-confirmation";
+import { MultiSelectDropdown } from "@/components/multi-select-dropdown";
 import { invoiceFieldEnabled } from "@/lib/invoice-fields";
 import { filterableStatuses, statusBadgeClass } from "@/lib/status-config";
 import type { AppData, Invoice } from "@/lib/types";
@@ -7,7 +8,7 @@ import { currencyDisplay, formatDate } from "@/lib/utils";
 
 export type InvoiceFilters = {
   statuses: string[];
-  department: string;
+  departments: string[];
   decisionType: string;
   search: string;
   sort: InvoiceSortKey;
@@ -101,7 +102,8 @@ export function filterInvoices(
     const matchesStatus =
       filters.statuses.length === 0 || filters.statuses.includes(invoice.status);
     const matchesDepartment =
-      !filters.department || invoice.departmentId === filters.department;
+      filters.departments.length === 0 ||
+      filters.departments.includes(invoice.departmentId);
     const matchesDecision =
       !filters.decisionType || invoice.departmentDecision === filters.decisionType;
     const haystack = [
@@ -146,7 +148,7 @@ function sortHref({
 }) {
   const params = new URLSearchParams();
   if (filters.search) params.set("search", filters.search);
-  if (filters.department) params.set("department", filters.department);
+  filters.departments.forEach((department) => params.append("department", department));
   if (filters.decisionType) params.set("decisionType", filters.decisionType);
   filters.statuses.forEach((status) => params.append("status", status));
   params.set("sort", sort);
@@ -199,10 +201,10 @@ export function FilterBar({
 }) {
   const filterKey = [
     filters.search,
-    filters.department,
     filters.decisionType,
     filters.sort,
     filters.direction,
+    ...filters.departments,
     ...filters.statuses,
   ].join("|");
   const statusOptions = filterableStatuses(data);
@@ -250,18 +252,19 @@ export function FilterBar({
       </details>
       <label className="text-xs font-semibold uppercase text-[var(--muted)]">
         Department
-        <select
-          className="focus-ring mt-1 min-h-10 w-full border border-[var(--line)] bg-white px-3 text-sm font-normal normal-case text-[var(--foreground)]"
-          name="department"
-          defaultValue={filters.department}
-        >
-          <option value="">All departments</option>
-          {data.departments.map((department) => (
-            <option key={department.id} value={department.id}>
-              {department.name}
-            </option>
-          ))}
-        </select>
+        <div className="mt-1">
+          <MultiSelectDropdown
+            emptyLabel="No departments are available."
+            initialSelected={filters.departments}
+            name="department"
+            options={data.departments.map((department) => ({
+              id: department.id,
+              label: department.name,
+            }))}
+            placeholder="All departments"
+            summaryPluralLabel="departments"
+          />
+        </div>
       </label>
       {showDecisionTypeFilter ? (
         <label className="text-xs font-semibold uppercase text-[var(--muted)]">

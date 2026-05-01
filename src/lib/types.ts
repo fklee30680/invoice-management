@@ -50,6 +50,32 @@ export type PoImportSettings = {
   updateExisting: boolean;
 };
 
+export type DashboardBoxMetricType = "count" | "dollars" | "countAndDollars";
+
+export type DashboardBoxLinkedView =
+  | "total"
+  | "needs-ap-work"
+  | "with-departments"
+  | "completed";
+
+export type DashboardBoxDepartmentScope = {
+  appliesToAllDepartments: boolean;
+  departmentIds: string[];
+};
+
+export type DashboardBox = {
+  id: string;
+  name: string;
+  enabled: boolean;
+  order: number;
+  linkedViewId: DashboardBoxLinkedView;
+  departmentScope: DashboardBoxDepartmentScope;
+  statusIds: string[];
+  metricType: DashboardBoxMetricType;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type StatusTone =
   | "slate"
   | "amber"
@@ -436,6 +462,7 @@ export type AppData = {
   branding: BrandingSettings;
   statuses: InvoiceStatusDefinition[];
   invoiceFields: InvoiceFieldConfig[];
+  dashboardBoxes: DashboardBox[];
   menuSettings: MenuSettings;
   poValidationSettings: PoValidationSettings;
   poImportSettings: PoImportSettings;

@@ -16,6 +16,7 @@ export function MultiSelectDropdown({
   inputNameForOption,
   inputValueForOption,
   isClearDisabled,
+  formId,
   name,
   onNormalizeSelection,
   options,
@@ -28,6 +29,7 @@ export function MultiSelectDropdown({
   inputNameForOption?: (id: string) => string;
   inputValueForOption?: (id: string) => string;
   isClearDisabled?: (selected: string[]) => boolean;
+  formId?: string;
   name?: string;
   onNormalizeSelection?: (selected: string[], previous: string[]) => string[];
   options: MultiSelectDropdownOption[];
@@ -96,6 +98,7 @@ export function MultiSelectDropdown({
         if (!inputName) return null;
         return (
           <input
+            form={formId}
             key={id}
             name={inputName}
             type="hidden"

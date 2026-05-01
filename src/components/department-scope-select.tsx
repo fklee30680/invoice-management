@@ -15,9 +15,11 @@ type DepartmentScope = {
 
 export function DepartmentScopeSelect({
   departments,
+  formId,
   initialScope,
 }: {
   departments: DepartmentOption[];
+  formId?: string;
   initialScope?: DepartmentScope;
 }) {
   const initialValues = useMemo(
@@ -46,6 +48,7 @@ export function DepartmentScopeSelect({
       emptyLabel="No departments are available."
       initialSelected={initialValues}
       isClearDisabled={(selected) => selected.includes("all")}
+      formId={formId}
       name="departmentScope"
       onNormalizeSelection={(next, previous) => {
         const selectedAll = next.includes("all");

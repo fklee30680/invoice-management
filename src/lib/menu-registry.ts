@@ -14,6 +14,7 @@ const BASE_MENU_TARGETS: MenuLinkTarget[] = [
   { id: "po-list-update", label: "PO List Update", href: "/uploads/po-list", roles: ["AP"], category: "Files" },
   { id: "vendor-file", label: "Vendor File", href: "/uploads/vendors", roles: ["AP"], category: "Files" },
   { id: "branding", label: "Branding", href: "/settings/branding", roles: ["AP"], category: "Setup" },
+  { id: "dashboard-boxes", label: "Dashboard Boxes", href: "/settings/dashboard-boxes", roles: ["AP"], category: "Setup" },
   { id: "decision-types", label: "Decision Types", href: "/settings/decisions", roles: ["AP"], category: "Setup" },
   { id: "department-emails", label: "Department Emails", href: "/settings/departments", roles: ["AP"], category: "Setup" },
   { id: "email-templates", label: "Email Templates", href: "/settings/email", roles: ["AP"], category: "Setup" },
@@ -69,18 +70,19 @@ export function defaultMenuSettings(): MenuSettings {
       menuLink("reports", 5),
       menuGroup("setup", "Setup", 6, ["AP"], [
         menuLink("branding", 1),
-        menuLink("decision-types", 2),
-        menuLink("department-emails", 3),
-        menuLink("email-templates", 4),
-        menuLink("environment", 5),
-        menuLink("escalation-schedules", 6),
-        menuLink("holidays-business-days", 7),
-        menuLink("invoice-fields", 8),
-        menuLink("menu-setup", 9),
-        menuLink("organization-escalation-contacts", 10),
-        menuLink("po-validation", 11),
-        menuLink("scheduler-runtime", 12),
-        menuLink("statuses", 13),
+        menuLink("dashboard-boxes", 2),
+        menuLink("decision-types", 3),
+        menuLink("department-emails", 4),
+        menuLink("email-templates", 5),
+        menuLink("environment", 6),
+        menuLink("escalation-schedules", 7),
+        menuLink("holidays-business-days", 8),
+        menuLink("invoice-fields", 9),
+        menuLink("menu-setup", 10),
+        menuLink("organization-escalation-contacts", 11),
+        menuLink("po-validation", 12),
+        menuLink("scheduler-runtime", 13),
+        menuLink("statuses", 14),
       ]),
       menuLink("department-dashboard", 7),
     ],
@@ -110,14 +112,16 @@ export function normalizeMenuSettings(settings: MenuSettings | undefined): MenuS
     items.push({ ...lockedDefault, order: items.length + 1 });
   }
   const setupGroup = items.find((item) => item.id === "setup" && item.type === "group");
-  if (
-    setupGroup &&
-    !flattenMenuItems(items).some((item) => item.href === "/settings/po-validation")
-  ) {
-    setupGroup.children = normalizeOrder([
-      ...(setupGroup.children || []),
-      menuLink("po-validation", (setupGroup.children || []).length + 1),
-    ]);
+  if (setupGroup) {
+    for (const targetId of ["dashboard-boxes", "po-validation"]) {
+      const target = menuTargetById(targetId);
+      if (!target) continue;
+      if (flattenMenuItems(items).some((item) => item.href === target.href)) continue;
+      setupGroup.children = normalizeOrder([
+        ...(setupGroup.children || []),
+        menuLink(targetId, (setupGroup.children || []).length + 1),
+      ]);
+    }
   }
 
   return { items: normalizeOrder(items) };

@@ -4,11 +4,10 @@ import { MultiSelectDropdown } from "./multi-select-dropdown";
 
 type StatusOption = {
   id: string;
-  includeInEscalation: boolean;
   label: string;
 };
 
-export function StatusMultiSelect({
+export function StatusFilterSelect({
   formId,
   initialSelected = [],
   name = "statusIds",
@@ -23,13 +22,10 @@ export function StatusMultiSelect({
 }) {
   const selectedSet = new Set(initialSelected);
   const options = [
-    ...statuses
-      .filter((status) => status.includeInEscalation || selectedSet.has(status.id))
-      .map((status) => ({
-        id: status.id,
-        inactive: !status.includeInEscalation,
-        label: status.label,
-      })),
+    ...statuses.map((status) => ({
+      id: status.id,
+      label: status.label,
+    })),
     ...initialSelected
       .filter((id) => !statuses.some((status) => status.id === id))
       .map((id) => ({ id, inactive: true, label: id })),
@@ -37,9 +33,9 @@ export function StatusMultiSelect({
 
   return (
     <MultiSelectDropdown
-      emptyLabel="No escalation-enabled statuses are available."
+      emptyLabel="No statuses are available."
       formId={formId}
-      initialSelected={initialSelected}
+      initialSelected={[...selectedSet]}
       name={name}
       options={options}
       placeholder={placeholder}

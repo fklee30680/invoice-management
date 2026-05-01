@@ -9,11 +9,13 @@ type ScheduleOption = {
 };
 
 export function ScheduleMultiSelect({
+  formId,
   initialSelected = [],
   name = "assignedScheduleIds",
   placeholder = "Select schedules",
   schedules,
 }: {
+  formId?: string;
   initialSelected?: string[];
   name?: string;
   placeholder?: string;
@@ -36,6 +38,7 @@ export function ScheduleMultiSelect({
   return (
     <MultiSelectDropdown
       emptyLabel="No enabled escalation schedules are available."
+      formId={formId}
       initialSelected={initialSelected}
       name={name}
       options={options}

@@ -37,7 +37,7 @@ export default async function InvoiceViewPage({
   const query = (await searchParams) || {};
   const filters = {
     statuses: many(query.status),
-    department: one(query.department),
+    departments: many(query.department),
     decisionType: one(query.decisionType),
     search: one(query.search),
     sort: sortKey(query.sort),

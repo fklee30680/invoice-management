@@ -18,6 +18,11 @@ import {
 } from "./file-storage";
 import { extractInvoiceMetadata } from "./ocr";
 import {
+  DASHBOARD_BOX_METRICS,
+  defaultStatusIdsForDashboardView,
+  isDashboardBoxLinkedView,
+} from "./dashboard-boxes";
+import {
   invoiceEligibleForPaymentFile,
   isPaymentFileFieldSource,
   sourceLabel,
@@ -75,6 +80,8 @@ import {
 } from "./status-config";
 import type {
   BrandingLogo,
+  DashboardBox,
+  DashboardBoxMetricType,
   DecisionWorkflowAction,
   Invoice,
   MenuConfigItem,
@@ -500,6 +507,133 @@ export async function deletePaymentFileColumn(formData: FormData) {
   });
 
   revalidatePath("/files/payment-file");
+}
+
+function dashboardBoxMetricType(formData: FormData) {
+  const metricType = value(formData, "metricType");
+  return DASHBOARD_BOX_METRICS.some((metric) => metric.value === metricType)
+    ? (metricType as DashboardBoxMetricType)
+    : "count";
+}
+
+function dashboardBoxLinkedView(formData: FormData) {
+  const linkedViewId = value(formData, "linkedViewId");
+  return isDashboardBoxLinkedView(linkedViewId) ? linkedViewId : "";
+}
+
+function dashboardBoxDepartmentScope(formData: FormData) {
+  const scope = normalizeOrganizationDepartmentScope(idList(formData, "departmentScope"));
+  return {
+    appliesToAllDepartments: scope.appliesToAllDepartments,
+    departmentIds: scope.departmentIds,
+  };
+}
+
+function normalizeDashboardBoxOrder<T extends { order: number }>(items: T[]) {
+  return [...items]
+    .sort((left, right) => left.order - right.order)
+    .map((item, index) => ({ ...item, order: index + 1 })) as T[];
+}
+
+export async function addDashboardBox(formData: FormData) {
+  await requireApUser();
+  const name = value(formData, "name");
+  const linkedViewId = dashboardBoxLinkedView(formData);
+  const enabled = checkbox(formData, "enabled");
+  const departmentScope = dashboardBoxDepartmentScope(formData);
+  const statusIds = idList(formData, "statusIds");
+  if (!name || !linkedViewId) return;
+  if (enabled && statusIds.length === 0) return;
+  if (enabled && !departmentScope.appliesToAllDepartments && departmentScope.departmentIds.length === 0) {
+    return;
+  }
+
+  await mutateData((data) => {
+    const now = new Date().toISOString();
+    data.dashboardBoxes = normalizeDashboardBoxOrder<DashboardBox>([
+      ...data.dashboardBoxes,
+      {
+        id: createId("dashboard-box"),
+        name,
+        enabled,
+        order: numberValue(formData, "order", data.dashboardBoxes.length + 1),
+        linkedViewId,
+        departmentScope,
+        statusIds: statusIds.length > 0 ? statusIds : defaultStatusIdsForDashboardView(data, linkedViewId),
+        metricType: dashboardBoxMetricType(formData),
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    addAudit(data, {
+      actor: "AP",
+      type: "dashboard_box_added",
+      message: `Added dashboard box ${name}.`,
+    });
+  });
+
+  revalidatePath("/");
+  revalidatePath("/settings/dashboard-boxes");
+  revalidatePath("/invoices", "layout");
+}
+
+export async function updateDashboardBox(formData: FormData) {
+  await requireApUser();
+  const boxId = value(formData, "boxId");
+  const name = value(formData, "name");
+  const linkedViewId = dashboardBoxLinkedView(formData);
+  const enabled = checkbox(formData, "enabled");
+  const departmentScope = dashboardBoxDepartmentScope(formData);
+  const statusIds = idList(formData, "statusIds");
+  if (!boxId || !name || !linkedViewId) return;
+  if (enabled && statusIds.length === 0) return;
+  if (enabled && !departmentScope.appliesToAllDepartments && departmentScope.departmentIds.length === 0) {
+    return;
+  }
+
+  await mutateData((data) => {
+    const box = data.dashboardBoxes.find((item) => item.id === boxId);
+    if (!box) return;
+    box.name = name;
+    box.enabled = enabled;
+    box.order = numberValue(formData, "order", box.order);
+    box.linkedViewId = linkedViewId;
+    box.departmentScope = departmentScope;
+    box.statusIds = statusIds;
+    box.metricType = dashboardBoxMetricType(formData);
+    box.updatedAt = new Date().toISOString();
+    data.dashboardBoxes = normalizeDashboardBoxOrder(data.dashboardBoxes);
+    addAudit(data, {
+      actor: "AP",
+      type: "dashboard_box_updated",
+      message: `Updated dashboard box ${name}.`,
+    });
+  });
+
+  revalidatePath("/");
+  revalidatePath("/settings/dashboard-boxes");
+  revalidatePath("/invoices", "layout");
+}
+
+export async function deleteDashboardBox(formData: FormData) {
+  await requireApUser();
+  const boxId = value(formData, "boxId");
+  if (!boxId) return;
+
+  await mutateData((data) => {
+    const box = data.dashboardBoxes.find((item) => item.id === boxId);
+    data.dashboardBoxes = normalizeDashboardBoxOrder(
+      data.dashboardBoxes.filter((item) => item.id !== boxId),
+    );
+    addAudit(data, {
+      actor: "AP",
+      type: "dashboard_box_deleted",
+      message: `Deleted dashboard box ${box?.name || boxId}.`,
+    });
+  });
+
+  revalidatePath("/");
+  revalidatePath("/settings/dashboard-boxes");
 }
 
 export async function markManualPaymentInvoicesPaid(formData: FormData) {

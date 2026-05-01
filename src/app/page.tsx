@@ -2,13 +2,17 @@ import Link from "next/link";
 import { PoValidationField } from "@/components/po-validation-field";
 import { VendorLookupField } from "@/components/vendor-lookup-field";
 import {
+  dashboardBoxHref,
+  dashboardBoxMetricDisplay,
+  dashboardBoxMetricLabel,
+} from "@/lib/dashboard-boxes";
+import {
   updateAndRouteInvoice,
   uploadInvoices,
 } from "@/lib/actions";
 import {
   invoicesForSummaryView,
   summaryViewPath,
-  type InvoiceSummaryView,
 } from "@/lib/invoice-views";
 import { invoiceFieldEnabled } from "@/lib/invoice-fields";
 import { vendorDropdownOptions } from "@/lib/vendor-validation";
@@ -32,10 +36,12 @@ function Metric({
   label,
   value,
   href,
+  metricLabel,
 }: {
   label: string;
   value: number | string;
   href: string;
+  metricLabel?: string;
 }) {
   return (
     <Link
@@ -44,6 +50,9 @@ function Metric({
     >
       <div className="text-sm text-[var(--muted)]">{label}</div>
       <div className="mt-2 text-2xl font-semibold tracking-normal">{value}</div>
+      {metricLabel ? (
+        <div className="mt-1 text-xs text-[var(--muted)]">{metricLabel}</div>
+      ) : null}
     </Link>
   );
 }
@@ -252,13 +261,9 @@ export default async function Home({ searchParams }: PageProps) {
   const params = (await searchParams) || {};
   const pageError = one(params.error);
   const data = await readData();
-  const metricViews: InvoiceSummaryView[] = [
-    "total",
-    "needs-ap-work",
-    "with-departments",
-    "completed",
-    "manual-payment",
-  ];
+  const dashboardBoxes = data.dashboardBoxes
+    .filter((box) => box.enabled)
+    .sort((left, right) => left.order - right.order);
 
   return (
     <main className="min-h-screen px-4 py-6 sm:px-6 lg:px-8">
@@ -276,25 +281,31 @@ export default async function Home({ searchParams }: PageProps) {
         </header>
 
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          {metricViews.map((view) => (
+          {dashboardBoxes.map((box) => (
             <Metric
-              href={summaryViewPath(view)}
-              key={view}
-              label={
-                view === "total"
-                  ? "Total invoices"
-                  : view === "needs-ap-work"
-                    ? "Needs AP work"
-                    : view === "with-departments"
-                      ? "With departments"
-                      : view === "completed"
-                        ? "Completed"
-                        : "Invoices to be paid manually"
-              }
-              value={invoicesForSummaryView(data.invoices, view, data).length}
+              href={dashboardBoxHref(data, box)}
+              key={box.id}
+              label={box.name}
+              metricLabel={dashboardBoxMetricLabel(box)}
+              value={dashboardBoxMetricDisplay(data, box)}
             />
           ))}
+          <Metric
+            href={summaryViewPath("manual-payment")}
+            label="Invoices to be paid manually"
+            value={invoicesForSummaryView(data.invoices, "manual-payment", data).length}
+          />
         </section>
+
+        {dashboardBoxes.length === 0 ? (
+          <section className="border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            No dashboard boxes are enabled. Configure them in{" "}
+            <Link className="font-semibold underline" href="/settings/dashboard-boxes">
+              Setup &gt; Dashboard Boxes
+            </Link>
+            .
+          </section>
+        ) : null}
 
         {pageError === "file-storage" ? (
           <section className="border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">

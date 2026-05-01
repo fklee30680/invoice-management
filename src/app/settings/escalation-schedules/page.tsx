@@ -155,6 +155,7 @@ export default async function EscalationSchedulesPage() {
                   </td>
                   <td className="border-b border-[var(--line)] px-3 py-3">
                     <StatusMultiSelect
+                      formId={formId}
                       initialSelected={schedule.statusIds || []}
                       statuses={data.statuses}
                     />

@@ -75,6 +75,7 @@ function baseData(): AppData {
     invoiceFiles: [],
     auditEvents: [],
     invoiceFields: normalizeInvoiceFields(undefined),
+    dashboardBoxes: [],
     menuSettings: defaultMenuSettings(),
     poValidationSettings: defaultPoValidationSettings(),
     poImportSettings: defaultPoImportSettings(),

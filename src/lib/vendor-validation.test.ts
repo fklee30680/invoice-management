@@ -79,6 +79,7 @@ function baseData(): AppData {
     },
     statuses: defaultStatuses(),
     invoiceFields: normalizeInvoiceFields(undefined),
+    dashboardBoxes: [],
     menuSettings: defaultMenuSettings(),
     poValidationSettings: defaultPoValidationSettings(),
     poImportSettings: defaultPoImportSettings(),

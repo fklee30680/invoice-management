@@ -5,6 +5,7 @@ import type {
   AppData,
   AuditEvent,
   BrandingSettings,
+  DashboardBox,
   Department,
   EscalationSchedulerSettings,
   Invoice,
@@ -20,6 +21,13 @@ import type {
   Vendor,
 } from "./types";
 import { defaultDepartmentDecisions } from "./constants";
+import {
+  DASHBOARD_BOX_METRICS,
+  DASHBOARD_BOX_VIEWS,
+  defaultDashboardBoxes,
+  defaultStatusIdsForDashboardView,
+  isDashboardBoxLinkedView,
+} from "./dashboard-boxes";
 import {
   clearDatabaseIssue,
   getDatabaseConfig,
@@ -328,6 +336,74 @@ function normalizeDepartmentDecisions(
   return normalized;
 }
 
+function normalizeDashboardBoxDepartmentScope(
+  scope:
+    | { appliesToAllDepartments?: boolean; departmentIds?: string[] }
+    | string[]
+    | string
+    | undefined,
+) {
+  if (!scope) return { appliesToAllDepartments: true, departmentIds: [] };
+  if (typeof scope === "string") {
+    return ["all", "ALL_DEPARTMENTS"].includes(scope)
+      ? { appliesToAllDepartments: true, departmentIds: [] }
+      : { appliesToAllDepartments: false, departmentIds: [scope] };
+  }
+  if (Array.isArray(scope)) {
+    if (
+      scope.length === 0 ||
+      scope.some((item) => ["all", "ALL_DEPARTMENTS"].includes(item))
+    ) {
+      return { appliesToAllDepartments: true, departmentIds: [] };
+    }
+    return { appliesToAllDepartments: false, departmentIds: scope.filter(Boolean) };
+  }
+  if (scope.appliesToAllDepartments !== false) {
+    return { appliesToAllDepartments: true, departmentIds: [] };
+  }
+  return {
+    appliesToAllDepartments: false,
+    departmentIds: (scope.departmentIds || []).filter(Boolean),
+  };
+}
+
+function normalizeDashboardBoxes(data: AppData): DashboardBox[] {
+  const configured = Array.isArray(data.dashboardBoxes) ? data.dashboardBoxes : [];
+  const defaults = defaultDashboardBoxes(data);
+  const validMetricTypes = new Set(DASHBOARD_BOX_METRICS.map((metric) => metric.value));
+  const source = configured.length ? configured : defaults;
+
+  return source
+    .map((box, index) => {
+      const rawView = String(box.linkedViewId || "");
+      const linkedViewId = isDashboardBoxLinkedView(rawView)
+        ? rawView
+        : defaults[0].linkedViewId;
+      const validView = DASHBOARD_BOX_VIEWS.includes(linkedViewId);
+      const enabled = validView && rawView !== "manual-payment" && box.enabled !== false;
+      const statusIds =
+        Array.isArray(box.statusIds) && box.statusIds.length > 0
+          ? box.statusIds.filter(Boolean)
+          : defaultStatusIdsForDashboardView(data, linkedViewId);
+      const metricType = validMetricTypes.has(box.metricType) ? box.metricType : "count";
+      const now = new Date().toISOString();
+      return {
+        id: box.id || createId("dashboard-box"),
+        name: box.name || defaults.find((item) => item.linkedViewId === linkedViewId)?.name || "Dashboard Box",
+        enabled,
+        order: Number(box.order) || index + 1,
+        linkedViewId,
+        departmentScope: normalizeDashboardBoxDepartmentScope(box.departmentScope),
+        statusIds,
+        metricType,
+        createdAt: box.createdAt || now,
+        updatedAt: box.updatedAt || now,
+      };
+    })
+    .sort((left, right) => left.order - right.order)
+    .map((box, index) => ({ ...box, order: index + 1 }));
+}
+
 function normalizeData(data: AppData): AppData {
   const defaultBrand = defaultBranding();
   const defaultStatusList = defaultStatuses();
@@ -417,6 +493,7 @@ function normalizeData(data: AppData): AppData {
     invoiceFields: normalizeInvoiceFields(
       (data as AppData & { invoiceFields?: InvoiceFieldConfig[] }).invoiceFields,
     ),
+    dashboardBoxes: normalizeDashboardBoxes({ ...data, statuses } as AppData),
     menuSettings: normalizeMenuSettings(
       (data as AppData & { menuSettings?: MenuSettings }).menuSettings,
     ),
@@ -707,6 +784,7 @@ function seedData(): AppData {
     branding: defaultBranding(),
     statuses: defaultStatuses(),
     invoiceFields: normalizeInvoiceFields(undefined),
+    dashboardBoxes: [],
     menuSettings: defaultMenuSettings(),
     poValidationSettings: normalizePoValidationSettings(undefined),
     poImportSettings: defaultPoImportSettings(),

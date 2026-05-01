@@ -1,31 +1,37 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { defaultDepartmentDecisions } from "./constants";
+import {
+  dashboardBoxHref,
+  dashboardBoxInvoices,
+  dashboardBoxMetric,
+  defaultDashboardBoxes,
+} from "./dashboard-boxes";
 import { normalizeInvoiceFields } from "./invoice-fields";
 import { defaultMenuSettings } from "./menu-registry";
-import { defaultPaymentFileSettings, invoiceEligibleForPaymentFile } from "./payment-file";
+import { defaultPaymentFileSettings } from "./payment-file";
 import { defaultPoImportSettings } from "./po-parser";
 import { defaultPoValidationSettings } from "./po-validation";
 import { defaultStatuses } from "./status-config";
-import type { AppData, Invoice } from "./types";
+import type { AppData, DashboardBox, Invoice } from "./types";
 
-function baseInvoice(overrides: Partial<Invoice> = {}): Invoice {
+function invoice(overrides: Partial<Invoice> = {}): Invoice {
   return {
     id: "invoice-1",
     vendorName: "Vendor A",
     invoiceNumber: "INV-1",
     invoiceDate: "2026-04-01",
     amount: "100",
-    poNumber: "PO-1",
+    poNumber: "",
     dateReceived: "2026-04-01",
     dateApproved: "",
     dateUploaded: "2026-04-01",
     dateSubmittedToDepartment: "",
     statusDate: "2026-04-01",
     routedAt: "",
-    status: "Approved/Completed",
+    status: "Routed",
     departmentId: "dept-1",
-    departmentDecision: "Receiving Record",
+    departmentDecision: "",
     paymentProcessed: false,
     escalations: [],
     comments: [],
@@ -38,13 +44,36 @@ function baseInvoice(overrides: Partial<Invoice> = {}): Invoice {
   };
 }
 
-function baseData(): AppData {
+function box(overrides: Partial<DashboardBox> = {}): DashboardBox {
   return {
-    departments: [{ id: "dept-1", name: "Finance", email: "finance@example.com" }],
+    id: "box-1",
+    name: "Routed Finance",
+    enabled: true,
+    order: 1,
+    linkedViewId: "with-departments",
+    departmentScope: { appliesToAllDepartments: false, departmentIds: ["dept-1"] },
+    statusIds: ["status-routed"],
+    metricType: "count",
+    createdAt: "2026-04-01T12:00:00.000Z",
+    updatedAt: "2026-04-01T12:00:00.000Z",
+    ...overrides,
+  };
+}
+
+function data(): AppData {
+  return {
+    departments: [
+      { id: "dept-1", name: "Finance", email: "finance@example.com" },
+      { id: "dept-2", name: "Public Works", email: "pw@example.com" },
+    ],
     users: [],
     purchaseOrders: [],
     vendors: [],
-    invoices: [],
+    invoices: [
+      invoice(),
+      invoice({ id: "invoice-2", amount: "250", departmentId: "dept-2" }),
+      invoice({ id: "invoice-3", status: "Approved/Completed", amount: "400" }),
+    ],
     invoiceFiles: [],
     auditEvents: [],
     notificationTemplate: {
@@ -93,49 +122,34 @@ function baseData(): AppData {
   };
 }
 
-describe("invoiceEligibleForPaymentFile", () => {
-  it("requires eligible status, eligible decision, and unprocessed payment flag", () => {
-    assert.equal(invoiceEligibleForPaymentFile(baseInvoice(), baseData()), true);
-  });
-
-  it("rejects invoices with a status not included in payment file", () => {
-    assert.equal(
-      invoiceEligibleForPaymentFile(baseInvoice({ status: "Routed" }), baseData()),
-      false,
+describe("dashboard boxes", () => {
+  it("creates defaults without manual payment", () => {
+    const defaults = defaultDashboardBoxes(data());
+    assert.equal(defaults.some((item) => String(item.linkedViewId) === "manual-payment"), false);
+    assert.deepEqual(
+      defaults.map((item) => item.linkedViewId),
+      ["total", "needs-ap-work", "with-departments", "completed"],
     );
   });
 
-  it("rejects invoices with a decision not included in payment file", () => {
-    assert.equal(
-      invoiceEligibleForPaymentFile(baseInvoice({ departmentDecision: "Hold" }), baseData()),
-      false,
+  it("filters by linked view, departments, and statuses", () => {
+    assert.deepEqual(
+      dashboardBoxInvoices(data(), box()).map((item) => item.id),
+      ["invoice-1"],
     );
   });
 
-  it("rejects processed invoices and inactive decision types", () => {
-    const data = baseData();
-    data.departmentDecisions[0].active = false;
-    assert.equal(invoiceEligibleForPaymentFile(baseInvoice(), data), false);
-    assert.equal(
-      invoiceEligibleForPaymentFile(baseInvoice({ paymentProcessed: true }), baseData()),
-      false,
-    );
+  it("supports dollar metrics", () => {
+    assert.deepEqual(dashboardBoxMetric(data(), box()), {
+      count: 1,
+      dollars: 100,
+    });
   });
 
-  it("rejects unresolved potential duplicates", () => {
+  it("builds invoice list links with matching filters", () => {
     assert.equal(
-      invoiceEligibleForPaymentFile(
-        baseInvoice({ duplicateCheckStatus: "Potential Duplicate" }),
-        baseData(),
-      ),
-      false,
-    );
-    assert.equal(
-      invoiceEligibleForPaymentFile(
-        baseInvoice({ duplicateCheckStatus: "Reviewed Not Duplicate" }),
-        baseData(),
-      ),
-      true,
+      dashboardBoxHref(data(), box()),
+      "/invoices/with-departments?department=dept-1&status=Routed",
     );
   });
 });
