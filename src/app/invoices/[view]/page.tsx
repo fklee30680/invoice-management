@@ -77,7 +77,7 @@ export default async function InvoiceViewPage({
               <p className="mt-1 text-sm text-[var(--muted)]">
                 Create a payment file from invoices that match the payment-file
                 rules and current filters, or mark the visible eligible invoices
-                as paid.
+                as processed for payment.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -110,7 +110,7 @@ export default async function InvoiceViewPage({
                   className="focus-ring border border-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent)] hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-45"
                   disabled={invoices.length === 0}
                 >
-                  Paid
+                  Process for Payment
                 </button>
               </form>
             </div>

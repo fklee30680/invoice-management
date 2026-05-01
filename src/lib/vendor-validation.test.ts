@@ -145,6 +145,7 @@ describe("validateVendorAgainstFile", () => {
       departmentId: "",
       departmentDecision: "",
       paymentProcessed: false,
+      dateProcessedForPayment: "",
       escalations: [],
       comments: [],
       fileId: "file-1",

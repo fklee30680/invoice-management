@@ -3,10 +3,14 @@ import { describe, it } from "node:test";
 import { defaultDepartmentDecisions } from "./constants";
 import { normalizeInvoiceFields } from "./invoice-fields";
 import { defaultMenuSettings } from "./menu-registry";
-import { defaultPaymentFileSettings, invoiceEligibleForPaymentFile } from "./payment-file";
+import {
+  buildPaymentCsv,
+  defaultPaymentFileSettings,
+  invoiceEligibleForPaymentFile,
+} from "./payment-file";
 import { defaultPoImportSettings } from "./po-parser";
 import { defaultPoValidationSettings } from "./po-validation";
-import { defaultStatuses } from "./status-config";
+import { defaultStatuses, statusLabelForRole } from "./status-config";
 import type { AppData, Invoice } from "./types";
 
 function baseInvoice(overrides: Partial<Invoice> = {}): Invoice {
@@ -27,6 +31,7 @@ function baseInvoice(overrides: Partial<Invoice> = {}): Invoice {
     departmentId: "dept-1",
     departmentDecision: "Receiving Record",
     paymentProcessed: false,
+    dateProcessedForPayment: "",
     escalations: [],
     comments: [],
     fileId: "file-1",
@@ -137,5 +142,39 @@ describe("invoiceEligibleForPaymentFile", () => {
       ),
       true,
     );
+  });
+});
+
+describe("processed for payment configuration", () => {
+  it("adds a protected processed-for-payment status role", () => {
+    const data = baseData();
+    assert.equal(
+      statusLabelForRole(data, "processedForPayment"),
+      "Processed for Payment",
+    );
+    const status = data.statuses.find(
+      (item) => item.systemRole === "processedForPayment",
+    );
+    assert.equal(status?.includeInPaymentFile, false);
+    assert.equal(status?.includeInEscalation, false);
+  });
+
+  it("exports Date Processed for Payment when configured", () => {
+    const data = baseData();
+    data.paymentFile.columns = [
+      {
+        id: "processed-date",
+        header: "Date Processed for Payment",
+        source: "dateProcessedForPayment",
+        included: true,
+      },
+    ];
+
+    const csv = buildPaymentCsv(
+      data,
+      [baseInvoice({ dateProcessedForPayment: "2026-04-30" })],
+    );
+
+    assert.equal(csv, '"Date Processed for Payment"\r\n"Apr 30, 2026"');
   });
 });

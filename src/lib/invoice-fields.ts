@@ -77,6 +77,14 @@ export const DEFAULT_INVOICE_FIELDS: InvoiceFieldConfig[] = [
     sortOrder: 100,
   },
   {
+    key: "dateProcessedForPayment",
+    label: "Date Processed for Payment",
+    enabled: true,
+    readOnly: true,
+    systemControlled: true,
+    sortOrder: 105,
+  },
+  {
     key: "routedAt",
     label: "Routed Date",
     enabled: true,

@@ -91,6 +91,18 @@ export function defaultStatuses(): InvoiceStatusDefinition[] {
       systemRole: "completed",
     },
     {
+      id: "status-processed-for-payment",
+      label: "Processed for Payment",
+      tone: "blue",
+      showInFilter: true,
+      showInApWorkQueue: false,
+      showInDepartmentWork: false,
+      showInCompleted: false,
+      includeInEscalation: false,
+      includeInPaymentFile: false,
+      systemRole: "processedForPayment",
+    },
+    {
       id: "status-rejected",
       label: "Rejected",
       tone: "red",

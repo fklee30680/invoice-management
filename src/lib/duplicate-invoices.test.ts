@@ -22,6 +22,7 @@ function invoice(overrides: Partial<Invoice> = {}): Invoice {
     departmentId: "",
     departmentDecision: "",
     paymentProcessed: false,
+    dateProcessedForPayment: "",
     escalations: [],
     comments: [],
     fileId: "file-1",

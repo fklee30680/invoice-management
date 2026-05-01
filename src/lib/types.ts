@@ -92,6 +92,7 @@ export type StatusSystemRole =
   | "apRework"
   | "routed"
   | "completed"
+  | "processedForPayment"
   | "rejected"
   | "hold";
 
@@ -259,6 +260,7 @@ export type PaymentFileFieldSource =
   | "dateUploaded"
   | "dateSubmittedToDepartment"
   | "statusDate"
+  | "dateProcessedForPayment"
   | "paymentProcessed";
 
 export type PaymentFileColumn = {
@@ -384,6 +386,7 @@ export type Invoice = {
   departmentId: string;
   departmentDecision: string;
   paymentProcessed: boolean;
+  dateProcessedForPayment: string;
   escalations: InvoiceEscalationEvent[];
   comments: InvoiceComment[];
   fileId: string;
@@ -428,6 +431,7 @@ export type InvoiceFieldKey =
   | "departmentId"
   | "status"
   | "dateApproved"
+  | "dateProcessedForPayment"
   | "routedAt"
   | "notificationSentAt"
   | "ocrSummary";

@@ -77,7 +77,9 @@ function sortValue(invoice: Invoice, data: AppData, key: InvoiceSortKey) {
   if (key === "amount") return amountValue(invoice.amount || "");
   if (key === "department") return departmentName(data, invoice.departmentId);
   if (key === "decision") return invoice.departmentDecision || "Waiting";
-  if (key === "payment") return invoice.paymentProcessed ? "Processed" : "Not processed";
+  if (key === "payment") {
+    return invoice.paymentProcessed ? "Processed for Payment" : "Not processed";
+  }
   if (key === "received") return invoice.dateReceived || "";
   return "";
 }
@@ -113,7 +115,9 @@ export function filterInvoices(
       invoice.amount,
       departmentName(data, invoice.departmentId),
       invoice.departmentDecision,
-      invoice.paymentProcessed ? "payment processed" : "payment not processed",
+      invoice.paymentProcessed
+        ? "processed for payment"
+        : "not processed for payment",
       invoice.status,
     ]
       .join(" ")
@@ -318,6 +322,10 @@ export function InvoiceTable({
   const showAmount = invoiceFieldEnabled(data, "amount");
   const showDepartment = invoiceFieldEnabled(data, "departmentId");
   const showReceived = invoiceFieldEnabled(data, "dateReceived");
+  const showDateProcessedForPayment = invoiceFieldEnabled(
+    data,
+    "dateProcessedForPayment",
+  );
   const visibleColumnCount =
     [
       showStatus,
@@ -437,7 +445,14 @@ export function InvoiceTable({
                 {invoice.departmentDecision || "Waiting"}
               </td>
               <td className="border-b border-[var(--line)] px-3 py-3">
-                {invoice.paymentProcessed ? "Processed" : "Not processed"}
+                {invoice.paymentProcessed ? "Processed for Payment" : "Not processed"}
+                {showDateProcessedForPayment && invoice.paymentProcessed ? (
+                  <div className="mt-1 text-xs text-[var(--muted)]">
+                    {invoice.dateProcessedForPayment
+                      ? formatDate(invoice.dateProcessedForPayment)
+                      : "Date not set"}
+                  </div>
+                ) : null}
               </td>
               {showReceived ? (
                 <td className="border-b border-[var(--line)] px-3 py-3">

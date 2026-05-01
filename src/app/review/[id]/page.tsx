@@ -97,6 +97,14 @@ export default async function ReviewPage({
     invoiceFieldEnabled(data, "dateApproved")
       ? ["Date Approved", formatDate(invoice.dateApproved)]
       : null,
+    invoiceFieldEnabled(data, "dateProcessedForPayment")
+      ? [
+          "Date Processed for Payment",
+          invoice.dateProcessedForPayment
+            ? formatDate(invoice.dateProcessedForPayment)
+            : "Not processed",
+        ]
+      : null,
     invoiceFieldEnabled(data, "dateUploaded")
       ? ["Date Uploaded", formatDate(invoice.dateUploaded)]
       : null,
@@ -110,7 +118,7 @@ export default async function ReviewPage({
     invoice.poValidationStatus && invoice.poValidationStatus !== "Not Checked"
       ? ["PO Validation", invoice.poValidationStatus]
       : null,
-    ["Payment Processed", invoice.paymentProcessed ? "Yes" : "No"],
+    ["Processed for Payment", invoice.paymentProcessed ? "Yes" : "No"],
   ].filter((row): row is [string, string] => Boolean(row));
   const systemRows = [
     invoiceFieldEnabled(data, "status") ? ["Current Status", invoice.status] : null,
@@ -122,6 +130,14 @@ export default async function ReviewPage({
       : null,
     invoiceFieldEnabled(data, "notificationSentAt")
       ? ["Notification Sent", formatDateTime(invoice.notificationSentAt)]
+      : null,
+    invoiceFieldEnabled(data, "dateProcessedForPayment")
+      ? [
+          "Date Processed for Payment",
+          invoice.dateProcessedForPayment
+            ? formatDate(invoice.dateProcessedForPayment)
+            : "Not processed",
+        ]
       : null,
     invoiceFieldEnabled(data, "status") ? ["Status Date", formatDate(invoice.statusDate)] : null,
     invoiceFieldEnabled(data, "vendorName")
@@ -459,14 +475,14 @@ export default async function ReviewPage({
                     type="checkbox"
                   />
                   <span>
-                    <span className="block font-semibold">Payment processed</span>
+                    <span className="block font-semibold">Processed for Payment</span>
                     <span className="text-[var(--muted)]">
                       Checked invoices are removed from the manual payment queue.
                     </span>
                   </span>
                 </label>
                 <button className="focus-ring mt-4 w-full border border-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent)] hover:bg-teal-50">
-                  Save Payment Status
+                  Save Payment Processing Status
                 </button>
               </form>
             ) : null}

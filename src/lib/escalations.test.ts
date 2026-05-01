@@ -63,6 +63,7 @@ function baseData(): AppData {
         departmentId: "dept-1",
         departmentDecision: "",
         paymentProcessed: false,
+        dateProcessedForPayment: "",
         escalations: [],
         comments: [],
         fileId: "file-1",

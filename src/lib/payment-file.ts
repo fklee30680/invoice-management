@@ -24,7 +24,8 @@ export const PAYMENT_FILE_FIELD_OPTIONS: {
   { source: "dateUploaded", label: "Date Uploaded" },
   { source: "dateSubmittedToDepartment", label: "Date Submitted To Department" },
   { source: "statusDate", label: "Status Date" },
-  { source: "paymentProcessed", label: "Payment Processed" },
+  { source: "dateProcessedForPayment", label: "Date Processed for Payment" },
+  { source: "paymentProcessed", label: "Processed for Payment" },
 ];
 
 const validSources = new Set(PAYMENT_FILE_FIELD_OPTIONS.map((option) => option.source));
@@ -172,6 +173,8 @@ function valueForColumn(invoice: Invoice, column: PaymentFileColumn, data: AppDa
       return formatDate(invoice.dateSubmittedToDepartment);
     case "statusDate":
       return formatDate(invoice.statusDate);
+    case "dateProcessedForPayment":
+      return formatDate(invoice.dateProcessedForPayment);
     case "paymentProcessed":
       return invoice.paymentProcessed ? "Processed" : "Not processed";
   }

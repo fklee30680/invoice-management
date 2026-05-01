@@ -645,24 +645,30 @@ export async function markManualPaymentInvoicesPaid(formData: FormData) {
 
   await mutateData((data) => {
     let count = 0;
+    const now = new Date();
+    const nowIso = now.toISOString();
+    const today = nowIso.slice(0, 10);
+    const processedStatus = statusLabelForRole(data, "processedForPayment");
     for (const invoice of data.invoices) {
       if (!invoiceIds.has(invoice.id)) continue;
       if (!invoiceEligibleForPaymentFile(invoice, data)) continue;
       if (invoiceHasBlockingPoValidation(invoice, data)) continue;
       invoice.paymentProcessed = true;
-      invoice.updatedAt = new Date().toISOString();
+      invoice.dateProcessedForPayment = today;
+      setInvoiceStatus(invoice, processedStatus, now);
+      invoice.updatedAt = nowIso;
       count += 1;
       addAudit(data, {
         invoiceId: invoice.id,
         actor: "AP",
-        type: "payment_processed_updated",
-        message: "AP marked invoice paid from manual payment list.",
+        type: "invoice_processed_for_payment",
+        message: "AP processed invoice for payment.",
       });
     }
     addAudit(data, {
       actor: "AP",
-      type: "manual_payment_batch_paid",
-      message: `Marked ${count} manual payment invoices as paid.`,
+      type: "manual_payment_batch_processed_for_payment",
+      message: `Processed ${count} manual payment invoices for payment.`,
     });
   });
 
@@ -736,6 +742,7 @@ export async function uploadInvoices(formData: FormData) {
           departmentId,
           departmentDecision: "",
           paymentProcessed: false,
+          dateProcessedForPayment: "",
           escalations: [],
           comments: [],
           fileId,
@@ -1766,6 +1773,7 @@ export async function sendTestEscalationEmail(formData: FormData) {
 }
 
 export async function addInvoiceStatus(formData: FormData) {
+  await requireApUser();
   const label = value(formData, "label");
   if (!label) return;
 
@@ -1799,6 +1807,7 @@ export async function addInvoiceStatus(formData: FormData) {
 }
 
 export async function updateInvoiceStatus(formData: FormData) {
+  await requireApUser();
   const statusId = value(formData, "statusId");
   const label = value(formData, "label");
   if (!statusId || !label) return;
@@ -1813,14 +1822,29 @@ export async function updateInvoiceStatus(formData: FormData) {
     if (duplicate) return;
 
     const oldLabel = status.label;
+    const protectedProcessedForPayment = statusRoles(status).includes(
+      "processedForPayment",
+    );
     status.label = label;
-    status.tone = toneValue(formData);
-    status.showInFilter = checkbox(formData, "showInFilter");
-    status.showInApWorkQueue = checkbox(formData, "showInApWorkQueue");
-    status.showInDepartmentWork = checkbox(formData, "showInDepartmentWork");
-    status.showInCompleted = checkbox(formData, "showInCompleted");
-    status.includeInEscalation = checkbox(formData, "includeInEscalation");
-    status.includeInPaymentFile = checkbox(formData, "includeInPaymentFile");
+    if (protectedProcessedForPayment) {
+      status.tone = "blue";
+      status.showInFilter = true;
+      status.showInApWorkQueue = false;
+      status.showInDepartmentWork = false;
+      status.showInCompleted = false;
+      status.includeInEscalation = false;
+      status.includeInPaymentFile = false;
+      status.systemRole = "processedForPayment";
+      status.systemRoles = undefined;
+    } else {
+      status.tone = toneValue(formData);
+      status.showInFilter = checkbox(formData, "showInFilter");
+      status.showInApWorkQueue = checkbox(formData, "showInApWorkQueue");
+      status.showInDepartmentWork = checkbox(formData, "showInDepartmentWork");
+      status.showInCompleted = checkbox(formData, "showInCompleted");
+      status.includeInEscalation = checkbox(formData, "includeInEscalation");
+      status.includeInPaymentFile = checkbox(formData, "includeInPaymentFile");
+    }
 
     if (oldLabel !== label) {
       for (const invoice of data.invoices) {
@@ -1846,6 +1870,7 @@ export async function updateInvoiceStatus(formData: FormData) {
 }
 
 export async function deleteInvoiceStatus(formData: FormData) {
+  await requireApUser();
   const statusId = value(formData, "statusId");
   const replacementStatusId = value(formData, "replacementStatusId");
   if (!statusId) return;
@@ -1853,6 +1878,14 @@ export async function deleteInvoiceStatus(formData: FormData) {
   await mutateData((data) => {
     const status = data.statuses.find((item) => item.id === statusId);
     if (!status) return;
+    if (statusRoles(status).includes("processedForPayment")) {
+      addAudit(data, {
+        actor: "AP",
+        type: "status_delete_blocked",
+        message: "Could not delete Processed for Payment; it is a system status.",
+      });
+      return;
+    }
     const replacement = data.statuses.find(
       (item) => item.id === replacementStatusId && item.id !== statusId,
     );
@@ -2476,6 +2509,7 @@ export async function completeInvoice(formData: FormData) {
     setInvoiceStatus(invoice, statusLabelForRole(data, "completed"));
     invoice.dateApproved = invoice.dateApproved || new Date().toISOString().slice(0, 10);
     invoice.paymentProcessed = false;
+    invoice.dateProcessedForPayment = "";
     invoice.updatedAt = new Date().toISOString();
     addAudit(data, {
       invoiceId,
@@ -2507,7 +2541,7 @@ export async function updateInvoicePaymentProcessed(formData: FormData) {
         invoiceId,
         actor: "AP",
         type: "payment_processed_blocked",
-        message: "Payment processed update blocked by unresolved potential duplicate.",
+        message: "Processing for payment was blocked by an unresolved potential duplicate.",
       });
       return;
     }
@@ -2516,19 +2550,30 @@ export async function updateInvoicePaymentProcessed(formData: FormData) {
         invoiceId,
         actor: "AP",
         type: "payment_processed_blocked",
-        message: "Payment processed update blocked by PO validation.",
+        message: "Processing for payment was blocked by PO validation.",
       });
       return;
     }
+    const now = new Date();
+    const nowIso = now.toISOString();
     invoice.paymentProcessed = paymentProcessed;
-    invoice.updatedAt = new Date().toISOString();
+    if (paymentProcessed) {
+      invoice.dateProcessedForPayment = nowIso.slice(0, 10);
+      setInvoiceStatus(invoice, statusLabelForRole(data, "processedForPayment"), now);
+    } else {
+      invoice.dateProcessedForPayment = "";
+      if (invoice.status === statusLabelForRole(data, "processedForPayment")) {
+        setInvoiceStatus(invoice, statusLabelForRole(data, "completed"), now);
+      }
+    }
+    invoice.updatedAt = nowIso;
     addAudit(data, {
       invoiceId,
       actor: "AP",
       type: "payment_processed_updated",
       message: paymentProcessed
-        ? "AP marked payment processed."
-        : "AP marked payment not processed.",
+        ? "AP processed invoice for payment."
+        : "AP marked invoice not processed for payment.",
     });
   });
 
@@ -2814,6 +2859,7 @@ export async function submitDepartmentDecision(formData: FormData) {
     } else {
       setInvoiceStatus(invoice, statusLabelForRole(data, "completed"), new Date(now));
       invoice.paymentProcessed = false;
+      invoice.dateProcessedForPayment = "";
       invoice.dateApproved = now.slice(0, 10);
     }
 

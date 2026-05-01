@@ -438,6 +438,7 @@ function normalizeData(data: AppData): AppData {
         normalizePoValidationStatus({
           ...invoice,
           paymentProcessed: invoice.paymentProcessed === true,
+          dateProcessedForPayment: invoice.dateProcessedForPayment || "",
           dateUploaded:
             invoice.dateUploaded ||
             invoice.createdAt?.slice(0, 10) ||
@@ -647,17 +648,32 @@ function mergeStatuses(
     );
   }
 
-  return statuses.map((status) => ({
-    ...status,
-    includeInEscalation:
-      typeof status.includeInEscalation === "boolean"
-        ? status.includeInEscalation
-        : statusRoles(status).includes("routed"),
-    includeInPaymentFile:
-      typeof status.includeInPaymentFile === "boolean"
-        ? status.includeInPaymentFile
-        : statusRoles(status).includes("completed"),
-  }));
+  return statuses.map((status) => {
+    const roles = statusRoles(status);
+    const normalized = {
+      ...status,
+      includeInEscalation:
+        typeof status.includeInEscalation === "boolean"
+          ? status.includeInEscalation
+          : roles.includes("routed"),
+      includeInPaymentFile:
+        typeof status.includeInPaymentFile === "boolean"
+          ? status.includeInPaymentFile
+          : roles.includes("completed"),
+    };
+
+    if (!roles.includes("processedForPayment")) return normalized;
+
+    const protectedDefault = defaultStatusList.find((item) =>
+      statusRoles(item).includes("processedForPayment"),
+    );
+    return {
+      ...(protectedDefault || normalized),
+      id: protectedDefault?.id || normalized.id,
+      label: normalized.label || protectedDefault?.label || "Processed for Payment",
+      systemRole: "processedForPayment" as const,
+    };
+  });
 }
 
 function hasDatabase() {

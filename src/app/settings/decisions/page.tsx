@@ -18,7 +18,8 @@ const workflowOptions: {
   {
     value: "complete",
     label: "Approve / Complete",
-    description: "Marks the invoice completed and adds it to manual payment if unpaid.",
+    description:
+      "Marks the invoice completed and adds it to manual payment if not processed for payment.",
   },
   {
     value: "reject",

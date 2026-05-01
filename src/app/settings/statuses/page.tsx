@@ -7,6 +7,7 @@ import {
   STATUS_TONES,
   STATUS_TONE_CLASSES,
   statusRoleLabel,
+  statusRoles,
 } from "@/lib/status-config";
 import { readData } from "@/lib/store";
 
@@ -21,11 +22,13 @@ function Checkbox({
   label,
   name,
   defaultChecked,
+  disabled,
   form,
 }: {
   label: string;
   name: string;
   defaultChecked?: boolean;
+  disabled?: boolean;
   form?: string;
 }) {
   return (
@@ -33,6 +36,7 @@ function Checkbox({
       <input
         className="h-4 w-4 accent-[var(--accent)]"
         defaultChecked={defaultChecked}
+        disabled={disabled}
         form={form}
         name={name}
         type="checkbox"
@@ -133,11 +137,16 @@ export default async function StatusSettingsPage() {
               const deleteFormId = `delete-${status.id}`;
               const count = usageCount(status.label, data);
               const roleLabel = statusRoleLabel(status);
+              const protectedProcessedForPayment = statusRoles(status).includes(
+                "processedForPayment",
+              );
               const replacementOptions = data.statuses.filter(
                 (candidate) => candidate.id !== status.id,
               );
               const needsReplacement = Boolean(roleLabel || count > 0);
-              const canDelete = !needsReplacement || replacementOptions.length > 0;
+              const canDelete =
+                !protectedProcessedForPayment &&
+                (!needsReplacement || replacementOptions.length > 0);
 
               return (
                 <tr className="align-top hover:bg-slate-50" key={status.id}>
@@ -155,12 +164,19 @@ export default async function StatusSettingsPage() {
                           Workflow: {roleLabel}
                         </div>
                       ) : null}
+                      {protectedProcessedForPayment ? (
+                        <div className="mt-1 text-xs text-[var(--muted)]">
+                          This system status is used when AP processes invoices for
+                          payment. Only the name can be changed.
+                        </div>
+                      ) : null}
                     </form>
                   </td>
                   <td className="border-b border-[var(--line)] px-3 py-3">
                     <select
                       className="focus-ring min-h-10 w-full border border-[var(--line)] bg-white px-3 text-sm"
                       defaultValue={status.tone}
+                      disabled={protectedProcessedForPayment}
                       form={formId}
                       name="tone"
                     >
@@ -180,36 +196,42 @@ export default async function StatusSettingsPage() {
                     <div className="grid gap-2 sm:grid-cols-2">
                       <Checkbox
                         defaultChecked={status.showInFilter}
+                        disabled={protectedProcessedForPayment}
                         form={formId}
                         label="Status filter"
                         name="showInFilter"
                       />
                       <Checkbox
                         defaultChecked={status.showInApWorkQueue}
+                        disabled={protectedProcessedForPayment}
                         form={formId}
                         label="AP work area"
                         name="showInApWorkQueue"
                       />
                       <Checkbox
                         defaultChecked={status.showInDepartmentWork}
+                        disabled={protectedProcessedForPayment}
                         form={formId}
                         label="Department work area"
                         name="showInDepartmentWork"
                       />
                       <Checkbox
                         defaultChecked={status.showInCompleted}
+                        disabled={protectedProcessedForPayment}
                         form={formId}
                         label="Completed list"
                         name="showInCompleted"
                       />
                       <Checkbox
                         defaultChecked={status.includeInEscalation}
+                        disabled={protectedProcessedForPayment}
                         form={formId}
                         label="Escalation processing"
                         name="includeInEscalation"
                       />
                       <Checkbox
                         defaultChecked={status.includeInPaymentFile}
+                        disabled={protectedProcessedForPayment}
                         form={formId}
                         label="Include in Payment File"
                         name="includeInPaymentFile"
@@ -220,27 +242,29 @@ export default async function StatusSettingsPage() {
                     {count}
                   </td>
                   <td className="border-b border-[var(--line)] px-3 py-3">
-                    <label className="mb-3 block text-xs font-semibold uppercase text-[var(--muted)]">
-                      Move To Before Delete
-                      <select
-                        className="focus-ring mt-1 min-h-10 w-full border border-[var(--line)] bg-white px-3 text-sm font-normal normal-case text-[var(--foreground)] disabled:opacity-45"
-                        disabled={!needsReplacement}
-                        form={deleteFormId}
-                        name="replacementStatusId"
-                        required={needsReplacement}
-                      >
-                        <option value="">
-                          {needsReplacement
-                            ? "Select replacement"
-                            : "Not needed"}
-                        </option>
-                        {replacementOptions.map((candidate) => (
-                          <option key={candidate.id} value={candidate.id}>
-                            {candidate.label}
+                    {!protectedProcessedForPayment ? (
+                      <label className="mb-3 block text-xs font-semibold uppercase text-[var(--muted)]">
+                        Move To Before Delete
+                        <select
+                          className="focus-ring mt-1 min-h-10 w-full border border-[var(--line)] bg-white px-3 text-sm font-normal normal-case text-[var(--foreground)] disabled:opacity-45"
+                          disabled={!needsReplacement}
+                          form={deleteFormId}
+                          name="replacementStatusId"
+                          required={needsReplacement}
+                        >
+                          <option value="">
+                            {needsReplacement
+                              ? "Select replacement"
+                              : "Not needed"}
                           </option>
-                        ))}
-                      </select>
-                    </label>
+                          {replacementOptions.map((candidate) => (
+                            <option key={candidate.id} value={candidate.id}>
+                              {candidate.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : null}
                     <div className="flex flex-wrap gap-2">
                       <button
                         className="focus-ring border border-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-[var(--accent)] hover:bg-teal-50"
@@ -248,17 +272,19 @@ export default async function StatusSettingsPage() {
                       >
                         Save
                       </button>
-                      <form action={deleteInvoiceStatus} id={deleteFormId}>
-                        <input name="statusId" type="hidden" value={status.id} />
-                        <button
-                          className="focus-ring border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-45"
-                          disabled={!canDelete}
-                        >
-                          Delete
-                        </button>
-                      </form>
+                      {!protectedProcessedForPayment ? (
+                        <form action={deleteInvoiceStatus} id={deleteFormId}>
+                          <input name="statusId" type="hidden" value={status.id} />
+                          <button
+                            className="focus-ring border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-45"
+                            disabled={!canDelete}
+                          >
+                            Delete
+                          </button>
+                        </form>
+                      ) : null}
                     </div>
-                    {!canDelete ? (
+                    {protectedProcessedForPayment ? null : !canDelete ? (
                       <div className="mt-2 text-xs text-[var(--muted)]">
                         Add another status before deleting this one.
                       </div>
