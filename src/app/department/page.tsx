@@ -70,7 +70,12 @@ function InvoiceList({
           </thead>
           <tbody>
             {invoices.map((invoice) => (
-              <tr className="align-top hover:bg-slate-50" key={invoice.id}>
+              <tr
+                className={`align-top hover:bg-slate-50 ${
+                  invoice.requiresApAttention ? "bg-amber-50/50" : ""
+                }`}
+                key={invoice.id}
+              >
                 {showStatus ? (
                   <td className="border-b border-[var(--line)] px-3 py-3">
                   <span
@@ -83,6 +88,11 @@ function InvoiceList({
                 {showVendor ? (
                   <td className="border-b border-[var(--line)] px-3 py-3 font-medium">
                   {invoice.vendorName || "Unknown Vendor"}
+                  {invoice.requiresApAttention ? (
+                    <div className="mt-2 inline-flex border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-900">
+                      AP Attention
+                    </div>
+                  ) : null}
                 </td>
                 ) : null}
                 {showInvoice ? (

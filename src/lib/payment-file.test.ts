@@ -4,6 +4,7 @@ import { defaultDepartmentDecisions } from "./constants";
 import { normalizeInvoiceFields } from "./invoice-fields";
 import { defaultMenuSettings } from "./menu-registry";
 import { defaultPaymentFileSettings, invoiceEligibleForPaymentFile } from "./payment-file";
+import { defaultPoValidationSettings } from "./po-validation";
 import { defaultStatuses } from "./status-config";
 import type { AppData, Invoice } from "./types";
 
@@ -83,6 +84,7 @@ function baseData(): AppData {
     statuses: defaultStatuses(),
     invoiceFields: normalizeInvoiceFields(undefined),
     menuSettings: defaultMenuSettings(),
+    poValidationSettings: defaultPoValidationSettings(),
     departmentDecisions: defaultDepartmentDecisions(),
     escalationContacts: [],
   };

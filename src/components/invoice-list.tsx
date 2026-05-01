@@ -348,7 +348,12 @@ export function InvoiceTable({
         </thead>
         <tbody>
           {invoices.map((invoice) => (
-            <tr key={invoice.id} className="align-top hover:bg-slate-50">
+            <tr
+              key={invoice.id}
+              className={`align-top hover:bg-slate-50 ${
+                invoice.requiresApAttention ? "bg-amber-50/50" : ""
+              }`}
+            >
               {showStatus ? (
                 <td className="border-b border-[var(--line)] px-3 py-3">
                 <span
@@ -367,6 +372,17 @@ export function InvoiceTable({
                 <div className="mt-1 text-xs font-normal text-[var(--muted)]">
                   Vendor record: {invoice.vendorValidationStatus || "Not Checked"}
                 </div>
+                {invoice.requiresApAttention ? (
+                  <div className="mt-2 inline-flex border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-900">
+                    AP Attention
+                  </div>
+                ) : null}
+                {invoice.poValidationStatus &&
+                invoice.poValidationStatus !== "Not Checked" ? (
+                  <div className="mt-1 text-xs font-normal text-[var(--muted)]">
+                    {invoice.poValidationStatus}
+                  </div>
+                ) : null}
                 {invoiceFieldEnabled(data, "ocrSummary") ? (
                   <div className="mt-1 text-xs font-normal text-[var(--muted)]">
                   {invoice.ocrSummary}

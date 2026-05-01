@@ -13,6 +13,7 @@ import type {
   MenuSettings,
   NotificationTemplate,
   PaymentFileSettings,
+  PoValidationSettings,
   PurchaseOrder,
   User,
   Vendor,
@@ -28,6 +29,10 @@ import {
   normalizePaymentFileSettings,
 } from "./payment-file";
 import { defaultMenuSettings, normalizeMenuSettings } from "./menu-registry";
+import {
+  normalizePoValidationSettings,
+  normalizePoValidationStatus,
+} from "./po-validation";
 import { defaultStatuses, statusRoles } from "./status-config";
 import { normalizeInvoiceFields } from "./invoice-fields";
 import { normalizePoNumber, normalizeVendorName, slugify } from "./utils";
@@ -315,7 +320,7 @@ function normalizeData(data: AppData): AppData {
     const legacyStatus = String(invoice.status);
     const notificationSentAt = invoice.notificationSentAt || "";
     const routedAt = invoice.routedAt || notificationSentAt || "";
-    const normalizedInvoice = {
+    const normalizedInvoice = normalizePoValidationStatus({
       ...invoice,
       vendorValidationStatus: invoice.vendorValidationStatus || "Not Checked",
       paymentProcessed: invoice.paymentProcessed === true,
@@ -327,7 +332,7 @@ function normalizeData(data: AppData): AppData {
       routedAt,
       escalations: invoice.escalations || [],
       notificationSentAt,
-    };
+    });
     if (legacyStatus === "OCR Processing") {
       return { ...normalizedInvoice, status: "Needs AP Review" as const };
     }
@@ -378,6 +383,10 @@ function normalizeData(data: AppData): AppData {
     ),
     menuSettings: normalizeMenuSettings(
       (data as AppData & { menuSettings?: MenuSettings }).menuSettings,
+    ),
+    poValidationSettings: normalizePoValidationSettings(
+      (data as AppData & { poValidationSettings?: PoValidationSettings })
+        .poValidationSettings,
     ),
     departmentDecisions: normalizeDepartmentDecisions(data.departmentDecisions),
     escalationSchedules,
@@ -654,6 +663,7 @@ function seedData(): AppData {
     statuses: defaultStatuses(),
     invoiceFields: normalizeInvoiceFields(undefined),
     menuSettings: defaultMenuSettings(),
+    poValidationSettings: normalizePoValidationSettings(undefined),
     departmentDecisions: defaultDepartmentDecisions(),
     escalationContacts: defaultEscalationContacts(),
   };

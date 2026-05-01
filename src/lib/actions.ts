@@ -32,6 +32,12 @@ import {
   menuTargetByHref,
   normalizeMenuSettings,
 } from "./menu-registry";
+import {
+  applyPoValidationState,
+  invoiceHasBlockingPoValidation,
+  normalizePoValidationSettings,
+  validateInvoicePoNumber,
+} from "./po-validation";
 import { parsePoUpload } from "./po-parser";
 import { canAccessInvoice, requireApUser, requireUser } from "./session";
 import { parseVendorUpload } from "./vendor-parser";
@@ -365,6 +371,7 @@ export async function markManualPaymentInvoicesPaid(formData: FormData) {
     for (const invoice of data.invoices) {
       if (!invoiceIds.has(invoice.id)) continue;
       if (!invoiceEligibleForPaymentFile(invoice, data)) continue;
+      if (invoiceHasBlockingPoValidation(invoice, data)) continue;
       invoice.paymentProcessed = true;
       invoice.updatedAt = new Date().toISOString();
       count += 1;
@@ -516,9 +523,13 @@ function applyApInvoiceMetadataUpdate(
   const previousRoutedAt = invoice.routedAt;
   const now = new Date();
   const nowIso = now.toISOString();
+  const poValidation = validatePoCandidate(data, invoice, formData);
+  if (poValidation.blocked) {
+    return { shouldNotify: false, blocked: poValidation.blocked };
+  }
 
   if (invoiceFieldEnabled(data, "vendorName") && formData.has("vendorName")) {
-    invoice.vendorName = value(formData, "vendorName");
+    invoice.vendorName = poValidation.vendorName;
   }
   if (invoiceFieldEnabled(data, "invoiceNumber") && formData.has("invoiceNumber")) {
     invoice.invoiceNumber = value(formData, "invoiceNumber");
@@ -530,7 +541,10 @@ function applyApInvoiceMetadataUpdate(
     invoice.amount = value(formData, "amount");
   }
   if (invoiceFieldEnabled(data, "poNumber") && formData.has("poNumber")) {
-    invoice.poNumber = value(formData, "poNumber");
+    invoice.poNumber = poValidation.poNumber;
+  }
+  if (poValidation.vendorUpdatedFromPo) {
+    invoice.vendorName = poValidation.vendorName;
   }
   if (invoiceFieldEnabled(data, "dateReceived") && formData.has("dateReceived")) {
     invoice.dateReceived = value(formData, "dateReceived");
@@ -583,6 +597,28 @@ function applyApInvoiceMetadataUpdate(
   }
 
   invoice.updatedAt = nowIso;
+  if (poValidation.result?.enabled) {
+    applyPoValidationState(invoice, poValidation.result, nowIso);
+  }
+  if (poValidation.vendorUpdatedFromPo && poValidation.result?.poVendorName) {
+    const previousVendor = poValidation.previousVendor || "Not set";
+    invoice.poValidationStatus = "Vendor Updated From PO";
+    invoice.poValidationMessage = `Vendor updated from ${previousVendor} to ${poValidation.result.poVendorName} based on PO ${invoice.poNumber}.`;
+    invoice.requiresApAttention = true;
+    invoice.apAttentionReason = "Vendor was updated from PO validation.";
+    invoice.comments.unshift({
+      id: createId("comment"),
+      author: "AP",
+      body: `Vendor updated from PO validation. Previous vendor: ${previousVendor}. PO vendor: ${poValidation.result.poVendorName}. PO number: ${invoice.poNumber}.`,
+      createdAt: nowIso,
+    });
+    addAudit(data, {
+      invoiceId: invoice.id,
+      actor: "AP",
+      type: "po_vendor_updated",
+      message: `Vendor updated from ${previousVendor} to ${poValidation.result.poVendorName} based on PO ${invoice.poNumber}. Invoice flagged for AP review.`,
+    });
+  }
 
   const nextDepartment = data.departments.find(
     (department) => department.id === invoice.departmentId,
@@ -604,11 +640,75 @@ function applyApInvoiceMetadataUpdate(
   return { shouldNotify };
 }
 
+function validatePoCandidate(
+  data: Awaited<ReturnType<typeof readData>>,
+  invoice: Invoice,
+  formData: FormData,
+) {
+  const poEnabled = invoiceFieldEnabled(data, "poNumber");
+  const vendorName =
+    invoiceFieldEnabled(data, "vendorName") && formData.has("vendorName")
+      ? value(formData, "vendorName")
+      : invoice.vendorName;
+  const poNumber =
+    poEnabled && formData.has("poNumber") ? value(formData, "poNumber") : invoice.poNumber;
+  const result =
+    poEnabled && poNumber
+      ? validateInvoicePoNumber(data, { poNumber, invoiceVendorName: vendorName })
+      : undefined;
+  const updateActionRequested =
+    value(formData, "poValidationAction") === "updateVendor" &&
+    result?.found &&
+    result.poVendorName &&
+    data.poValidationSettings.allowVendorUpdateFromPo;
+  if (updateActionRequested && result?.poVendorName) {
+    return {
+      poNumber,
+      vendorName: result.poVendorName,
+      result,
+      vendorUpdatedFromPo:
+        invoice.vendorName.trim().toLowerCase() !==
+        result.poVendorName.trim().toLowerCase(),
+      previousVendor: invoice.vendorName,
+    };
+  }
+  if (!result || !result.enabled || result.severity !== "blocking") {
+    return { poNumber, vendorName, result };
+  }
+  if (formData.has("departmentId") && !value(formData, "departmentId")) {
+    return { poNumber, vendorName, result };
+  }
+
+  const canUpdateVendor =
+    result.found &&
+    !result.vendorMatches &&
+    data.poValidationSettings.allowVendorUpdateFromPo &&
+    value(formData, "poValidationAction") === "updateVendor" &&
+    result.poVendorName;
+  if (canUpdateVendor) {
+    return {
+      poNumber,
+      vendorName: result.poVendorName || vendorName,
+      result,
+      vendorUpdatedFromPo: true,
+      previousVendor: vendorName,
+    };
+  }
+
+  return {
+    poNumber,
+    vendorName,
+    result,
+    blocked: result.found ? "po-vendor-mismatch" : "po-not-found",
+  };
+}
+
 export async function updateAndRouteInvoice(formData: FormData) {
   await requireApUser();
   const invoiceId = value(formData, "invoiceId");
   let updatedInvoice: Invoice | undefined;
   let shouldNotify = false;
+  let blocked = "";
 
   await mutateData((data) => {
     const invoice = getInvoice(data, invoiceId);
@@ -616,8 +716,14 @@ export async function updateAndRouteInvoice(formData: FormData) {
 
     const result = applyApInvoiceMetadataUpdate(data, invoice, formData);
     shouldNotify = result.shouldNotify;
+    blocked = result.blocked || "";
+    if (blocked) return;
     updatedInvoice = invoice;
   });
+
+  if (blocked) {
+    redirect(`/review/${invoiceId}?error=${blocked}`);
+  }
 
   const current = await mutateData((data) => data);
   if (updatedInvoice?.status === statusLabelForRole(current, "routed") && shouldNotify) {
@@ -1605,6 +1711,52 @@ export async function updateInvoiceFields(formData: FormData) {
   revalidatePath("/settings/decisions");
 }
 
+export async function updatePoValidationSettings(formData: FormData) {
+  await requireApUser();
+
+  await mutateData((data) => {
+    data.poValidationSettings = normalizePoValidationSettings({
+      enabled: checkbox(formData, "enabled"),
+      requirePoToExistInPoList: checkbox(formData, "requirePoToExistInPoList"),
+      blockSaveOnVendorMismatch: checkbox(formData, "blockSaveOnVendorMismatch"),
+      allowVendorUpdateFromPo: checkbox(formData, "allowVendorUpdateFromPo"),
+      fuzzyVendorMatch: checkbox(formData, "fuzzyVendorMatch"),
+      vendorMatchThreshold: numberValue(formData, "vendorMatchThreshold", 0.85),
+    });
+    addAudit(data, {
+      actor: "AP",
+      type: "po_validation_settings_updated",
+      message: "Updated PO validation settings.",
+    });
+  });
+
+  revalidatePath("/settings/po-validation");
+}
+
+export async function clearInvoiceAttentionFlag(formData: FormData) {
+  await requireApUser();
+  const invoiceId = value(formData, "invoiceId");
+  if (!invoiceId) return;
+
+  await mutateData((data) => {
+    const invoice = getInvoice(data, invoiceId);
+    if (!invoice) return;
+    invoice.requiresApAttention = false;
+    invoice.apAttentionReason = "";
+    invoice.updatedAt = new Date().toISOString();
+    addAudit(data, {
+      invoiceId,
+      actor: "AP",
+      type: "ap_attention_cleared",
+      message: "AP cleared invoice attention flag.",
+    });
+  });
+
+  revalidatePath("/");
+  revalidatePath("/invoices", "layout");
+  revalidatePath(`/review/${invoiceId}`);
+}
+
 export async function updateMenuSettings(formData: FormData) {
   await requireApUser();
   const topItemIds = idList(formData, "menuItemId");
@@ -1899,6 +2051,15 @@ export async function completeInvoice(formData: FormData) {
   await mutateData((data) => {
     const invoice = getInvoice(data, invoiceId);
     if (!invoice) return;
+    if (invoiceHasBlockingPoValidation(invoice, data)) {
+      addAudit(data, {
+        invoiceId,
+        actor: "AP",
+        type: "complete_blocked",
+        message: "Could not complete invoice because PO validation is blocking.",
+      });
+      return;
+    }
     setInvoiceStatus(invoice, statusLabelForRole(data, "completed"));
     invoice.dateApproved = invoice.dateApproved || new Date().toISOString().slice(0, 10);
     invoice.paymentProcessed = false;
@@ -1928,6 +2089,15 @@ export async function updateInvoicePaymentProcessed(formData: FormData) {
   await mutateData((data) => {
     const invoice = getInvoice(data, invoiceId);
     if (!invoice) return;
+    if (paymentProcessed && invoiceHasBlockingPoValidation(invoice, data)) {
+      addAudit(data, {
+        invoiceId,
+        actor: "AP",
+        type: "payment_processed_blocked",
+        message: "Payment processed update blocked by PO validation.",
+      });
+      return;
+    }
     invoice.paymentProcessed = paymentProcessed;
     invoice.updatedAt = new Date().toISOString();
     addAudit(data, {
@@ -2015,6 +2185,25 @@ export async function submitDepartmentDecision(formData: FormData) {
   if (poEnabled && decisionDefinition.requirePoNumber && !poNumberForDecision) {
     redirect(`/review/${invoiceId}?error=po-required&decision=${encodeURIComponent(decision)}`);
   }
+  const poValidationResult =
+    poEnabled && poNumberForDecision && decisionDefinition.workflowAction !== "apRework"
+      ? validateInvoicePoNumber(currentData, {
+          poNumber: poNumberForDecision,
+          invoiceVendorName: currentInvoice.vendorName,
+        })
+      : undefined;
+  const updateVendorFromPo =
+    poValidationResult?.severity === "blocking" &&
+    poValidationResult.found &&
+    !poValidationResult.vendorMatches &&
+    currentData.poValidationSettings.allowVendorUpdateFromPo &&
+    value(formData, "poValidationAction") === "updateVendor" &&
+    poValidationResult.poVendorName;
+  if (poValidationResult?.severity === "blocking" && !updateVendorFromPo) {
+    redirect(
+      `/review/${invoiceId}?error=${poValidationResult.found ? "po-vendor-mismatch" : "po-not-found"}&decision=${encodeURIComponent(decision)}`,
+    );
+  }
 
   await mutateData((data) => {
     const invoice = getInvoice(data, invoiceId);
@@ -2022,6 +2211,7 @@ export async function submitDepartmentDecision(formData: FormData) {
 
     const now = new Date().toISOString();
     const existingPoNumber = invoice.poNumber.trim();
+    const previousVendor = invoice.vendorName || "Not set";
     if (
       invoiceFieldEnabled(data, "poNumber") &&
       decisionDefinition.requirePoNumber &&
@@ -2034,6 +2224,28 @@ export async function submitDepartmentDecision(formData: FormData) {
         actor: "Department Reviewer",
         type: "po_number_added",
         message: `Department reviewer added PO number ${submittedPoNumber} for PO-required decision ${decision}.`,
+      });
+    }
+    if (poValidationResult?.enabled) {
+      applyPoValidationState(invoice, poValidationResult, now);
+    }
+    if (updateVendorFromPo && poValidationResult?.poVendorName) {
+      invoice.vendorName = poValidationResult.poVendorName;
+      invoice.poValidationStatus = "Vendor Updated From PO";
+      invoice.poValidationMessage = `Vendor updated from ${previousVendor} to ${poValidationResult.poVendorName} based on PO ${poNumberForDecision}.`;
+      invoice.requiresApAttention = true;
+      invoice.apAttentionReason = "Vendor was updated from PO validation.";
+      invoice.comments.unshift({
+        id: createId("comment"),
+        author: "Department Reviewer",
+        body: `Vendor updated from PO validation. Previous vendor: ${previousVendor}. PO vendor: ${poValidationResult.poVendorName}. PO number: ${poNumberForDecision}.`,
+        createdAt: now,
+      });
+      addAudit(data, {
+        invoiceId,
+        actor: "Department Reviewer",
+        type: "po_vendor_updated",
+        message: `Vendor updated from ${previousVendor} to ${poValidationResult.poVendorName} based on PO ${poNumberForDecision}. Invoice flagged for AP review.`,
       });
     }
     invoice.departmentDecision = decision;

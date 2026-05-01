@@ -23,6 +23,7 @@ const BASE_MENU_TARGETS: MenuLinkTarget[] = [
   { id: "invoice-fields", label: "Invoice Fields", href: "/settings/invoice-fields", roles: ["AP"], category: "Setup" },
   { id: "menu-setup", label: "Menu Setup", href: "/settings/menu", roles: ["AP"], locked: true, category: "Setup" },
   { id: "organization-escalation-contacts", label: "Organization Escalation Contacts", href: "/settings/organization-escalation-contacts", roles: ["AP"], category: "Setup" },
+  { id: "po-validation", label: "PO Validation", href: "/settings/po-validation", roles: ["AP"], category: "Setup" },
   { id: "scheduler-runtime", label: "Scheduler Runtime", href: "/settings/scheduler", roles: ["AP"], category: "Setup" },
   { id: "statuses", label: "Statuses", href: "/settings/statuses", roles: ["AP"], category: "Setup" },
   { id: "department-dashboard", label: "Department Dashboard", href: "/department", roles: ["DEPARTMENT"], locked: true, category: "Department" },
@@ -77,8 +78,9 @@ export function defaultMenuSettings(): MenuSettings {
         menuLink("invoice-fields", 8),
         menuLink("menu-setup", 9),
         menuLink("organization-escalation-contacts", 10),
-        menuLink("scheduler-runtime", 11),
-        menuLink("statuses", 12),
+        menuLink("po-validation", 11),
+        menuLink("scheduler-runtime", 12),
+        menuLink("statuses", 13),
       ]),
       menuLink("department-dashboard", 7),
     ],
@@ -106,6 +108,16 @@ export function normalizeMenuSettings(settings: MenuSettings | undefined): MenuS
       }
     }
     items.push({ ...lockedDefault, order: items.length + 1 });
+  }
+  const setupGroup = items.find((item) => item.id === "setup" && item.type === "group");
+  if (
+    setupGroup &&
+    !flattenMenuItems(items).some((item) => item.href === "/settings/po-validation")
+  ) {
+    setupGroup.children = normalizeOrder([
+      ...(setupGroup.children || []),
+      menuLink("po-validation", (setupGroup.children || []).length + 1),
+    ]);
   }
 
   return { items: normalizeOrder(items) };

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PoValidationField } from "@/components/po-validation-field";
 import {
   updateAndRouteInvoice,
   uploadInvoices,
@@ -94,7 +95,9 @@ function ApWorkQueue({ data }: { data: AppData }) {
         {queue.map((invoice) => (
           <form
             action={updateAndRouteInvoice}
-            className="border border-[var(--line)] bg-[var(--panel)] p-4"
+            className={`border bg-[var(--panel)] p-4 ${
+              invoice.requiresApAttention ? "border-amber-400" : "border-[var(--line)]"
+            }`}
             key={invoice.id}
           >
             <input type="hidden" name="invoiceId" value={invoice.id} />
@@ -120,6 +123,11 @@ function ApWorkQueue({ data }: { data: AppData }) {
                   Vendor record: {invoice.vendorValidationStatus || "Not Checked"}
                 </p>
               </div>
+              {invoice.requiresApAttention ? (
+                <div className="border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
+                  AP Attention: {invoice.apAttentionReason || "Review needed"}
+                </div>
+              ) : null}
               <Link
                 className="focus-ring border border-[var(--line)] px-3 py-1.5 text-xs font-semibold hover:bg-slate-100"
                 href={`/files/${invoice.fileId}`}
@@ -170,14 +178,10 @@ function ApWorkQueue({ data }: { data: AppData }) {
                 </label>
               ) : null}
               {invoiceFieldEnabled(data, "poNumber") ? (
-                <label className="text-xs font-semibold uppercase text-[var(--muted)]">
-                  PO Number
-                  <input
-                    className="focus-ring mt-1 min-h-10 w-full border border-[var(--line)] px-3 text-sm font-normal normal-case text-[var(--foreground)]"
-                    name="poNumber"
-                    defaultValue={invoice.poNumber}
-                  />
-                </label>
+                <PoValidationField
+                  defaultValue={invoice.poNumber}
+                  invoiceId={invoice.id}
+                />
               ) : null}
               {invoiceFieldEnabled(data, "dateReceived") ? (
                 <label className="text-xs font-semibold uppercase text-[var(--muted)]">

@@ -32,6 +32,15 @@ export type MenuSettings = {
   items: MenuConfigItem[];
 };
 
+export type PoValidationSettings = {
+  enabled: boolean;
+  requirePoToExistInPoList: boolean;
+  blockSaveOnVendorMismatch: boolean;
+  allowVendorUpdateFromPo: boolean;
+  fuzzyVendorMatch: boolean;
+  vendorMatchThreshold: number;
+};
+
 export type StatusTone =
   | "slate"
   | "amber"
@@ -334,6 +343,18 @@ export type Invoice = {
   fileId: string;
   notificationSentAt: string;
   ocrSummary: string;
+  poValidationStatus?:
+    | "Not Checked"
+    | "Matched"
+    | "PO Not Found"
+    | "Vendor Mismatch"
+    | "Vendor Updated From PO";
+  poValidationMessage?: string;
+  poValidationCheckedAt?: string;
+  poValidationPurchaseOrderId?: string;
+  poVendorName?: string;
+  requiresApAttention?: boolean;
+  apAttentionReason?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -384,6 +405,7 @@ export type AppData = {
   statuses: InvoiceStatusDefinition[];
   invoiceFields: InvoiceFieldConfig[];
   menuSettings: MenuSettings;
+  poValidationSettings: PoValidationSettings;
   departmentDecisions: DepartmentDecisionDefinition[];
   escalationContacts: EscalationContact[];
 };

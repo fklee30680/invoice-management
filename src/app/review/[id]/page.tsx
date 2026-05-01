@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import {
+  clearInvoiceAttentionFlag,
   updateAndRouteInvoice,
   updateInvoicePaymentProcessed,
 } from "@/lib/actions";
 import { DepartmentDecisionForm } from "@/components/department-decision-form";
+import { PoValidationField } from "@/components/po-validation-field";
 import { invoiceFieldEnabled } from "@/lib/invoice-fields";
 import { canAccessInvoice, requireUser } from "@/lib/session";
 import { statusBadgeClass } from "@/lib/status-config";
@@ -95,6 +97,9 @@ export default async function ReviewPage({
       ? ["Notification Sent", formatDateTime(invoice.notificationSentAt)]
       : null,
     invoiceFieldEnabled(data, "status") ? ["Status Date", formatDate(invoice.statusDate)] : null,
+    invoice.poValidationStatus && invoice.poValidationStatus !== "Not Checked"
+      ? ["PO Validation", invoice.poValidationStatus]
+      : null,
     ["Payment Processed", invoice.paymentProcessed ? "Yes" : "No"],
   ].filter((row): row is [string, string] => Boolean(row));
   const systemRows = [
@@ -111,6 +116,9 @@ export default async function ReviewPage({
     invoiceFieldEnabled(data, "status") ? ["Status Date", formatDate(invoice.statusDate)] : null,
     invoiceFieldEnabled(data, "vendorName")
       ? ["Vendor Record", invoice.vendorValidationStatus || "Not Checked"]
+      : null,
+    invoice.poValidationStatus && invoice.poValidationStatus !== "Not Checked"
+      ? ["PO Validation", invoice.poValidationStatus]
       : null,
   ].filter((row): row is [string, string] => Boolean(row));
 
@@ -144,6 +152,33 @@ export default async function ReviewPage({
         {error === "po-required" ? (
           <div className="border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
             PO number is required for this decision. Please enter the PO number before submitting.
+          </div>
+        ) : null}
+        {error === "po-not-found" ? (
+          <div className="border border-red-300 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
+            PO number was not found in the PO list. This invoice cannot move
+            forward until a valid PO number is entered.
+          </div>
+        ) : null}
+        {error === "po-vendor-mismatch" ? (
+          <div className="border border-red-300 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
+            Vendor mismatch must be resolved before this invoice can move forward.
+          </div>
+        ) : null}
+        {invoice.requiresApAttention ? (
+          <div className="flex flex-col gap-3 border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <span className="font-semibold">AP Attention:</span>{" "}
+              {invoice.apAttentionReason || "Review needed"}
+            </div>
+            {user.role === "AP" ? (
+              <form action={clearInvoiceAttentionFlag}>
+                <input name="invoiceId" type="hidden" value={invoice.id} />
+                <button className="focus-ring border border-amber-500 bg-white px-3 py-1.5 text-xs font-semibold hover:bg-amber-100">
+                  Clear AP Attention Flag
+                </button>
+              </form>
+            ) : null}
           </div>
         ) : null}
 
@@ -203,10 +238,10 @@ export default async function ReviewPage({
                   Purchasing And Routing
                 </legend>
                 {poNumberEnabled ? (
-                  <label className={labelClass}>
-                    PO Number
-                    <input className={inputClass} name="poNumber" defaultValue={invoice.poNumber} />
-                  </label>
+                  <PoValidationField
+                    defaultValue={invoice.poNumber}
+                    invoiceId={invoice.id}
+                  />
                 ) : null}
                 <label className={labelClass}>
                   Department
@@ -332,7 +367,6 @@ export default async function ReviewPage({
                 initialDecision={selectedDecision || invoice.departmentDecision}
                 invoiceId={invoice.id}
                 poNumberEnabled={poNumberEnabled}
-                poRequiredError={error === "po-required"}
               />
             ) : null}
           </aside>

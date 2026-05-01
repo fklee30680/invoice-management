@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { submitDepartmentDecision } from "@/lib/actions";
+import { PoValidationField } from "@/components/po-validation-field";
 
 type DecisionOption = {
   id: string;
@@ -14,7 +15,6 @@ export function DepartmentDecisionForm({
   decisionOptions,
   initialDecision,
   invoiceId,
-  poRequiredError,
   hasPoNumber,
   poNumberEnabled,
 }: {
@@ -22,12 +22,11 @@ export function DepartmentDecisionForm({
   decisionOptions: DecisionOption[];
   initialDecision: string;
   invoiceId: string;
-  poRequiredError: boolean;
   hasPoNumber: boolean;
   poNumberEnabled: boolean;
 }) {
   const [decision, setDecision] = useState(initialDecision || currentDecision);
-  const poInputRef = useRef<HTMLInputElement>(null);
+  const poInputRef = useRef<HTMLDivElement>(null);
   const requiresPo = useMemo(
     () => decisionOptions.some((option) => option.label === decision && option.requirePoNumber),
     [decision, decisionOptions],
@@ -36,7 +35,7 @@ export function DepartmentDecisionForm({
 
   useEffect(() => {
     if (showPoInput) {
-      poInputRef.current?.focus();
+      poInputRef.current?.querySelector("input")?.focus();
     }
   }, [showPoInput]);
 
@@ -70,17 +69,9 @@ export function DepartmentDecisionForm({
           <div className="text-sm font-semibold text-amber-900">
             PO number is required for this decision. Please enter the PO number before submitting.
           </div>
-          <label className="mt-3 block text-xs font-semibold uppercase text-amber-900">
-            PO Number
-            <input
-              className={`focus-ring mt-1 min-h-10 w-full border px-3 text-sm font-normal normal-case text-[var(--foreground)] ${
-                poRequiredError ? "border-red-500 bg-red-50" : "border-amber-400 bg-white"
-              }`}
-              name="poNumber"
-              ref={poInputRef}
-              required
-            />
-          </label>
+          <div ref={poInputRef}>
+            <PoValidationField invoiceId={invoiceId} required />
+          </div>
         </div>
       ) : null}
 
