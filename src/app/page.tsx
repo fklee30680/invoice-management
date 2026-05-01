@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { PoValidationField } from "@/components/po-validation-field";
+import { VendorLookupField } from "@/components/vendor-lookup-field";
 import {
   updateAndRouteInvoice,
   uploadInvoices,
@@ -10,6 +11,7 @@ import {
   type InvoiceSummaryView,
 } from "@/lib/invoice-views";
 import { invoiceFieldEnabled } from "@/lib/invoice-fields";
+import { vendorDropdownOptions } from "@/lib/vendor-validation";
 import { requireApUser } from "@/lib/session";
 import { statusBadgeClass, statusesForApWorkQueue } from "@/lib/status-config";
 import { readData } from "@/lib/store";
@@ -78,6 +80,7 @@ function UploadPanel() {
 function ApWorkQueue({ data }: { data: AppData }) {
   const apWorkStatuses = statusesForApWorkQueue(data);
   const queue = data.invoices.filter((invoice) => apWorkStatuses.includes(invoice.status));
+  const vendorOptions = vendorDropdownOptions(data);
 
   return (
     <section className="space-y-3">
@@ -120,8 +123,13 @@ function ApWorkQueue({ data }: { data: AppData }) {
                   ) : null}
                 </h3>
                 <p className="mt-1 text-xs text-[var(--muted)]">
-                  Vendor record: {invoice.vendorValidationStatus || "Not Checked"}
+                  Vendor validation: {invoice.vendorValidationStatus || "Not Checked"}
                 </p>
+                {invoice.vendorValidationStatus && invoice.vendorValidationStatus !== "Validated" ? (
+                  <div className="mt-2 inline-flex border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-900">
+                    Vendor not validated
+                  </div>
+                ) : null}
               </div>
               {invoice.requiresApAttention ? (
                 <div className="border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
@@ -137,14 +145,20 @@ function ApWorkQueue({ data }: { data: AppData }) {
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               {invoiceFieldEnabled(data, "vendorName") ? (
-                <label className="text-xs font-semibold uppercase text-[var(--muted)]">
-                  Vendor
-                  <input
-                    className="focus-ring mt-1 min-h-10 w-full border border-[var(--line)] px-3 text-sm font-normal normal-case text-[var(--foreground)]"
-                    name="vendorName"
-                    defaultValue={invoice.vendorName}
-                  />
-                </label>
+                <VendorLookupField
+                  extractedVendor={invoice.vendorValidationStatus === "Validated" ? "" : invoice.vendorName}
+                  listId={`vendor-options-${invoice.id}`}
+                  options={vendorOptions}
+                  selectedVendorNumber={invoice.vendorNumber}
+                />
+              ) : null}
+              {invoiceFieldEnabled(data, "vendorNumber") ? (
+                <div className="text-xs font-semibold uppercase text-[var(--muted)]">
+                  Vendor Number
+                  <div className="mt-1 min-h-10 border border-[var(--line)] bg-white px-3 py-2 text-sm font-normal normal-case text-[var(--foreground)]">
+                    {invoice.vendorNumber || "Not selected"}
+                  </div>
+                </div>
               ) : null}
               {invoiceFieldEnabled(data, "invoiceNumber") ? (
                 <label className="text-xs font-semibold uppercase text-[var(--muted)]">

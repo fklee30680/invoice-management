@@ -7,10 +7,12 @@ import {
 } from "@/lib/actions";
 import { DepartmentDecisionForm } from "@/components/department-decision-form";
 import { PoValidationField } from "@/components/po-validation-field";
+import { VendorLookupField } from "@/components/vendor-lookup-field";
 import { invoiceFieldEnabled } from "@/lib/invoice-fields";
 import { canAccessInvoice, requireUser } from "@/lib/session";
 import { statusBadgeClass } from "@/lib/status-config";
 import { readData } from "@/lib/store";
+import { vendorDropdownOptions } from "@/lib/vendor-validation";
 import { currencyDisplay, formatDate, formatDateTime } from "@/lib/utils";
 
 export const runtime = "nodejs";
@@ -42,6 +44,7 @@ export default async function ReviewPage({
   const error = Array.isArray(query.error) ? query.error[0] : query.error;
   const selectedDecision = Array.isArray(query.decision) ? query.decision[0] : query.decision;
   const activeDecisions = data.departmentDecisions.filter((decision) => decision.active);
+  const vendorOptions = vendorDropdownOptions(data);
   const currentDecisionIsInactive =
     invoice.departmentDecision &&
     !activeDecisions.some((decision) => decision.label === invoice.departmentDecision);
@@ -65,8 +68,11 @@ export default async function ReviewPage({
     invoiceFieldEnabled(data, "vendorName")
       ? ["Vendor Name", invoice.vendorName || "Unknown Vendor"]
       : null,
+    invoiceFieldEnabled(data, "vendorNumber")
+      ? ["Vendor Number", invoice.vendorNumber || "Not selected"]
+      : null,
     invoiceFieldEnabled(data, "vendorName")
-      ? ["Vendor Record", invoice.vendorValidationStatus || "Not Checked"]
+      ? ["Vendor Validation", invoice.vendorValidationStatus || "Not Checked"]
       : null,
     invoiceFieldEnabled(data, "invoiceNumber")
       ? ["Invoice Number", invoice.invoiceNumber || "Not set"]
@@ -115,7 +121,10 @@ export default async function ReviewPage({
       : null,
     invoiceFieldEnabled(data, "status") ? ["Status Date", formatDate(invoice.statusDate)] : null,
     invoiceFieldEnabled(data, "vendorName")
-      ? ["Vendor Record", invoice.vendorValidationStatus || "Not Checked"]
+      ? ["Vendor Validation", invoice.vendorValidationStatus || "Not Checked"]
+      : null,
+    invoiceFieldEnabled(data, "vendorNumber")
+      ? ["Vendor Number", invoice.vendorNumber || "Not selected"]
       : null,
     invoice.poValidationStatus && invoice.poValidationStatus !== "Not Checked"
       ? ["PO Validation", invoice.poValidationStatus]
@@ -165,6 +174,17 @@ export default async function ReviewPage({
             Vendor mismatch must be resolved before this invoice can move forward.
           </div>
         ) : null}
+        {error === "po-vendor-not-found" ? (
+          <div className="border border-red-300 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
+            The PO vendor was not found in the vendor file. Select a vendor from
+            the vendor file before this invoice can move forward.
+          </div>
+        ) : null}
+        {error === "vendor-required" ? (
+          <div className="border border-red-300 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
+            Select a valid vendor from the vendor file before routing this invoice.
+          </div>
+        ) : null}
         {invoice.requiresApAttention ? (
           <div className="flex flex-col gap-3 border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -208,10 +228,20 @@ export default async function ReviewPage({
                   Vendor And Invoice
                 </legend>
                 {invoiceFieldEnabled(data, "vendorName") ? (
-                  <label className={labelClass}>
-                    Vendor Name
-                    <input className={inputClass} name="vendorName" defaultValue={invoice.vendorName} />
-                  </label>
+                  <VendorLookupField
+                    extractedVendor={invoice.vendorValidationStatus === "Validated" ? "" : invoice.vendorName}
+                    listId={`vendor-options-${invoice.id}`}
+                    options={vendorOptions}
+                    selectedVendorNumber={invoice.vendorNumber}
+                  />
+                ) : null}
+                {invoiceFieldEnabled(data, "vendorNumber") ? (
+                  <div className={labelClass}>
+                    Vendor Number
+                    <div className="mt-1 min-h-10 border border-[var(--line)] bg-white px-3 py-2 text-sm font-normal normal-case text-[var(--foreground)]">
+                      {invoice.vendorNumber || "Not selected"}
+                    </div>
+                  </div>
                 ) : null}
                 {invoiceFieldEnabled(data, "invoiceNumber") ? (
                   <label className={labelClass}>

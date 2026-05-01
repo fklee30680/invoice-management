@@ -8,6 +8,14 @@ export const DEFAULT_INVOICE_FIELDS: InvoiceFieldConfig[] = [
     sortOrder: 10,
   },
   {
+    key: "vendorNumber",
+    label: "Vendor Number",
+    enabled: true,
+    readOnly: true,
+    systemControlled: true,
+    sortOrder: 15,
+  },
+  {
     key: "invoiceNumber",
     label: "Invoice Number",
     enabled: true,

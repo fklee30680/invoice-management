@@ -12,6 +12,7 @@ export const PAYMENT_FILE_FIELD_OPTIONS: {
   label: string;
 }[] = [
   { source: "vendorName", label: "Vendor Name" },
+  { source: "vendorNumber", label: "Vendor Number" },
   { source: "invoiceNumber", label: "Invoice Number" },
   { source: "invoiceDate", label: "Invoice Date" },
   { source: "amount", label: "Amount" },
@@ -118,6 +119,14 @@ export function invoiceEligibleForPaymentFile(invoice: Invoice, data: AppData) {
     (item) => item.label === invoice.departmentDecision,
   );
   if (!decision?.active || !decision.includeInPaymentFile) return false;
+  if (
+    data.paymentFile.columns.some(
+      (column) => column.included && column.source === "vendorNumber",
+    ) &&
+    !invoice.vendorNumber
+  ) {
+    return false;
+  }
 
   return true;
 }
@@ -138,6 +147,8 @@ function valueForColumn(invoice: Invoice, column: PaymentFileColumn, data: AppDa
   switch (column.source) {
     case "vendorName":
       return invoice.vendorName;
+    case "vendorNumber":
+      return invoice.vendorNumber || "";
     case "invoiceNumber":
       return invoice.invoiceNumber;
     case "invoiceDate":

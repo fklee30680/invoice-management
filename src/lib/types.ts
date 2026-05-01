@@ -211,6 +211,7 @@ export type NotificationTemplate = {
 
 export type PaymentFileFieldSource =
   | "vendorName"
+  | "vendorNumber"
   | "invoiceNumber"
   | "invoiceDate"
   | "amount"
@@ -323,7 +324,13 @@ export type Invoice = {
   id: string;
   vendorName: string;
   vendorRecordId?: string;
-  vendorValidationStatus?: "Matched" | "Not Found" | "Not Checked";
+  vendorId?: string;
+  vendorNumber?: string;
+  vendorValidationStatus?: "Not Checked" | "Validated" | "Warning" | "Blocked";
+  vendorValidationMessage?: string;
+  vendorValidationCheckedAt?: string;
+  vendorMatchConfidence?: number;
+  vendorMatchSource?: "OCR" | "Manual Selection" | "PO Validation" | "Import" | "Unknown";
   invoiceNumber: string;
   invoiceDate: string;
   amount: string;
@@ -361,6 +368,7 @@ export type Invoice = {
 
 export type InvoiceFieldKey =
   | "vendorName"
+  | "vendorNumber"
   | "invoiceNumber"
   | "invoiceDate"
   | "amount"

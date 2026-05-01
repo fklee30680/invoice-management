@@ -42,12 +42,18 @@ import { parsePoUpload } from "./po-parser";
 import { canAccessInvoice, requireApUser, requireUser } from "./session";
 import { parseVendorUpload } from "./vendor-parser";
 import {
+  applyVendorToInvoice,
+  applyVendorValidationWarning,
+  findVendorByNumber,
+  invoiceVendorValidated,
+  validateVendorAgainstFile,
+} from "./vendor-validation";
+import {
   addAudit,
   addInvoice,
   addInvoiceFile,
   createId,
   findPurchaseOrder,
-  findVendorByName,
   getInvoice,
   getInvoiceFile,
   mutateData,
@@ -423,15 +429,10 @@ export async function uploadInvoices(formData: FormData) {
       await mutateData((data) => {
         const purchaseOrder = findPurchaseOrder(data, extracted.poNumber);
         const vendorName = extracted.vendorName || purchaseOrder?.vendorName || "";
-        const vendorRecord = purchaseOrder ? undefined : findVendorByName(data, vendorName);
-        const vendorValidationStatus = purchaseOrder
-          ? "Not Checked"
-          : vendorRecord
-            ? "Matched"
-            : "Not Found";
+        const vendorValidation = validateVendorAgainstFile(data, vendorName);
         const departmentId = purchaseOrder?.departmentId || "";
         const department = data.departments.find((item) => item.id === departmentId);
-        const canNotify = Boolean(purchaseOrder && department?.email);
+        const canNotify = Boolean(purchaseOrder && department?.email && vendorValidation.found);
         const status = canNotify
           ? statusLabelForRole(data, "routed")
           : statusLabelForRole(data, "apReview");
@@ -441,8 +442,15 @@ export async function uploadInvoices(formData: FormData) {
         const invoice: Invoice = {
           id: invoiceId,
           vendorName,
-          vendorRecordId: vendorRecord?.id,
-          vendorValidationStatus,
+          vendorId: "",
+          vendorRecordId: "",
+          vendorNumber: "",
+          vendorValidationStatus: "Warning",
+          vendorValidationMessage:
+            "Vendor was not found in the vendor file. Select a vendor before routing.",
+          vendorValidationCheckedAt: now,
+          vendorMatchConfidence: vendorValidation.confidence,
+          vendorMatchSource: "OCR",
           invoiceNumber: extracted.invoiceNumber,
           invoiceDate: extracted.invoiceDate,
           amount: extracted.amount,
@@ -463,10 +471,15 @@ export async function uploadInvoices(formData: FormData) {
           notificationSentAt: "",
           ocrSummary: purchaseOrder
             ? extracted.summary
-            : `${extracted.summary} Vendor record: ${vendorValidationStatus}.`.trim(),
+            : `${extracted.summary} Vendor validation: ${vendorValidation.status}.`.trim(),
           createdAt: now,
           updatedAt: now,
         };
+        if (vendorValidation.found && vendorValidation.vendor) {
+          applyVendorToInvoice(invoice, vendorValidation.vendor, "OCR", now);
+        } else {
+          applyVendorValidationWarning(invoice, vendorValidation, "OCR", now);
+        }
 
         addInvoice(data, invoice);
         addAudit(data, {
@@ -485,16 +498,15 @@ export async function uploadInvoices(formData: FormData) {
               ? `Matched ${purchaseOrder.poNumber}, but ${department?.name || "the department"} has no email configured. AP review required.`
               : "No matching PO found; AP review required.",
         });
-        if (!purchaseOrder) {
-          addAudit(data, {
-            invoiceId,
-            actor: "System",
-            type: vendorRecord ? "vendor_matched" : "vendor_missing",
-            message: vendorRecord
-              ? `Vendor matched vendor record: ${vendorRecord.vendorName}.`
-              : "Vendor was not found in the vendor list.",
-          });
-        }
+        addAudit(data, {
+          invoiceId,
+          actor: "System",
+          type: vendorValidation.found ? "vendor_validated" : "vendor_missing",
+          message:
+            vendorValidation.found && vendorValidation.vendor
+              ? `Vendor validated from vendor file: ${vendorValidation.vendor.vendorName} (${vendorValidation.vendor.vendorNumber || "No number"}).`
+              : "Vendor could not be validated from the vendor file.",
+        });
       });
 
       const data = await mutateData((current) => current);
@@ -525,11 +537,34 @@ function applyApInvoiceMetadataUpdate(
   const nowIso = now.toISOString();
   const poValidation = validatePoCandidate(data, invoice, formData);
   if (poValidation.blocked) {
+    invoice.requiresApAttention = true;
+    invoice.apAttentionReason =
+      poValidation.blocked === "po-vendor-not-found"
+        ? "PO vendor was not found in the vendor file."
+        : invoice.apAttentionReason || "PO validation must be resolved.";
     return { shouldNotify: false, blocked: poValidation.blocked };
   }
+  const selectedVendor = formData.has("vendorNumber")
+    ? findVendorByNumber(data, value(formData, "vendorNumber"))
+    : undefined;
 
-  if (invoiceFieldEnabled(data, "vendorName") && formData.has("vendorName")) {
-    invoice.vendorName = poValidation.vendorName;
+  if (invoiceFieldEnabled(data, "vendorName") && selectedVendor) {
+    const previousVendor = invoice.vendorName;
+    applyVendorToInvoice(invoice, selectedVendor, "Manual Selection", nowIso);
+    if (previousVendor !== selectedVendor.vendorName) {
+      invoice.comments.unshift({
+        id: createId("comment"),
+        author: "AP",
+        body: `AP selected vendor ${selectedVendor.vendorName} (${selectedVendor.vendorNumber || "No number"}) from vendor file.`,
+        createdAt: nowIso,
+      });
+      addAudit(data, {
+        invoiceId: invoice.id,
+        actor: "AP",
+        type: "vendor_selected",
+        message: `AP selected vendor ${selectedVendor.vendorName} (${selectedVendor.vendorNumber || "No number"}) from vendor file.`,
+      });
+    }
   }
   if (invoiceFieldEnabled(data, "invoiceNumber") && formData.has("invoiceNumber")) {
     invoice.invoiceNumber = value(formData, "invoiceNumber");
@@ -544,7 +579,9 @@ function applyApInvoiceMetadataUpdate(
     invoice.poNumber = poValidation.poNumber;
   }
   if (poValidation.vendorUpdatedFromPo) {
-    invoice.vendorName = poValidation.vendorName;
+    if (poValidation.vendorFromPo) {
+      applyVendorToInvoice(invoice, poValidation.vendorFromPo, "PO Validation", nowIso);
+    }
   }
   if (invoiceFieldEnabled(data, "dateReceived") && formData.has("dateReceived")) {
     invoice.dateReceived = value(formData, "dateReceived");
@@ -555,17 +592,19 @@ function applyApInvoiceMetadataUpdate(
   if (invoiceFieldEnabled(data, "departmentId") && formData.has("departmentId")) {
     invoice.departmentId = value(formData, "departmentId");
   }
-
-  const purchaseOrder = findPurchaseOrder(data, invoice.poNumber);
-  const vendorRecord = purchaseOrder
-    ? undefined
-    : findVendorByName(data, invoice.vendorName);
-  invoice.vendorRecordId = vendorRecord?.id;
-  invoice.vendorValidationStatus = purchaseOrder
-    ? "Not Checked"
-    : vendorRecord
-      ? "Matched"
-      : "Not Found";
+  if (invoice.departmentId && !invoiceVendorValidated(invoice)) {
+    invoice.departmentId = previousDepartmentId;
+    invoice.requiresApAttention = true;
+    invoice.apAttentionReason =
+      "Select a valid vendor from the vendor file before routing this invoice.";
+    addAudit(data, {
+      invoiceId: invoice.id,
+      actor: "AP",
+      type: "routing_blocked_vendor",
+      message: "Routing blocked because the invoice vendor was not validated from the vendor file.",
+    });
+    return { shouldNotify: false, blocked: "vendor-required" };
+  }
 
   const routedStatus = statusLabelForRole(data, "routed");
   const nextStatus = invoice.departmentId
@@ -646,9 +685,14 @@ function validatePoCandidate(
   formData: FormData,
 ) {
   const poEnabled = invoiceFieldEnabled(data, "poNumber");
+  const selectedVendor = formData.has("vendorNumber")
+    ? findVendorByNumber(data, value(formData, "vendorNumber"))
+    : undefined;
   const vendorName =
-    invoiceFieldEnabled(data, "vendorName") && formData.has("vendorName")
-      ? value(formData, "vendorName")
+    invoiceFieldEnabled(data, "vendorName") && selectedVendor
+      ? selectedVendor.vendorName
+      : invoiceFieldEnabled(data, "vendorName") && formData.has("vendorName")
+        ? value(formData, "vendorName")
       : invoice.vendorName;
   const poNumber =
     poEnabled && formData.has("poNumber") ? value(formData, "poNumber") : invoice.poNumber;
@@ -662,13 +706,25 @@ function validatePoCandidate(
     result.poVendorName &&
     data.poValidationSettings.allowVendorUpdateFromPo;
   if (updateActionRequested && result?.poVendorName) {
+    const vendorValidation = validateVendorAgainstFile(data, result.poVendorName, {
+      blockWhenMissing: true,
+    });
+    if (!vendorValidation.found || !vendorValidation.vendor) {
+      return {
+        poNumber,
+        vendorName,
+        result,
+        blocked: "po-vendor-not-found",
+      };
+    }
     return {
       poNumber,
-      vendorName: result.poVendorName,
+      vendorName: vendorValidation.vendor.vendorName,
       result,
+      vendorFromPo: vendorValidation.vendor,
       vendorUpdatedFromPo:
         invoice.vendorName.trim().toLowerCase() !==
-        result.poVendorName.trim().toLowerCase(),
+        vendorValidation.vendor.vendorName.trim().toLowerCase(),
       previousVendor: invoice.vendorName,
     };
   }
@@ -686,10 +742,22 @@ function validatePoCandidate(
     value(formData, "poValidationAction") === "updateVendor" &&
     result.poVendorName;
   if (canUpdateVendor) {
+    const vendorValidation = validateVendorAgainstFile(data, result.poVendorName || "", {
+      blockWhenMissing: true,
+    });
+    if (!vendorValidation.found || !vendorValidation.vendor) {
+      return {
+        poNumber,
+        vendorName,
+        result,
+        blocked: "po-vendor-not-found",
+      };
+    }
     return {
       poNumber,
-      vendorName: result.poVendorName || vendorName,
+      vendorName: vendorValidation.vendor.vendorName,
       result,
+      vendorFromPo: vendorValidation.vendor,
       vendorUpdatedFromPo: true,
       previousVendor: vendorName,
     };
@@ -2199,10 +2267,39 @@ export async function submitDepartmentDecision(formData: FormData) {
     currentData.poValidationSettings.allowVendorUpdateFromPo &&
     value(formData, "poValidationAction") === "updateVendor" &&
     poValidationResult.poVendorName;
+  const poVendorFileMatch = updateVendorFromPo
+    ? validateVendorAgainstFile(currentData, poValidationResult?.poVendorName || "", {
+        blockWhenMissing: true,
+      })
+    : undefined;
+  if (updateVendorFromPo && !poVendorFileMatch?.vendor) {
+    await mutateData((data) => {
+      const invoice = getInvoice(data, invoiceId);
+      if (!invoice) return;
+      invoice.requiresApAttention = true;
+      invoice.apAttentionReason =
+        "PO vendor was not found in the vendor file. AP must select a valid vendor.";
+      invoice.updatedAt = new Date().toISOString();
+      addAudit(data, {
+        invoiceId,
+        actor: "Department Reviewer",
+        type: "po_vendor_missing_vendor_file",
+        message: `PO vendor ${poValidationResult?.poVendorName || "Unknown"} was not found in the vendor file. Invoice flagged for AP review.`,
+      });
+    });
+    redirect(`/review/${invoiceId}?error=po-vendor-not-found&decision=${encodeURIComponent(decision)}`);
+  }
   if (poValidationResult?.severity === "blocking" && !updateVendorFromPo) {
     redirect(
       `/review/${invoiceId}?error=${poValidationResult.found ? "po-vendor-mismatch" : "po-not-found"}&decision=${encodeURIComponent(decision)}`,
     );
+  }
+  if (
+    decisionDefinition.workflowAction !== "apRework" &&
+    !invoiceVendorValidated(currentInvoice) &&
+    !poVendorFileMatch?.vendor
+  ) {
+    redirect(`/review/${invoiceId}?error=vendor-required&decision=${encodeURIComponent(decision)}`);
   }
 
   await mutateData((data) => {
@@ -2229,24 +2326,36 @@ export async function submitDepartmentDecision(formData: FormData) {
     if (poValidationResult?.enabled) {
       applyPoValidationState(invoice, poValidationResult, now);
     }
-    if (updateVendorFromPo && poValidationResult?.poVendorName) {
-      invoice.vendorName = poValidationResult.poVendorName;
+    if (updateVendorFromPo && poValidationResult?.poVendorName && poVendorFileMatch?.vendor) {
+      applyVendorToInvoice(invoice, poVendorFileMatch.vendor, "PO Validation", now);
       invoice.poValidationStatus = "Vendor Updated From PO";
-      invoice.poValidationMessage = `Vendor updated from ${previousVendor} to ${poValidationResult.poVendorName} based on PO ${poNumberForDecision}.`;
+      invoice.poValidationMessage = `Vendor updated from ${previousVendor} to ${poVendorFileMatch.vendor.vendorName} based on PO ${poNumberForDecision}.`;
       invoice.requiresApAttention = true;
       invoice.apAttentionReason = "Vendor was updated from PO validation.";
       invoice.comments.unshift({
         id: createId("comment"),
         author: "Department Reviewer",
-        body: `Vendor updated from PO validation. Previous vendor: ${previousVendor}. PO vendor: ${poValidationResult.poVendorName}. PO number: ${poNumberForDecision}.`,
+        body: `Vendor updated from PO validation. Previous vendor: ${previousVendor}. PO vendor: ${poVendorFileMatch.vendor.vendorName} (${poVendorFileMatch.vendor.vendorNumber || "No number"}). PO number: ${poNumberForDecision}.`,
         createdAt: now,
       });
       addAudit(data, {
         invoiceId,
         actor: "Department Reviewer",
         type: "po_vendor_updated",
-        message: `Vendor updated from ${previousVendor} to ${poValidationResult.poVendorName} based on PO ${poNumberForDecision}. Invoice flagged for AP review.`,
+        message: `Vendor updated from ${previousVendor} to ${poVendorFileMatch.vendor.vendorName} (${poVendorFileMatch.vendor.vendorNumber || "No number"}) based on PO ${poNumberForDecision}. Invoice flagged for AP review.`,
       });
+    }
+    if (decisionDefinition.workflowAction !== "apRework" && !invoiceVendorValidated(invoice)) {
+      invoice.requiresApAttention = true;
+      invoice.apAttentionReason =
+        "Select a valid vendor from the vendor file before this invoice can move forward.";
+      addAudit(data, {
+        invoiceId,
+        actor: "Department Reviewer",
+        type: "department_decision_blocked_vendor",
+        message: "Department decision blocked because the invoice vendor was not validated from the vendor file.",
+      });
+      return;
     }
     invoice.departmentDecision = decision;
     invoice.updatedAt = now;

@@ -33,6 +33,7 @@ import {
   normalizePoValidationSettings,
   normalizePoValidationStatus,
 } from "./po-validation";
+import { normalizeVendorValidationState } from "./vendor-validation";
 import { defaultStatuses, statusRoles } from "./status-config";
 import { normalizeInvoiceFields } from "./invoice-fields";
 import { normalizePoNumber, normalizeVendorName, slugify } from "./utils";
@@ -316,13 +317,23 @@ function normalizeDepartmentDecisions(
 function normalizeData(data: AppData): AppData {
   const defaultBrand = defaultBranding();
   const defaultStatusList = defaultStatuses();
+  const vendors = (data.vendors || []).map((vendor) => ({
+    ...vendor,
+    vendorName: vendor.vendorName || "",
+    normalizedVendorName:
+      vendor.normalizedVendorName || normalizeVendorName(vendor.vendorName || ""),
+    vendorNumber: vendor.vendorNumber || "",
+    email: vendor.email || "",
+    active: vendor.active !== false,
+    uploadedAt: vendor.uploadedAt || new Date().toISOString(),
+  }));
+  const vendorData = { ...data, vendors } as AppData;
   const invoices = (data.invoices || []).map((invoice) => {
     const legacyStatus = String(invoice.status);
     const notificationSentAt = invoice.notificationSentAt || "";
     const routedAt = invoice.routedAt || notificationSentAt || "";
-    const normalizedInvoice = normalizePoValidationStatus({
+    const normalizedInvoice = normalizeVendorValidationState(normalizePoValidationStatus({
       ...invoice,
-      vendorValidationStatus: invoice.vendorValidationStatus || "Not Checked",
       paymentProcessed: invoice.paymentProcessed === true,
       dateUploaded:
         invoice.dateUploaded || invoice.createdAt?.slice(0, 10) || invoice.dateReceived || "",
@@ -332,7 +343,7 @@ function normalizeData(data: AppData): AppData {
       routedAt,
       escalations: invoice.escalations || [],
       notificationSentAt,
-    });
+    }), vendorData);
     if (legacyStatus === "OCR Processing") {
       return { ...normalizedInvoice, status: "Needs AP Review" as const };
     }
@@ -357,16 +368,7 @@ function normalizeData(data: AppData): AppData {
       escalationName: department.escalationName || "",
       escalationEmail: department.escalationEmail || "",
     })),
-    vendors: (data.vendors || []).map((vendor) => ({
-      ...vendor,
-      vendorName: vendor.vendorName || "",
-      normalizedVendorName:
-        vendor.normalizedVendorName || normalizeVendorName(vendor.vendorName || ""),
-      vendorNumber: vendor.vendorNumber || "",
-      email: vendor.email || "",
-      active: vendor.active !== false,
-      uploadedAt: vendor.uploadedAt || new Date().toISOString(),
-    })),
+    vendors,
     notificationTemplate: {
       ...defaultNotificationTemplate(),
       ...(data.notificationTemplate || {}),
