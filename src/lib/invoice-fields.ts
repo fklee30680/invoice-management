@@ -41,7 +41,7 @@ export const DEFAULT_INVOICE_FIELDS: InvoiceFieldConfig[] = [
   },
   {
     key: "dateReceived",
-    label: "Date Received",
+    label: "Date Invoice Received",
     enabled: true,
     sortOrder: 60,
   },

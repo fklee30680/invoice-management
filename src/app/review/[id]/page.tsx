@@ -92,7 +92,7 @@ export default async function ReviewPage({
       ? ["Department", department?.name || "Unassigned"]
       : null,
     invoiceFieldEnabled(data, "dateReceived")
-      ? ["Date Received", formatDate(invoice.dateReceived)]
+      ? ["Date Invoice Received", formatDate(invoice.dateReceived)]
       : null,
     invoiceFieldEnabled(data, "dateApproved")
       ? ["Date Approved", formatDate(invoice.dateApproved)]
@@ -372,7 +372,7 @@ export default async function ReviewPage({
                 </label>
                 {invoiceFieldEnabled(data, "dateReceived") ? (
                   <label className={labelClass}>
-                    Date Received
+                    Date Invoice Received
                     <input className={inputClass} name="dateReceived" type="date" defaultValue={invoice.dateReceived} />
                   </label>
                 ) : null}

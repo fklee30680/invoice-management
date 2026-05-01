@@ -19,7 +19,7 @@ export const PAYMENT_FILE_FIELD_OPTIONS: {
   { source: "poNumber", label: "PO Number" },
   { source: "department", label: "Department" },
   { source: "departmentDecision", label: "Department Decision" },
-  { source: "dateReceived", label: "Date Received" },
+  { source: "dateReceived", label: "Date Invoice Received" },
   { source: "dateApproved", label: "Date Approved" },
   { source: "dateUploaded", label: "Date Uploaded" },
   { source: "dateSubmittedToDepartment", label: "Date Submitted To Department" },

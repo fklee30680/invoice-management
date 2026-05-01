@@ -204,7 +204,7 @@ function ApWorkQueue({ data }: { data: AppData }) {
               ) : null}
               {invoiceFieldEnabled(data, "dateReceived") ? (
                 <label className="text-xs font-semibold uppercase text-[var(--muted)]">
-                  Date Received
+                  Date Invoice Received
                   <input
                     className="focus-ring mt-1 min-h-10 w-full border border-[var(--line)] px-3 text-sm font-normal normal-case text-[var(--foreground)]"
                     name="dateReceived"

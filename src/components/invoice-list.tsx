@@ -342,7 +342,7 @@ export function InvoiceTable({
             {showDepartment ? <SortHeader baseHref={baseHref} filters={filters} label="Department" sort="department" /> : null}
             <SortHeader baseHref={baseHref} filters={filters} label="Decision" sort="decision" />
             <SortHeader baseHref={baseHref} filters={filters} label="Payment" sort="payment" />
-            {showReceived ? <SortHeader baseHref={baseHref} filters={filters} label="Received" sort="received" /> : null}
+            {showReceived ? <SortHeader baseHref={baseHref} filters={filters} label="Date Invoice Received" sort="received" /> : null}
             <th className="border-b border-[var(--line)] px-3 py-3">Actions</th>
           </tr>
         </thead>
