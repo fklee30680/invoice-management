@@ -6,6 +6,7 @@ import {
 } from "./escalations";
 import { normalizeInvoiceFields } from "./invoice-fields";
 import { defaultMenuSettings } from "./menu-registry";
+import { defaultPoImportSettings } from "./po-parser";
 import { defaultPoValidationSettings } from "./po-validation";
 import { normalizeOrganizationDepartmentScope } from "./store";
 import type { AppData, EscalationSchedulerSettings } from "./types";
@@ -76,6 +77,7 @@ function baseData(): AppData {
     invoiceFields: normalizeInvoiceFields(undefined),
     menuSettings: defaultMenuSettings(),
     poValidationSettings: defaultPoValidationSettings(),
+    poImportSettings: defaultPoImportSettings(),
     notificationTemplate: {
       departmentSubject: "",
       departmentBody: "",

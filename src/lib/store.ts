@@ -13,6 +13,7 @@ import type {
   MenuSettings,
   NotificationTemplate,
   PaymentFileSettings,
+  PoImportSettings,
   PoValidationSettings,
   PurchaseOrder,
   User,
@@ -30,6 +31,10 @@ import {
 } from "./payment-file";
 import { normalizeInvoiceDuplicateState } from "./duplicate-invoices";
 import { defaultMenuSettings, normalizeMenuSettings } from "./menu-registry";
+import {
+  defaultPoImportSettings,
+  normalizePoImportSettings,
+} from "./po-parser";
 import {
   normalizePoValidationSettings,
   normalizePoValidationStatus,
@@ -329,6 +334,17 @@ function normalizeData(data: AppData): AppData {
     uploadedAt: vendor.uploadedAt || new Date().toISOString(),
   }));
   const vendorData = { ...data, vendors } as AppData;
+  const purchaseOrders = (data.purchaseOrders || []).map((po) => ({
+    ...po,
+    poNumber: po.poNumber || "",
+    normalizedPoNumber: po.normalizedPoNumber || normalizePoNumber(po.poNumber || ""),
+    vendorName: po.vendorName || "",
+    vendorNumber: po.vendorNumber || "",
+    departmentId: po.departmentId || "",
+    departmentName: po.departmentName || "",
+    uploadedAt: po.uploadedAt || new Date().toISOString(),
+    updatedAt: po.updatedAt || "",
+  }));
   const invoices = (data.invoices || []).map((invoice) => {
     const legacyStatus = String(invoice.status);
     const notificationSentAt = invoice.notificationSentAt || "";
@@ -370,6 +386,7 @@ function normalizeData(data: AppData): AppData {
   return {
     ...data,
     invoices,
+    purchaseOrders,
     departments: (data.departments || []).map((department) => ({
       ...department,
       departmentHeadName: department.departmentHeadName || "",
@@ -398,6 +415,9 @@ function normalizeData(data: AppData): AppData {
     poValidationSettings: normalizePoValidationSettings(
       (data as AppData & { poValidationSettings?: PoValidationSettings })
         .poValidationSettings,
+    ),
+    poImportSettings: normalizePoImportSettings(
+      (data as AppData & { poImportSettings?: PoImportSettings }).poImportSettings,
     ),
     departmentDecisions: normalizeDepartmentDecisions(data.departmentDecisions),
     escalationSchedules,
@@ -633,16 +653,22 @@ function seedData(): AppData {
       poNumber: "PO-10045",
       normalizedPoNumber: normalizePoNumber("PO-10045"),
       vendorName: "Northstar Supply",
+      vendorNumber: "",
       departmentId: "dept-facilities",
+      departmentName: "Facilities",
       uploadedAt: new Date().toISOString(),
+      updatedAt: "",
     },
     {
       id: "po-20810",
       poNumber: "PO-20810",
       normalizedPoNumber: normalizePoNumber("PO-20810"),
       vendorName: "Brightline Services",
+      vendorNumber: "",
       departmentId: "dept-operations",
+      departmentName: "Operations",
       uploadedAt: new Date().toISOString(),
+      updatedAt: "",
     },
   ];
 
@@ -675,6 +701,7 @@ function seedData(): AppData {
     invoiceFields: normalizeInvoiceFields(undefined),
     menuSettings: defaultMenuSettings(),
     poValidationSettings: normalizePoValidationSettings(undefined),
+    poImportSettings: defaultPoImportSettings(),
     departmentDecisions: defaultDepartmentDecisions(),
     escalationContacts: defaultEscalationContacts(),
   };
@@ -769,17 +796,23 @@ export function upsertPurchaseOrder(
   poNumber: string,
   vendorName: string,
   departmentName: string,
+  vendorNumber = "",
+  options: { updateExisting?: boolean; nowIso?: string } = {},
 ) {
-  const department = upsertDepartment(data, departmentName);
+  const department = findDepartmentByName(data, departmentName);
   const normalizedPoNumber = normalizePoNumber(poNumber);
+  const nowIso = options.nowIso || new Date().toISOString();
   const existing = data.purchaseOrders.find(
     (po) => po.normalizedPoNumber === normalizedPoNumber,
   );
 
   if (existing) {
+    if (options.updateExisting === false) return undefined;
     existing.vendorName = vendorName.trim();
-    existing.departmentId = department.id;
-    existing.uploadedAt = new Date().toISOString();
+    existing.vendorNumber = vendorNumber.trim();
+    existing.departmentId = department?.id || "";
+    existing.departmentName = department?.name || departmentName.trim();
+    existing.updatedAt = nowIso;
     return existing;
   }
 
@@ -788,8 +821,11 @@ export function upsertPurchaseOrder(
     poNumber: poNumber.trim(),
     normalizedPoNumber,
     vendorName: vendorName.trim(),
-    departmentId: department.id,
-    uploadedAt: new Date().toISOString(),
+    vendorNumber: vendorNumber.trim(),
+    departmentId: department?.id || "",
+    departmentName: department?.name || departmentName.trim(),
+    uploadedAt: nowIso,
+    updatedAt: nowIso,
   };
   data.purchaseOrders.push(purchaseOrder);
   return purchaseOrder;

@@ -17,6 +17,7 @@ export async function POST(request: NextRequest) {
     invoiceId?: string;
     poNumber?: string;
     vendorName?: string;
+    vendorNumber?: string;
   } | null;
   if (!body) return Response.json({ error: "Invalid request" }, { status: 400 });
 
@@ -44,6 +45,7 @@ export async function POST(request: NextRequest) {
   const result = validateInvoicePoNumber(data, {
     poNumber: body.poNumber || invoice?.poNumber || "",
     invoiceVendorName: body.vendorName || invoice?.vendorName || "",
+    invoiceVendorNumber: body.vendorNumber || invoice?.vendorNumber || "",
   });
 
   return Response.json({
@@ -54,6 +56,7 @@ export async function POST(request: NextRequest) {
           id: result.purchaseOrder.id,
           poNumber: result.purchaseOrder.poNumber,
           vendorName: result.purchaseOrder.vendorName,
+          vendorNumber: result.purchaseOrder.vendorNumber,
         }
       : undefined,
   });

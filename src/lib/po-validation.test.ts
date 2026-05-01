@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { defaultDepartmentDecisions } from "./constants";
 import { normalizeInvoiceFields } from "./invoice-fields";
 import { defaultMenuSettings } from "./menu-registry";
+import { defaultPoImportSettings } from "./po-parser";
 import {
   defaultPoValidationSettings,
   validateInvoicePoNumber,
@@ -21,8 +22,11 @@ function baseData(): AppData {
         poNumber: "PO-100",
         normalizedPoNumber: "PO-100",
         vendorName: "ABC Supply LLC",
+        vendorNumber: "V100",
         departmentId: "dept-1",
+        departmentName: "Finance",
         uploadedAt: "2026-04-01T12:00:00.000Z",
+        updatedAt: "",
       },
     ],
     vendors: [],
@@ -68,6 +72,7 @@ function baseData(): AppData {
     invoiceFields: normalizeInvoiceFields(undefined),
     menuSettings: defaultMenuSettings(),
     poValidationSettings: { ...defaultPoValidationSettings(), enabled: true },
+    poImportSettings: defaultPoImportSettings(),
     departmentDecisions: defaultDepartmentDecisions(),
     escalationContacts: [],
   };
@@ -91,6 +96,17 @@ describe("validateInvoicePoNumber", () => {
       invoiceVendorName: "ABC Supply",
     });
     assert.equal(result.found, true);
+    assert.equal(result.vendorMatches, true);
+    assert.equal(result.poVendorNumber, "V100");
+    assert.equal(result.severity, "none");
+  });
+
+  it("accepts matching vendor numbers even when names differ", () => {
+    const result = validateInvoicePoNumber(baseData(), {
+      poNumber: "PO-100",
+      invoiceVendorName: "Different Vendor",
+      invoiceVendorNumber: "V100",
+    });
     assert.equal(result.vendorMatches, true);
     assert.equal(result.severity, "none");
   });

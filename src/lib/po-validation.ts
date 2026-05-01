@@ -8,6 +8,7 @@ export type PoValidationResult = {
   purchaseOrder?: PurchaseOrder;
   invoiceVendorName: string;
   poVendorName?: string;
+  poVendorNumber?: string;
   vendorMatches: boolean;
   matchScore?: number;
   severity: "none" | "warning" | "blocking";
@@ -45,6 +46,7 @@ export function validateInvoicePoNumber(
   input: {
     poNumber: string;
     invoiceVendorName: string;
+    invoiceVendorNumber?: string;
   },
 ): PoValidationResult {
   const settings = normalizePoValidationSettings(data.poValidationSettings);
@@ -76,6 +78,27 @@ export function validateInvoicePoNumber(
     };
   }
 
+  if (
+    input.invoiceVendorNumber &&
+    purchaseOrder.vendorNumber &&
+    input.invoiceVendorNumber.trim().toLowerCase() ===
+      purchaseOrder.vendorNumber.trim().toLowerCase()
+  ) {
+    return {
+      enabled: true,
+      poNumber,
+      found: true,
+      purchaseOrder,
+      invoiceVendorName,
+      poVendorName: purchaseOrder.vendorName,
+      poVendorNumber: purchaseOrder.vendorNumber,
+      vendorMatches: true,
+      matchScore: 1,
+      severity: "none",
+      message: "PO matched.",
+    };
+  }
+
   const score = vendorMatchScore(
     invoiceVendorName,
     purchaseOrder.vendorName,
@@ -90,6 +113,7 @@ export function validateInvoicePoNumber(
       purchaseOrder,
       invoiceVendorName,
       poVendorName: purchaseOrder.vendorName,
+      poVendorNumber: purchaseOrder.vendorNumber,
       vendorMatches: true,
       matchScore: score,
       severity: "none",
@@ -104,6 +128,7 @@ export function validateInvoicePoNumber(
     purchaseOrder,
     invoiceVendorName,
     poVendorName: purchaseOrder.vendorName,
+    poVendorNumber: purchaseOrder.vendorNumber,
     vendorMatches: false,
     matchScore: score,
     severity: settings.blockSaveOnVendorMismatch ? "blocking" : "warning",

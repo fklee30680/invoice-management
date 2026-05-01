@@ -41,6 +41,15 @@ export type PoValidationSettings = {
   vendorMatchThreshold: number;
 };
 
+export type PoImportSettings = {
+  headerRow: number;
+  poNumberColumn: string;
+  vendorNameColumn: string;
+  vendorNumberColumn: string;
+  departmentColumn: string;
+  updateExisting: boolean;
+};
+
 export type StatusTone =
   | "slate"
   | "amber"
@@ -276,8 +285,11 @@ export type PurchaseOrder = {
   poNumber: string;
   normalizedPoNumber: string;
   vendorName: string;
+  vendorNumber: string;
   departmentId: string;
+  departmentName?: string;
   uploadedAt: string;
+  updatedAt?: string;
 };
 
 export type Vendor = {
@@ -425,6 +437,7 @@ export type AppData = {
   invoiceFields: InvoiceFieldConfig[];
   menuSettings: MenuSettings;
   poValidationSettings: PoValidationSettings;
+  poImportSettings: PoImportSettings;
   departmentDecisions: DepartmentDecisionDefinition[];
   escalationContacts: EscalationContact[];
 };

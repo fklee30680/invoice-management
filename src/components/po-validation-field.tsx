@@ -12,7 +12,7 @@ type PoValidationResponse = {
   severity: "none" | "warning" | "blocking";
   message: string;
   allowVendorUpdateFromPo?: boolean;
-  purchaseOrder?: { id: string; poNumber: string; vendorName: string };
+  purchaseOrder?: { id: string; poNumber: string; vendorName: string; vendorNumber?: string };
 };
 
 export function PoValidationField({
@@ -57,6 +57,7 @@ export function PoValidationField({
     const form = input?.form;
     if (!input || !form) return;
     const vendorInput = form.elements.namedItem("vendorName") as HTMLInputElement | null;
+    const vendorNumberInput = form.elements.namedItem("vendorNumber") as HTMLInputElement | null;
     const response = await fetch("/api/po-validation", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -64,6 +65,7 @@ export function PoValidationField({
         invoiceId,
         poNumber: input.value,
         vendorName: vendorInput?.value || "",
+        vendorNumber: vendorNumberInput?.value || "",
       }),
     });
     if (!response.ok) return;

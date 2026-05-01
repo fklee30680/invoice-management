@@ -279,26 +279,113 @@ async function notifyDepartment(invoice: Invoice) {
 }
 
 export async function uploadPoList(formData: FormData) {
+  await requireApUser();
   const file = formData.get("poFile");
   if (!(file instanceof File) || file.size === 0) {
     return;
   }
 
-  const rows = await parsePoUpload(file);
+  const settings = {
+    headerRow: Math.max(Number(value(formData, "headerRow")) || 1, 1),
+    poNumberColumn: value(formData, "poNumberColumn") || "PO Number",
+    vendorNameColumn: value(formData, "vendorNameColumn") || "Vendor Name",
+    vendorNumberColumn: value(formData, "vendorNumberColumn") || "Vendor Number",
+    departmentColumn: value(formData, "departmentColumn") || "Department",
+    updateExisting: checkbox(formData, "updateExisting"),
+  };
+  const result = await parsePoUpload(file, settings);
+  let imported = 0;
+  let updated = 0;
+  let skipped = 0;
+  const warnings = [...result.warnings];
+
   await mutateData((data) => {
-    for (const row of rows) {
-      upsertPurchaseOrder(data, row.poNumber, row.vendorName, row.departmentName);
+    data.poImportSettings = settings;
+
+    if (result.errors.length > 0) {
+      addAudit(data, {
+        actor: "AP",
+        type: "po_upload_failed",
+        message: `PO import from ${file.name} failed: ${result.errors.join(" ")}`,
+      });
+      return;
+    }
+
+    const nowIso = new Date().toISOString();
+    for (const row of result.rows) {
+      const existing = data.purchaseOrders.find(
+        (po) => po.normalizedPoNumber === row.normalizedPoNumber,
+      );
+      const department = data.departments.find(
+        (item) =>
+          item.name.trim().toLowerCase() === row.departmentName.trim().toLowerCase(),
+      );
+      if (!department) {
+        warnings.push(
+          `Row ${row.rowNumber}: Department '${row.departmentName}' was not found in department setup.`,
+        );
+      }
+      if (
+        row.vendorNumber &&
+        !data.vendors.some(
+          (vendor) =>
+            vendor.vendorNumber.trim().toLowerCase() ===
+            row.vendorNumber.trim().toLowerCase(),
+        )
+      ) {
+        warnings.push(
+          `Row ${row.rowNumber}: Vendor Number '${row.vendorNumber}' was not found in the vendor file.`,
+        );
+      }
+      if (existing && !settings.updateExisting) {
+        skipped += 1;
+        warnings.push(
+          `Row ${row.rowNumber}: PO ${row.poNumber} already exists and was skipped.`,
+        );
+        continue;
+      }
+
+      const saved = upsertPurchaseOrder(
+        data,
+        row.poNumber,
+        row.vendorName,
+        row.departmentName,
+        row.vendorNumber,
+        { updateExisting: settings.updateExisting, nowIso },
+      );
+      if (!saved) {
+        skipped += 1;
+      } else if (existing) {
+        updated += 1;
+      } else {
+        imported += 1;
+      }
     }
     addAudit(data, {
       actor: "AP",
       type: "po_upload",
-      message: `Imported ${rows.length} purchase order rows from ${file.name}.`,
+      message: `Imported ${imported} purchase orders from ${file.name}. Updated ${updated}. Skipped ${skipped}. Warnings: ${warnings.length}.`,
     });
+    if (warnings.length > 0) {
+      addAudit(data, {
+        actor: "System",
+        type: "po_upload_warnings",
+        message: warnings.slice(0, 20).join(" "),
+      });
+    }
   });
 
   revalidatePath("/");
   revalidatePath("/settings");
   revalidatePath("/uploads/po-list");
+  const params = new URLSearchParams({
+    imported: String(imported),
+    updated: String(updated),
+    skipped: String(skipped),
+    warnings: String(warnings.length),
+    errors: String(result.errors.length),
+  });
+  redirect(`/uploads/po-list?${params.toString()}`);
 }
 
 export async function uploadVendorList(formData: FormData) {
@@ -808,7 +895,11 @@ function validatePoCandidate(
     poEnabled && formData.has("poNumber") ? value(formData, "poNumber") : invoice.poNumber;
   const result =
     poEnabled && poNumber
-      ? validateInvoicePoNumber(data, { poNumber, invoiceVendorName: vendorName })
+      ? validateInvoicePoNumber(data, {
+          poNumber,
+          invoiceVendorName: vendorName,
+          invoiceVendorNumber: selectedVendor?.vendorNumber || invoice.vendorNumber,
+        })
       : undefined;
   const updateActionRequested =
     value(formData, "poValidationAction") === "updateVendor" &&
@@ -817,6 +908,7 @@ function validatePoCandidate(
     data.poValidationSettings.allowVendorUpdateFromPo;
   if (updateActionRequested && result?.poVendorName) {
     const vendorValidation = validateVendorAgainstFile(data, result.poVendorName, {
+      vendorNumber: result.poVendorNumber,
       blockWhenMissing: true,
     });
     if (!vendorValidation.found || !vendorValidation.vendor) {
@@ -853,6 +945,7 @@ function validatePoCandidate(
     result.poVendorName;
   if (canUpdateVendor) {
     const vendorValidation = validateVendorAgainstFile(data, result.poVendorName || "", {
+      vendorNumber: result.poVendorNumber,
       blockWhenMissing: true,
     });
     if (!vendorValidation.found || !vendorValidation.vendor) {
@@ -2412,6 +2505,7 @@ export async function submitDepartmentDecision(formData: FormData) {
       ? validateInvoicePoNumber(currentData, {
           poNumber: poNumberForDecision,
           invoiceVendorName: currentInvoice.vendorName,
+          invoiceVendorNumber: currentInvoice.vendorNumber,
         })
       : undefined;
   const updateVendorFromPo =
@@ -2423,6 +2517,7 @@ export async function submitDepartmentDecision(formData: FormData) {
     poValidationResult.poVendorName;
   const poVendorFileMatch = updateVendorFromPo
     ? validateVendorAgainstFile(currentData, poValidationResult?.poVendorName || "", {
+        vendorNumber: poValidationResult?.poVendorNumber,
         blockWhenMissing: true,
       })
     : undefined;
