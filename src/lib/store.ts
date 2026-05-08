@@ -439,6 +439,14 @@ function normalizeData(data: AppData): AppData {
           ...invoice,
           paymentProcessed: invoice.paymentProcessed === true,
           dateProcessedForPayment: invoice.dateProcessedForPayment || "",
+          documentId: invoice.documentId || "",
+          extractionId: invoice.extractionId || "",
+          extractionConfidence: invoice.extractionConfidence || 0,
+          validationSummary: invoice.validationSummary || "",
+          apReviewReasonCodes: Array.isArray(invoice.apReviewReasonCodes)
+            ? invoice.apReviewReasonCodes
+            : [],
+          processingStatus: invoice.processingStatus || "validation_completed",
           dateUploaded:
             invoice.dateUploaded ||
             invoice.createdAt?.slice(0, 10) ||
@@ -471,6 +479,57 @@ function normalizeData(data: AppData): AppData {
   return {
     ...data,
     invoices,
+    invoiceFiles: (data.invoiceFiles || []).map((file) => ({
+      ...file,
+      fileHash: file.fileHash || "",
+      processingStatus: file.processingStatus || "stored",
+    })),
+    invoiceDocuments: (data.invoiceDocuments || []).map((document) => ({
+      ...document,
+      invoiceId: document.invoiceId || "",
+      fileId: document.fileId || "",
+      fileHash: document.fileHash || "",
+      storageProvider: document.storageProvider || "local",
+      blobUrl: document.blobUrl || "",
+      blobPathname: document.blobPathname || "",
+      uploadedBy: document.uploadedBy || "Unknown",
+      uploadedAt: document.uploadedAt || new Date().toISOString(),
+      processingStatus: document.processingStatus || "uploaded",
+      failureReason: document.failureReason || "",
+    })),
+    invoiceExtractions: (data.invoiceExtractions || []).map((extraction) => ({
+      ...extraction,
+      invoiceId: extraction.invoiceId || "",
+      provider: extraction.provider || "filename_fallback",
+      providerModel: extraction.providerModel || "",
+      rawText: extraction.rawText || "",
+      documentType: extraction.documentType || "unknown",
+      documentConfidence: extraction.documentConfidence || 0,
+      ocrConfidence: extraction.ocrConfidence || 0,
+      extractionSummary: extraction.extractionSummary || "",
+      invoiceConfidence: extraction.invoiceConfidence || 0,
+      createdAt: extraction.createdAt || new Date().toISOString(),
+    })),
+    invoiceFieldCandidates: (data.invoiceFieldCandidates || []).map((candidate) => ({
+      ...candidate,
+      invoiceId: candidate.invoiceId || "",
+      rawValue: candidate.rawValue || "",
+      normalizedValue: candidate.normalizedValue || "",
+      nearbyLabel: candidate.nearbyLabel || "",
+      extractionSource: candidate.extractionSource || "filename_fallback",
+      confidence: candidate.confidence || 0,
+      selected: candidate.selected === true,
+      validationStatus: candidate.validationStatus || "not_checked",
+      validationMessage: candidate.validationMessage || "",
+    })),
+    invoiceValidationResults: (data.invoiceValidationResults || []).map((result) => ({
+      ...result,
+      invoiceId: result.invoiceId || "",
+      fieldName: result.fieldName || "",
+      status: result.status || "not_checked",
+      severity: result.severity || "info",
+      createdAt: result.createdAt || new Date().toISOString(),
+    })),
     purchaseOrders,
     departments: (data.departments || []).map((department) => ({
       ...department,
@@ -780,6 +839,10 @@ function seedData(): AppData {
     vendors: [],
     invoices: [],
     invoiceFiles: [],
+    invoiceDocuments: [],
+    invoiceExtractions: [],
+    invoiceFieldCandidates: [],
+    invoiceValidationResults: [],
     auditEvents: [
       {
         id: createId("audit"),

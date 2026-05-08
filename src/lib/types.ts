@@ -2,6 +2,28 @@ export type Role = "AP" | "DEPARTMENT";
 
 export type WorkflowStatus = string;
 
+export type DocumentProcessingStatus =
+  | "uploaded"
+  | "stored"
+  | "staged_for_processing"
+  | "classified"
+  | "ocr_completed"
+  | "extraction_completed"
+  | "normalization_completed"
+  | "validation_completed"
+  | "ready_for_ap_review"
+  | "routed"
+  | "failed";
+
+export type ExtractionSource =
+  | "azure_document_intelligence"
+  | "embedded_pdf_text"
+  | "filename_fallback";
+
+export type ValidationStatus = "passed" | "warning" | "failed" | "not_checked";
+
+export type ValidationSeverity = "info" | "warning" | "blocking";
+
 export type MenuItemType = "link" | "group";
 
 export type MenuRole = Role;
@@ -350,7 +372,72 @@ export type InvoiceFile = {
   blobAccess?: "private" | "public";
   mimeType: string;
   size: number;
+  fileHash?: string;
+  processingStatus?: DocumentProcessingStatus;
   uploadedAt: string;
+};
+
+export type InvoiceDocument = {
+  id: string;
+  invoiceId?: string;
+  fileId?: string;
+  originalFilename: string;
+  fileHash: string;
+  mimeType: string;
+  sizeBytes: number;
+  storageProvider: "local" | "blob";
+  blobUrl?: string;
+  blobPathname?: string;
+  uploadedBy: string;
+  uploadedAt: string;
+  processingStatus: DocumentProcessingStatus;
+  failureReason?: string;
+};
+
+export type InvoiceExtraction = {
+  id: string;
+  invoiceId?: string;
+  documentId: string;
+  provider: ExtractionSource;
+  providerModel: string;
+  rawText: string;
+  rawJson?: unknown;
+  documentType: "invoice" | "non_invoice" | "unknown";
+  documentConfidence: number;
+  ocrConfidence: number;
+  extractionSummary: string;
+  invoiceConfidence: number;
+  createdAt: string;
+};
+
+export type InvoiceFieldCandidate = {
+  id: string;
+  invoiceId?: string;
+  documentId: string;
+  extractionId: string;
+  fieldName: string;
+  rawValue: string;
+  normalizedValue: string;
+  pageNumber?: number;
+  boundingBox?: number[];
+  nearbyLabel?: string;
+  extractionSource: ExtractionSource;
+  confidence: number;
+  selected: boolean;
+  validationStatus: ValidationStatus;
+  validationMessage?: string;
+};
+
+export type InvoiceValidationResult = {
+  id: string;
+  invoiceId?: string;
+  documentId: string;
+  fieldName?: string;
+  status: ValidationStatus;
+  code: string;
+  message: string;
+  severity: ValidationSeverity;
+  createdAt: string;
 };
 
 export type AuditEvent = {
@@ -364,6 +451,8 @@ export type AuditEvent = {
 
 export type Invoice = {
   id: string;
+  documentId?: string;
+  extractionId?: string;
   vendorName: string;
   vendorRecordId?: string;
   vendorId?: string;
@@ -393,6 +482,10 @@ export type Invoice = {
   fileId: string;
   notificationSentAt: string;
   ocrSummary: string;
+  extractionConfidence?: number;
+  validationSummary?: string;
+  apReviewReasonCodes?: string[];
+  processingStatus?: DocumentProcessingStatus;
   poValidationStatus?:
     | "Not Checked"
     | "Matched"
@@ -455,6 +548,10 @@ export type AppData = {
   vendors: Vendor[];
   invoices: Invoice[];
   invoiceFiles: InvoiceFile[];
+  invoiceDocuments: InvoiceDocument[];
+  invoiceExtractions: InvoiceExtraction[];
+  invoiceFieldCandidates: InvoiceFieldCandidate[];
+  invoiceValidationResults: InvoiceValidationResult[];
   auditEvents: AuditEvent[];
   notificationTemplate: NotificationTemplate;
   escalationSchedules: EscalationSchedule[];

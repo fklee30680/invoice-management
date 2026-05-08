@@ -37,6 +37,7 @@ export async function saveInvoiceFile(input: {
   storedName: string;
   mimeType: string;
   size: number;
+  fileHash?: string;
   uploadedAt: string;
   bytes: Buffer;
 }): Promise<InvoiceFile> {
@@ -64,6 +65,8 @@ export async function saveInvoiceFile(input: {
         blobAccess,
         mimeType: blob.contentType || input.mimeType || "application/octet-stream",
         size: input.size,
+        fileHash: input.fileHash || "",
+        processingStatus: "stored",
         uploadedAt: input.uploadedAt,
       };
     } catch (error) {
@@ -85,6 +88,8 @@ export async function saveInvoiceFile(input: {
     storageProvider: "local",
     mimeType: input.mimeType || "application/octet-stream",
     size: input.size,
+    fileHash: input.fileHash || "",
+    processingStatus: "stored",
     uploadedAt: input.uploadedAt,
   };
 }

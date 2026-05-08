@@ -5,6 +5,7 @@ import {
   parseReportFilters,
   reportTitle,
 } from "@/lib/reports";
+import { buildInvoiceProcessingMetrics } from "@/lib/processing-metrics";
 import { requireApUser } from "@/lib/session";
 import { readData } from "@/lib/store";
 import { currencyDisplay } from "@/lib/utils";
@@ -27,6 +28,7 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
   const filters = parseReportFilters(query);
   const invoices = filteredReportInvoices(data, filters);
   const metrics = buildReportMetrics(data, invoices, filters);
+  const processingMetrics = buildInvoiceProcessingMetrics(data);
 
   const pdfParams = new URLSearchParams();
   pdfParams.set("reportType", filters.reportType);
@@ -182,6 +184,65 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
                 ) : null}
               </tbody>
             </table>
+          </div>
+        </section>
+
+        <section className="border border-[var(--line)] bg-[var(--panel)] p-4">
+          <h2 className="text-xl font-semibold">Invoice Processing Metrics</h2>
+          <div className="mt-4 grid gap-px bg-[var(--line)] text-sm sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              ["Uploaded", String(processingMetrics.totalUploaded)],
+              ["Auto-routed", `${processingMetrics.percentAutoRouted}%`],
+              ["Sent to AP Review", `${processingMetrics.percentSentToApReview}%`],
+              ["OCR Failure Rate", `${processingMetrics.ocrFailureRate}%`],
+              ["Field Accuracy", `${processingMetrics.fieldExtractionAccuracy}%`],
+              ["Human Correction Rate", `${processingMetrics.humanCorrectionRate}%`],
+              ["Vendor Match Rate", `${processingMetrics.vendorMatchRate}%`],
+              ["PO Match Rate", `${processingMetrics.poMatchRate}%`],
+              ["Duplicate Detection Rate", `${processingMetrics.duplicateDetectionRate}%`],
+              ["Math Failure Rate", `${processingMetrics.mathValidationFailureRate}%`],
+              [
+                "Average Processing Time",
+                `${Math.round(processingMetrics.averageProcessingTimeMs / 1000)}s`,
+              ],
+            ].map(([label, value]) => (
+              <div className="bg-white p-3" key={label}>
+                <div className="text-xs font-semibold uppercase text-[var(--muted)]">
+                  {label}
+                </div>
+                <div className="mt-1 text-lg font-semibold">{value}</div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            <div className="border border-[var(--line)] bg-white p-3">
+              <h3 className="text-sm font-semibold">Top AP Review Reasons</h3>
+              <div className="mt-2 space-y-1 text-sm">
+                {processingMetrics.topApReviewReasons.map((item) => (
+                  <div className="flex justify-between gap-3" key={item.label}>
+                    <span className="font-mono text-xs">{item.label}</span>
+                    <span>{item.count}</span>
+                  </div>
+                ))}
+                {processingMetrics.topApReviewReasons.length === 0 ? (
+                  <div className="text-[var(--muted)]">No review reasons recorded.</div>
+                ) : null}
+              </div>
+            </div>
+            <div className="border border-[var(--line)] bg-white p-3">
+              <h3 className="text-sm font-semibold">Top Vendors By Exception Count</h3>
+              <div className="mt-2 space-y-1 text-sm">
+                {processingMetrics.topVendorsByExceptionCount.map((item) => (
+                  <div className="flex justify-between gap-3" key={item.label}>
+                    <span>{item.label}</span>
+                    <span>{item.count}</span>
+                  </div>
+                ))}
+                {processingMetrics.topVendorsByExceptionCount.length === 0 ? (
+                  <div className="text-[var(--muted)]">No vendor exceptions recorded.</div>
+                ) : null}
+              </div>
+            </div>
           </div>
         </section>
       </div>

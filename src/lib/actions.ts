@@ -1,5 +1,6 @@
 "use server";
 
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -16,7 +17,7 @@ import {
   saveInvoiceFile,
   stageFileForProcessing,
 } from "./file-storage";
-import { extractInvoiceMetadata } from "./ocr";
+import { extractInvoiceMetadata, type ExtractedInvoiceMetadata } from "./ocr";
 import {
   DASHBOARD_BOX_METRICS,
   defaultStatusIdsForDashboardView,
@@ -72,7 +73,7 @@ import {
   upsertDepartment,
   upsertVendor,
 } from "./store";
-import { normalizePoNumber } from "./utils";
+import { normalizePoNumber, normalizeVendorName } from "./utils";
 import {
   STATUS_TONES,
   statusLabelForRole,
@@ -85,6 +86,8 @@ import type {
   DashboardBoxMetricType,
   DecisionWorkflowAction,
   Invoice,
+  InvoiceDocument,
+  InvoiceValidationResult,
   MenuConfigItem,
   MenuRole,
   StatusTone,
@@ -237,6 +240,233 @@ function applyDuplicateCheck(
     clearAttentionReason(invoice, DUPLICATE_ATTENTION_REASON);
   }
   return result;
+}
+
+function processingValidation(
+  input: {
+    documentId: string;
+    invoiceId: string;
+    nowIso: string;
+    extracted: ExtractedInvoiceMetadata;
+    invoice: Invoice;
+    purchaseOrder: ReturnType<typeof findPurchaseOrder>;
+    departmentEmail: string;
+    vendorValidated: boolean;
+    vendorInactive: boolean;
+    duplicateStatus: Invoice["duplicateCheckStatus"];
+    fileHashDuplicate: boolean;
+  },
+) {
+  const validations: Omit<InvoiceValidationResult, "id">[] = [];
+  const reasonCodes: string[] = [];
+  const addResult = (
+    code: string,
+    status: InvoiceValidationResult["status"],
+    severity: InvoiceValidationResult["severity"],
+    message: string,
+    fieldName = "",
+  ) => {
+    validations.push({
+      invoiceId: input.invoiceId,
+      documentId: input.documentId,
+      fieldName,
+      status,
+      code,
+      message,
+      severity,
+      createdAt: input.nowIso,
+    });
+    if (severity === "blocking" && !reasonCodes.includes(code)) {
+      reasonCodes.push(code);
+    }
+  };
+
+  if (input.extracted.documentType !== "invoice" || input.extracted.documentConfidence < 0.9) {
+    addResult(
+      "document_type_uncertain",
+      "failed",
+      "blocking",
+      "Document was not confidently classified as an invoice.",
+    );
+  } else {
+    addResult("document_classified_invoice", "passed", "info", "Document classified as invoice.");
+  }
+
+  if (input.extracted.ocrConfidence < 0.9) {
+    addResult(
+      "low_ocr_confidence",
+      "warning",
+      "blocking",
+      "OCR confidence is below the auto-route threshold.",
+    );
+  }
+  if (input.extracted.fallbackReason?.toLowerCase().includes("ocr failed")) {
+    addResult("ocr_failed", "failed", "blocking", input.extracted.fallbackReason);
+  }
+
+  const requiredFields: Array<[keyof Invoice, string, string]> = [
+    ["vendorName", "missing_vendor", "Vendor name is required."],
+    ["invoiceNumber", "missing_invoice_number", "Invoice number is required."],
+    ["invoiceDate", "missing_invoice_date", "Invoice date is required."],
+    ["amount", "missing_total_due", "Total due is required."],
+    ["poNumber", "missing_po_number", "PO number is required."],
+    ["fileId", "missing_uploaded_file", "Uploaded file reference is required."],
+    ["departmentId", "department_missing", "Department routing target is required."],
+  ];
+  for (const [fieldName, code, message] of requiredFields) {
+    if (!String(input.invoice[fieldName] || "").trim()) {
+      addResult(code, "failed", "blocking", message, String(fieldName));
+    }
+  }
+
+  const invoiceDate = parseDate(input.invoice.invoiceDate);
+  if (input.invoice.invoiceDate && !invoiceDate) {
+    addResult("invalid_invoice_date", "failed", "blocking", "Invoice date is invalid.", "invoiceDate");
+  } else if (invoiceDate && invoiceDate.getTime() > Date.now() + 1000 * 60 * 60 * 24 * 7) {
+    addResult(
+      "future_invoice_date",
+      "failed",
+      "blocking",
+      "Invoice date is future-dated beyond policy.",
+      "invoiceDate",
+    );
+  }
+
+  if (input.extracted.dueDate && input.invoice.invoiceDate) {
+    const dueDate = parseDate(input.extracted.dueDate);
+    if (dueDate && invoiceDate && dueDate.getTime() < invoiceDate.getTime()) {
+      addResult("due_date_before_invoice_date", "failed", "blocking", "Due date is before invoice date.", "dueDate");
+    }
+  }
+
+  if (amountCents(input.invoice.amount) <= 0) {
+    addResult("invalid_total_due", "failed", "blocking", "Total due must be greater than zero.", "amount");
+  }
+
+  const math = validateAmountMath(input.extracted);
+  if (math === false) {
+    addResult(
+      "total_math_mismatch",
+      "failed",
+      "blocking",
+      "Subtotal plus tax and shipping does not equal total due.",
+      "amount",
+    );
+  } else if (math === true) {
+    addResult("total_math_passed", "passed", "info", "Subtotal plus tax and shipping equals total due.", "amount");
+  }
+
+  if (!input.purchaseOrder) {
+    addResult("po_not_found", "failed", "blocking", "PO number was not found in the PO list.", "poNumber");
+  } else {
+    addResult("po_matched", "passed", "info", "PO number was found in the PO list.", "poNumber");
+    if (!input.purchaseOrder.departmentId) {
+      addResult("department_missing", "failed", "blocking", "PO does not map to a department.", "departmentId");
+    }
+    if (!input.departmentEmail) {
+      addResult(
+        "department_email_missing",
+        "failed",
+        "blocking",
+        "Department does not have an email configured.",
+        "departmentId",
+      );
+    }
+    if (
+      input.purchaseOrder.vendorName &&
+      input.invoice.vendorName &&
+      normalizeVendorName(input.purchaseOrder.vendorName) !==
+        normalizeVendorName(input.invoice.vendorName)
+    ) {
+      addResult(
+        "po_vendor_mismatch",
+        "failed",
+        "blocking",
+        "PO vendor does not match the invoice vendor.",
+        "vendorName",
+      );
+    }
+  }
+
+  if (input.vendorInactive) {
+    addResult(
+      "vendor_inactive",
+      "failed",
+      "blocking",
+      "Vendor is inactive in the vendor file.",
+      "vendorName",
+    );
+  } else if (!input.vendorValidated) {
+    addResult(
+      "vendor_not_found",
+      "failed",
+      "blocking",
+      "Vendor was not validated against the vendor file.",
+      "vendorName",
+    );
+  } else {
+    addResult("vendor_validated", "passed", "info", "Vendor was validated against the vendor file.", "vendorName");
+  }
+
+  if (input.fileHashDuplicate || input.duplicateStatus === "Potential Duplicate") {
+    addResult(
+      "duplicate_suspected",
+      "failed",
+      "blocking",
+      input.fileHashDuplicate
+        ? "An existing invoice file has the same file hash."
+        : "A potential duplicate invoice was detected.",
+    );
+  }
+
+  const selectedCandidateConfidence = input.extracted.candidates
+    .filter((candidate) => candidate.selected)
+    .map((candidate) => candidate.confidence);
+  const requiredConfidencePassed = ["vendor_name", "invoice_number", "invoice_date", "total_due", "po_number"]
+    .every((fieldName) => {
+      const candidate = input.extracted.candidates.find(
+        (item) => item.fieldName === fieldName && item.selected,
+      );
+      return candidate && candidate.confidence >= 0.9;
+    });
+  const confidence =
+    selectedCandidateConfidence.length > 0
+      ? selectedCandidateConfidence.reduce((sum, item) => sum + item, 0) /
+        selectedCandidateConfidence.length
+      : 0;
+  const blocking = validations.some((result) => result.severity === "blocking");
+  return {
+    validations,
+    reasonCodes,
+    requiredConfidencePassed,
+    invoiceConfidence: Math.round(confidence * 100) / 100,
+    canAutoRoute: !blocking && requiredConfidencePassed,
+  };
+}
+
+function validateAmountMath(extracted: ExtractedInvoiceMetadata) {
+  const subtotal = amountCents(extracted.subtotal);
+  const tax = amountCents(extracted.tax);
+  const shipping = amountCents(extracted.shipping);
+  const total = amountCents(extracted.totalDue || extracted.amount);
+  if (total <= 0 || subtotal <= 0) return undefined;
+  return subtotal + Math.max(tax, 0) + Math.max(shipping, 0) === total;
+}
+
+function amountCents(value: string) {
+  const cleaned = String(value || "").replace(/[$,]/g, "").trim();
+  if (!cleaned) return 0;
+  const match = cleaned.match(/^-?\d+(?:\.\d{1,2})?$/);
+  if (!match) return 0;
+  const [dollars, cents = ""] = cleaned.split(".");
+  const sign = dollars.startsWith("-") ? -1 : 1;
+  return sign * (Math.abs(Number(dollars)) * 100 + Number(cents.padEnd(2, "0").slice(0, 2)));
+}
+
+function parseDate(value: string) {
+  if (!value) return null;
+  const date = new Date(`${value}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 async function notifyDepartment(invoice: Invoice) {
@@ -879,6 +1109,7 @@ export async function markManualPaymentInvoicesPaid(formData: FormData) {
 }
 
 export async function uploadInvoices(formData: FormData) {
+  const user = await requireApUser();
   const files = formData
     .getAll("invoiceFiles")
     .filter((file): file is File => file instanceof File && file.size > 0);
@@ -887,13 +1118,16 @@ export async function uploadInvoices(formData: FormData) {
     for (const file of files) {
       const invoiceId = createId("invoice");
       const fileId = createId("file");
+      const documentId = createId("document");
+      const extractionId = createId("extraction");
       const extension = path.extname(file.name) || ".bin";
       const storedName = `${invoiceId}${extension}`;
       const bytes = Buffer.from(await file.arrayBuffer());
+      const fileHash = createHash("sha256").update(bytes).digest("hex");
+      const now = new Date().toISOString();
       const filePath = await stageFileForProcessing(bytes, storedName);
 
       const extracted = await extractInvoiceMetadata(filePath, file.name, file.type);
-      const now = new Date().toISOString();
       const invoiceFile = await saveInvoiceFile({
         id: fileId,
         invoiceId,
@@ -901,6 +1135,7 @@ export async function uploadInvoices(formData: FormData) {
         storedName,
         mimeType: file.type || "application/octet-stream",
         size: file.size,
+        fileHash,
         uploadedAt: now,
         bytes,
       });
@@ -908,18 +1143,55 @@ export async function uploadInvoices(formData: FormData) {
       await mutateData((data) => {
         const purchaseOrder = findPurchaseOrder(data, extracted.poNumber);
         const vendorName = extracted.vendorName || purchaseOrder?.vendorName || "";
-        const vendorValidation = validateVendorAgainstFile(data, vendorName);
+        const vendorValidation = validateVendorAgainstFile(data, vendorName, {
+          vendorNumber: extracted.vendorNumber,
+        });
         const departmentId = purchaseOrder?.departmentId || "";
         const department = data.departments.find((item) => item.id === departmentId);
-        const canNotify = Boolean(purchaseOrder && department?.email && vendorValidation.found);
-        const status = canNotify
-          ? statusLabelForRole(data, "routed")
-          : statusLabelForRole(data, "apReview");
+        const fileHashDuplicate = data.invoiceFiles.some(
+          (item) => item.id !== fileId && item.fileHash && item.fileHash === fileHash,
+        );
 
         addInvoiceFile(data, invoiceFile);
 
+        const document: InvoiceDocument = {
+          id: documentId,
+          invoiceId,
+          fileId,
+          originalFilename: file.name,
+          fileHash,
+          mimeType: invoiceFile.mimeType,
+          sizeBytes: invoiceFile.size,
+          storageProvider: invoiceFile.storageProvider || "local",
+          blobUrl: invoiceFile.blobUrl || "",
+          blobPathname: invoiceFile.blobPathname || "",
+          uploadedBy: user.email || user.name,
+          uploadedAt: now,
+          processingStatus: "validation_completed",
+          failureReason: "",
+        };
+        data.invoiceDocuments.push(document);
+
+        data.invoiceExtractions.push({
+          id: extractionId,
+          invoiceId,
+          documentId,
+          provider: extracted.provider,
+          providerModel: extracted.providerModel,
+          rawText: extracted.rawText,
+          rawJson: extracted.rawJson,
+          documentType: extracted.documentType,
+          documentConfidence: extracted.documentConfidence,
+          ocrConfidence: extracted.ocrConfidence,
+          extractionSummary: extracted.summary,
+          invoiceConfidence: extracted.extractionConfidence,
+          createdAt: now,
+        });
+
         const invoice: Invoice = {
           id: invoiceId,
+          documentId,
+          extractionId,
           vendorName,
           vendorId: "",
           vendorRecordId: "",
@@ -932,15 +1204,15 @@ export async function uploadInvoices(formData: FormData) {
           vendorMatchSource: "OCR",
           invoiceNumber: extracted.invoiceNumber,
           invoiceDate: extracted.invoiceDate,
-          amount: extracted.amount,
+          amount: extracted.totalDue || extracted.amount,
           poNumber: extracted.poNumber,
           dateReceived: now.slice(0, 10),
           dateApproved: "",
           dateUploaded: now.slice(0, 10),
-          dateSubmittedToDepartment: canNotify ? now.slice(0, 10) : "",
+          dateSubmittedToDepartment: "",
           statusDate: now.slice(0, 10),
-          routedAt: canNotify ? now : "",
-          status,
+          routedAt: "",
+          status: statusLabelForRole(data, "apReview"),
           departmentId,
           departmentDecision: "",
           paymentProcessed: false,
@@ -949,9 +1221,11 @@ export async function uploadInvoices(formData: FormData) {
           comments: [],
           fileId,
           notificationSentAt: "",
-          ocrSummary: purchaseOrder
-            ? extracted.summary
-            : `${extracted.summary} Vendor validation: ${vendorValidation.status}.`.trim(),
+          ocrSummary: extracted.summary,
+          extractionConfidence: extracted.extractionConfidence,
+          validationSummary: "",
+          apReviewReasonCodes: [],
+          processingStatus: "validation_completed",
           createdAt: now,
           updatedAt: now,
         };
@@ -962,29 +1236,115 @@ export async function uploadInvoices(formData: FormData) {
         }
 
         const duplicateResult = applyDuplicateCheck(data, invoice, now);
-        if (duplicateResult.status === "Potential Duplicate" && canNotify) {
+        if (fileHashDuplicate) {
+          invoice.duplicateCheckStatus = "Potential Duplicate";
+          invoice.duplicateCheckMessage = "Potential duplicate invoice found from exact file hash match.";
+          invoice.duplicateMatchedInvoiceIds = data.invoiceFiles
+            .filter((item) => item.id !== fileId && item.fileHash === fileHash)
+            .map((item) => item.invoiceId)
+            .filter(Boolean);
+          appendAttentionReason(invoice, DUPLICATE_ATTENTION_REASON);
+        }
+        const processing = processingValidation({
+          documentId,
+          invoiceId,
+          nowIso: now,
+          extracted,
+          invoice,
+          purchaseOrder,
+          departmentEmail: department?.email || "",
+          vendorValidated: vendorValidation.found && vendorValidation.vendor?.active !== false,
+          vendorInactive: vendorValidation.vendor?.active === false,
+          duplicateStatus: invoice.duplicateCheckStatus,
+          fileHashDuplicate,
+        });
+
+        invoice.extractionConfidence = processing.invoiceConfidence;
+        invoice.apReviewReasonCodes = processing.reasonCodes;
+        invoice.validationSummary = processing.reasonCodes.length
+          ? `AP review required: ${processing.reasonCodes.join(", ")}.`
+          : "Document processing validations passed.";
+        invoice.ocrSummary = `${extracted.summary} Classification confidence: ${Math.round(
+          extracted.documentConfidence * 100,
+        )}%. Invoice confidence: ${Math.round(processing.invoiceConfidence * 100)}%.`;
+
+        if (processing.canAutoRoute) {
+          setInvoiceStatus(invoice, statusLabelForRole(data, "routed"), new Date(now));
+          invoice.routedAt = now;
+          invoice.dateSubmittedToDepartment = now.slice(0, 10);
+          invoice.processingStatus = "routed";
+          document.processingStatus = "routed";
+        } else {
           setInvoiceStatus(invoice, statusLabelForRole(data, "apReview"), new Date(now));
-          invoice.routedAt = "";
-          invoice.dateSubmittedToDepartment = "";
-          invoice.notificationSentAt = "";
+          invoice.processingStatus = "ready_for_ap_review";
+          document.processingStatus = "ready_for_ap_review";
+          appendAttentionReason(invoice, "Invoice processing review required.");
         }
 
+        data.invoiceFieldCandidates.push(
+          ...extracted.candidates.map((candidate) => ({
+            id: createId("candidate"),
+            invoiceId,
+            documentId,
+            extractionId,
+            fieldName: candidate.fieldName,
+            rawValue: candidate.rawValue,
+            normalizedValue: candidate.normalizedValue,
+            pageNumber: candidate.pageNumber,
+            boundingBox: candidate.boundingBox,
+            nearbyLabel: candidate.nearbyLabel || "",
+            extractionSource: candidate.extractionSource,
+            confidence: candidate.confidence,
+            selected: candidate.selected,
+            validationStatus: candidate.normalizedValue ? "passed" : candidate.validationStatus,
+            validationMessage: candidate.validationMessage || "",
+          })),
+        );
+        data.invoiceValidationResults.push(
+          ...processing.validations.map((result) => ({
+            ...result,
+            id: createId("validation"),
+          })),
+        );
         addInvoice(data, invoice);
-        addAudit(data, {
-          invoiceId,
-          actor: "AP",
-          type: "invoice_uploaded",
-          message: `Uploaded ${file.name}.`,
-        });
+
+        const processingEvents: Array<[string, string, string]> = [
+          ["file_uploaded", "uploaded", `Uploaded ${file.name}.`],
+          ["file_stored", "stored", `Stored original invoice file ${file.name}.`],
+          ["file_staged_for_processing", "staged_for_processing", "Staged file for OCR processing."],
+          ["ocr_started", "staged_for_processing", "OCR processing started."],
+          ["document_classified", "classified", `Document classified as ${extracted.documentType}.`],
+          [
+            extracted.fallbackReason?.toLowerCase().includes("ocr failed")
+              ? "ocr_failed"
+              : "ocr_completed",
+            extracted.fallbackReason?.toLowerCase().includes("ocr failed")
+              ? "failed"
+              : "ocr_completed",
+            extracted.fallbackReason?.toLowerCase().includes("ocr failed")
+              ? extracted.fallbackReason
+              : `OCR completed with ${extracted.provider}.`,
+          ],
+          ["extraction_completed", "extraction_completed", "Invoice field candidate extraction completed."],
+          ["field_selected", "extraction_completed", `${extracted.candidates.filter((candidate) => candidate.selected).length} field candidates selected.`],
+          ["normalization_completed", "normalization_completed", "Invoice field normalization completed."],
+          ["validation_completed", "validation_completed", "Invoice validation completed."],
+        ];
+        for (const [type, status, message] of processingEvents) {
+          addAudit(data, {
+            invoiceId,
+            actor: type === "file_uploaded" ? "AP" : "System",
+            type,
+            message: `${message} Processing status: ${status}.`,
+          });
+        }
         addAudit(data, {
           invoiceId,
           actor: "System",
           type: purchaseOrder ? "po_matched" : "po_missing",
-          message: purchaseOrder && department?.email
-            ? `Matched ${purchaseOrder.poNumber}; routed to department.`
-            : purchaseOrder
-              ? `Matched ${purchaseOrder.poNumber}, but ${department?.name || "the department"} has no email configured. AP review required.`
-              : "No matching PO found; AP review required.",
+          message: purchaseOrder
+            ? `Matched ${purchaseOrder.poNumber}.`
+            : "No matching PO found; AP review required.",
         });
         addAudit(data, {
           invoiceId,
@@ -995,14 +1355,24 @@ export async function uploadInvoices(formData: FormData) {
               ? `Vendor validated from vendor file: ${vendorValidation.vendor.vendorName} (${vendorValidation.vendor.vendorNumber || "No number"}).`
               : "Vendor could not be validated from the vendor file.",
         });
-        if (duplicateResult.status === "Potential Duplicate") {
+        if (duplicateResult.status === "Potential Duplicate" || fileHashDuplicate) {
           addAudit(data, {
             invoiceId,
             actor: "System",
             type: "duplicate_detected_upload",
-            message: `Potential duplicate invoice detected for vendor ${invoice.vendorNumber || invoice.vendorName || "Unknown"} and invoice number ${invoice.invoiceNumber || "Not set"}.`,
+            message: fileHashDuplicate
+              ? "Potential duplicate invoice detected from exact file hash match."
+              : `Potential duplicate invoice detected for vendor ${invoice.vendorNumber || invoice.vendorName || "Unknown"} and invoice number ${invoice.invoiceNumber || "Not set"}.`,
           });
         }
+        addAudit(data, {
+          invoiceId,
+          actor: "System",
+          type: processing.canAutoRoute ? "invoice_routed" : "invoice_sent_to_ap_review",
+          message: processing.canAutoRoute
+            ? "Invoice routed to department after structured processing validations passed."
+            : `Invoice sent to AP review. Reasons: ${processing.reasonCodes.join(", ") || "review required"}.`,
+        });
       });
 
       const data = await mutateData((current) => current);

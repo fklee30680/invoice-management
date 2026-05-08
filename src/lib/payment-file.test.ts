@@ -51,6 +51,10 @@ function baseData(): AppData {
     vendors: [],
     invoices: [],
     invoiceFiles: [],
+    invoiceDocuments: [],
+    invoiceExtractions: [],
+    invoiceFieldCandidates: [],
+    invoiceValidationResults: [],
     auditEvents: [],
     notificationTemplate: {
       departmentSubject: "",

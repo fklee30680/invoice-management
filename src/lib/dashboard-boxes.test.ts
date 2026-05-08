@@ -76,6 +76,10 @@ function data(): AppData {
       invoice({ id: "invoice-3", status: "Approved/Completed", amount: "400" }),
     ],
     invoiceFiles: [],
+    invoiceDocuments: [],
+    invoiceExtractions: [],
+    invoiceFieldCandidates: [],
+    invoiceValidationResults: [],
     auditEvents: [],
     notificationTemplate: {
       departmentSubject: "",
