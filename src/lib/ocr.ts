@@ -1016,27 +1016,41 @@ export async function extractInvoiceMetadata(
   originalName: string,
   mimeType: string,
 ): Promise<ExtractedInvoiceMetadata> {
+  let azureFailureReason = "";
   try {
     const azure = await extractWithAzure(filePath, mimeType);
     if (azure) return azure;
   } catch (error) {
-    return fromFileName(
-      originalName,
-      error instanceof Error ? `OCR failed: ${error.message}` : "OCR failed.",
-    );
+    azureFailureReason =
+      error instanceof Error
+        ? `Azure OCR failed: ${error.message}`
+        : "Azure OCR failed.";
   }
 
   if (mimeType === "application/pdf" || /\.pdf$/i.test(originalName)) {
     try {
       const file = await readFile(filePath);
       const extracted = extractInvoiceMetadataFromText(extractPdfText(file));
-      if (extracted) return extracted;
-    } catch {
-      // Fall through to the filename fallback.
+      if (extracted) {
+        if (azureFailureReason) {
+          extracted.fallbackReason = `${azureFailureReason} Used embedded PDF text fallback.`;
+          extracted.summary = `${extracted.summary} ${extracted.fallbackReason}`;
+        }
+        return extracted;
+      }
+    } catch (error) {
+      const embeddedFailure =
+        error instanceof Error
+          ? `Embedded PDF text extraction failed: ${error.message}`
+          : "Embedded PDF text extraction failed.";
+      const reason = azureFailureReason
+        ? `${azureFailureReason} ${embeddedFailure}`
+        : embeddedFailure;
+      return fromFileName(originalName, reason);
     }
   }
 
-  return fromFileName(originalName);
+  return fromFileName(originalName, azureFailureReason);
 }
 
 function firstLikelyVendorLine(lines: string[]) {

@@ -339,9 +339,23 @@ export default async function ReviewPage({
                 <div className="mt-1 font-medium">{extraction?.provider || "Not set"}</div>
               </div>
               <div className="bg-white p-3">
+                <div className="text-xs font-semibold uppercase text-[var(--muted)]">Provider Model</div>
+                <div className="mt-1 font-medium">{extraction?.providerModel || "Not set"}</div>
+              </div>
+              <div className="bg-white p-3">
+                <div className="text-xs font-semibold uppercase text-[var(--muted)]">Document Type</div>
+                <div className="mt-1 font-medium">{extraction?.documentType || "Not set"}</div>
+              </div>
+              <div className="bg-white p-3">
                 <div className="text-xs font-semibold uppercase text-[var(--muted)]">Document Confidence</div>
                 <div className="mt-1 font-medium">
                   {extraction ? `${Math.round(extraction.documentConfidence * 100)}%` : "Not set"}
+                </div>
+              </div>
+              <div className="bg-white p-3">
+                <div className="text-xs font-semibold uppercase text-[var(--muted)]">OCR Confidence</div>
+                <div className="mt-1 font-medium">
+                  {extraction ? `${Math.round(extraction.ocrConfidence * 100)}%` : "Not set"}
                 </div>
               </div>
               <div className="bg-white p-3">
@@ -357,6 +371,10 @@ export default async function ReviewPage({
                 <div className="mt-1 truncate font-mono text-xs">
                   {processingDocument?.fileHash || "Not set"}
                 </div>
+              </div>
+              <div className="bg-white p-3">
+                <div className="text-xs font-semibold uppercase text-[var(--muted)]">Extraction Summary</div>
+                <div className="mt-1 text-xs">{extraction?.extractionSummary || "Not set"}</div>
               </div>
             </div>
 

@@ -6,16 +6,29 @@ describe("extractInvoiceMetadataFromText", () => {
   it("extracts and normalizes the sample invoice fields", () => {
     const result = extractInvoiceMetadataFromText(`
       IMPACT 46
+      333 3rd Ave
+      Seattle, WA 12345
+      Phone: 123-456-7890
       INVOICE # 100
       PO 260773
-      DATE 01/31/2026
-      PURCHASED BY Keith Lee
-      SHIP TO City of Lawrenceville
-      QTY DESCRIPTION UNIT PRICE LINE TOTAL
+      DATE: 01/31/2026
+      PURCHASED BY:
+      Keith Lee
+      CFO
+      70 S Clayton St
+      Lawrenceville GA 30046
+      Phone: 111-222-3333
+      SHIP TO:
+      City of Lawrenceville
+      70 S Clayton St
+      Lawrenceville GA 30046
+      COMMENTS OR SPECIAL INSTRUCTIONS:
+      Due upon receipt
+      QUANTITY DESCRIPTION UNIT PRICE TOTAL
       1 TB Cloud service 99.99 99.99
-      SUBTOTAL 99.99
-      SALES TAX 4.99
-      SHIPPING AND HANDLING 0.00
+      Subtotal 99.99
+      Sales tax 4.99
+      Shipping and handling 0.00
       TOTAL DUE 104.98
     `);
 

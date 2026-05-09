@@ -1723,18 +1723,17 @@ export async function uploadInvoices(formData: FormData) {
         );
         addInvoice(data, invoice);
 
+        const extractionFailed =
+          extracted.provider === "filename_fallback" &&
+          extracted.fallbackReason?.toLowerCase().includes("failed");
         const processingEvents: Array<[string, string, string]> = [
           ["ocr_started", "staged_for_processing", "OCR processing started."],
           ["document_classified", "classified", `Document classified as ${extracted.documentType}.`],
           [
-            extracted.fallbackReason?.toLowerCase().includes("ocr failed")
-              ? "ocr_failed"
-              : "ocr_completed",
-            extracted.fallbackReason?.toLowerCase().includes("ocr failed")
-              ? "failed"
-              : "ocr_completed",
-            extracted.fallbackReason?.toLowerCase().includes("ocr failed")
-              ? extracted.fallbackReason
+            extractionFailed ? "ocr_failed" : "ocr_completed",
+            extractionFailed ? "failed" : "ocr_completed",
+            extractionFailed
+              ? extracted.fallbackReason || "OCR failed."
               : `OCR completed with ${extracted.provider}.`,
           ],
           ["extraction_completed", "extraction_completed", "Invoice field candidate extraction completed."],
