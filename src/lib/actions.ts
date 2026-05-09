@@ -256,11 +256,14 @@ function applyDuplicateCheck(
   return result;
 }
 
+type ProcessingValidationMode = "upload" | "route";
+
 function processingValidation(
   input: {
     documentId: string;
     invoiceId: string;
     nowIso: string;
+    mode: ProcessingValidationMode;
     extracted: ExtractedInvoiceMetadata;
     invoice: Invoice;
     purchaseOrder: ReturnType<typeof findPurchaseOrder>;
@@ -273,13 +276,19 @@ function processingValidation(
 ) {
   const validations: Omit<InvoiceValidationResult, "id">[] = [];
   const reasonCodes: string[] = [];
+  let routeBlocking = false;
   const addResult = (
     code: string,
     status: InvoiceValidationResult["status"],
-    severity: InvoiceValidationResult["severity"],
+    routeSeverity: InvoiceValidationResult["severity"],
     message: string,
     fieldName = "",
+    blocksRouting = routeSeverity === "blocking",
   ) => {
+    const severity =
+      input.mode === "upload" && routeSeverity === "blocking"
+        ? "warning"
+        : routeSeverity;
     validations.push({
       invoiceId: input.invoiceId,
       documentId: input.documentId,
@@ -290,7 +299,8 @@ function processingValidation(
       severity,
       createdAt: input.nowIso,
     });
-    if (severity === "blocking" && !reasonCodes.includes(code)) {
+    if (blocksRouting) routeBlocking = true;
+    if (blocksRouting && !reasonCodes.includes(code)) {
       reasonCodes.push(code);
     }
   };
@@ -312,6 +322,14 @@ function processingValidation(
       "warning",
       "blocking",
       "OCR confidence is below the auto-route threshold.",
+    );
+  }
+  if (input.extracted.provider === "filename_fallback") {
+    addResult(
+      "filename_fallback",
+      "warning",
+      "blocking",
+      "Filename fallback was used. AP review is required before routing.",
     );
   }
   if (input.extracted.fallbackReason?.toLowerCase().includes("ocr failed")) {
@@ -448,13 +466,12 @@ function processingValidation(
       ? selectedCandidateConfidence.reduce((sum, item) => sum + item, 0) /
         selectedCandidateConfidence.length
       : 0;
-  const blocking = validations.some((result) => result.severity === "blocking");
   return {
     validations,
     reasonCodes,
     requiredConfidencePassed,
     invoiceConfidence: Math.round(confidence * 100) / 100,
-    canAutoRoute: !blocking && requiredConfidencePassed,
+    canAutoRoute: !routeBlocking && requiredConfidencePassed,
   };
 }
 
@@ -1369,8 +1386,6 @@ export async function uploadInvoices(formData: FormData) {
       const fileHash = createHash("sha256").update(bytes).digest("hex");
       const now = new Date().toISOString();
       const filePath = await stageFileForProcessing(bytes, storedName);
-
-      const extracted = await extractInvoiceMetadata(filePath, file.name, file.type);
       const invoiceFile = await saveInvoiceFile({
         id: fileId,
         invoiceId,
@@ -1384,20 +1399,8 @@ export async function uploadInvoices(formData: FormData) {
       });
 
       await mutateData((data) => {
-        const purchaseOrder = findPurchaseOrder(data, extracted.poNumber);
-        const vendorName = extracted.vendorName || purchaseOrder?.vendorName || "";
-        const vendorValidation = validateVendorAgainstFile(data, vendorName, {
-          vendorNumber: extracted.vendorNumber,
-        });
-        const departmentId = purchaseOrder?.departmentId || "";
-        const department = data.departments.find((item) => item.id === departmentId);
-        const fileHashDuplicate = data.invoiceFiles.some(
-          (item) => item.id !== fileId && item.fileHash && item.fileHash === fileHash,
-        );
-
         addInvoiceFile(data, invoiceFile);
-
-        const document: InvoiceDocument = {
+        data.invoiceDocuments.push({
           id: documentId,
           invoiceId,
           fileId,
@@ -1410,10 +1413,65 @@ export async function uploadInvoices(formData: FormData) {
           blobPathname: invoiceFile.blobPathname || "",
           uploadedBy: user.email || user.name,
           uploadedAt: now,
-          processingStatus: "validation_completed",
+          processingStatus: "staged_for_processing",
           failureReason: "",
-        };
-        data.invoiceDocuments.push(document);
+        });
+        addAudit(data, {
+          invoiceId,
+          actor: "AP",
+          type: "file_uploaded",
+          message: `Uploaded ${file.name}. Processing status: uploaded.`,
+        });
+        addAudit(data, {
+          invoiceId,
+          actor: "System",
+          type: "file_stored",
+          message: `Stored original invoice file ${file.name}. Processing status: stored.`,
+        });
+        addAudit(data, {
+          invoiceId,
+          actor: "System",
+          type: "file_staged_for_processing",
+          message: "Staged file for OCR processing. Processing status: staged_for_processing.",
+        });
+      });
+
+      const extracted = await extractInvoiceMetadata(filePath, file.name, file.type);
+
+      await mutateData((data) => {
+        const purchaseOrder = findPurchaseOrder(data, extracted.poNumber);
+        const vendorName = extracted.vendorName || purchaseOrder?.vendorName || "";
+        const vendorValidation = validateVendorAgainstFile(data, vendorName, {
+          vendorNumber: extracted.vendorNumber,
+        });
+        const departmentId = purchaseOrder?.departmentId || "";
+        const department = data.departments.find((item) => item.id === departmentId);
+        const fileHashDuplicate = data.invoiceFiles.some(
+          (item) => item.id !== fileId && item.fileHash && item.fileHash === fileHash,
+        );
+
+        const document =
+          data.invoiceDocuments.find((item) => item.id === documentId) ||
+          ({
+            id: documentId,
+            invoiceId,
+            fileId,
+            originalFilename: file.name,
+            fileHash,
+            mimeType: invoiceFile.mimeType,
+            sizeBytes: invoiceFile.size,
+            storageProvider: invoiceFile.storageProvider || "local",
+            blobUrl: invoiceFile.blobUrl || "",
+            blobPathname: invoiceFile.blobPathname || "",
+            uploadedBy: user.email || user.name,
+            uploadedAt: now,
+            processingStatus: "staged_for_processing",
+            failureReason: "",
+          } satisfies InvoiceDocument);
+        if (!data.invoiceDocuments.some((item) => item.id === documentId)) {
+          data.invoiceDocuments.push(document);
+        }
+        document.failureReason = extracted.fallbackReason || "";
 
         data.invoiceExtractions.push({
           id: extractionId,
@@ -1477,6 +1535,26 @@ export async function uploadInvoices(formData: FormData) {
         } else {
           applyVendorValidationWarning(invoice, vendorValidation, "OCR", now);
         }
+        invoice.poValidationCheckedAt = now;
+        if (!invoice.poNumber) {
+          invoice.poValidationStatus = "Not Checked";
+          invoice.poValidationMessage = "No PO number was extracted.";
+        } else if (!purchaseOrder) {
+          invoice.poValidationStatus = "PO Not Found";
+          invoice.poValidationMessage = "PO number was not found in the PO list.";
+        } else {
+          invoice.poValidationPurchaseOrderId = purchaseOrder.id;
+          invoice.poVendorName = purchaseOrder.vendorName;
+          const vendorMismatch =
+            purchaseOrder.vendorName &&
+            invoice.vendorName &&
+            normalizeVendorName(purchaseOrder.vendorName) !==
+              normalizeVendorName(invoice.vendorName);
+          invoice.poValidationStatus = vendorMismatch ? "Vendor Mismatch" : "Matched";
+          invoice.poValidationMessage = vendorMismatch
+            ? "PO vendor does not match the invoice vendor."
+            : "PO number was found in the PO list.";
+        }
 
         const duplicateResult = applyDuplicateCheck(data, invoice, now);
         if (fileHashDuplicate) {
@@ -1492,6 +1570,7 @@ export async function uploadInvoices(formData: FormData) {
           documentId,
           invoiceId,
           nowIso: now,
+          mode: "upload",
           extracted,
           invoice,
           purchaseOrder,
@@ -1523,6 +1602,10 @@ export async function uploadInvoices(formData: FormData) {
           document.processingStatus = "ready_for_ap_review";
           appendAttentionReason(invoice, "Invoice processing review required.");
         }
+        const storedFile = data.invoiceFiles.find((item) => item.id === fileId);
+        if (storedFile) {
+          storedFile.processingStatus = invoice.processingStatus;
+        }
 
         data.invoiceFieldCandidates.push(
           ...extracted.candidates.map((candidate) => ({
@@ -1552,9 +1635,6 @@ export async function uploadInvoices(formData: FormData) {
         addInvoice(data, invoice);
 
         const processingEvents: Array<[string, string, string]> = [
-          ["file_uploaded", "uploaded", `Uploaded ${file.name}.`],
-          ["file_stored", "stored", `Stored original invoice file ${file.name}.`],
-          ["file_staged_for_processing", "staged_for_processing", "Staged file for OCR processing."],
           ["ocr_started", "staged_for_processing", "OCR processing started."],
           ["document_classified", "classified", `Document classified as ${extracted.documentType}.`],
           [
@@ -1757,6 +1837,47 @@ function applyApInvoiceMetadataUpdate(
       message: "Routing blocked because potential duplicate invoice has not been reviewed.",
     });
     return { shouldNotify: false, blocked: "duplicate-review-required" };
+  }
+  if (invoice.departmentId) {
+    const department = data.departments.find((item) => item.id === invoice.departmentId);
+    if (!department?.email) {
+      invoice.departmentId = previousDepartmentId;
+      invoice.updatedAt = nowIso;
+      invoice.requiresApAttention = true;
+      invoice.apAttentionReason = "Department routing email is missing.";
+      addAudit(data, {
+        invoiceId: invoice.id,
+        actor: "AP",
+        type: "routing_blocked_department_email",
+        message: "Routing blocked because the selected department does not have an email configured.",
+      });
+      return { shouldNotify: false, blocked: "department-email-required" };
+    }
+
+    const missingFields = [
+      invoiceFieldEnabled(data, "invoiceNumber") && !invoice.invoiceNumber.trim()
+        ? "invoice number"
+        : "",
+      invoiceFieldEnabled(data, "invoiceDate") && !invoice.invoiceDate.trim()
+        ? "invoice date"
+        : "",
+      invoiceFieldEnabled(data, "amount") && amountCents(invoice.amount) <= 0
+        ? "valid total due"
+        : "",
+    ].filter(Boolean);
+    if (missingFields.length > 0) {
+      invoice.departmentId = previousDepartmentId;
+      invoice.updatedAt = nowIso;
+      invoice.requiresApAttention = true;
+      invoice.apAttentionReason = `Complete required invoice fields before routing: ${missingFields.join(", ")}.`;
+      addAudit(data, {
+        invoiceId: invoice.id,
+        actor: "AP",
+        type: "routing_blocked_required_fields",
+        message: `Routing blocked because required invoice fields are missing or invalid: ${missingFields.join(", ")}.`,
+      });
+      return { shouldNotify: false, blocked: "required-fields" };
+    }
   }
 
   const routedStatus = statusLabelForRole(data, "routed");
