@@ -76,7 +76,6 @@ import {
 import { normalizePoNumber, normalizeVendorName } from "./utils";
 import {
   STATUS_TONES,
-  defaultStatuses,
   isProtectedStatus,
   statusLabelForRole,
   statusRoles,
@@ -92,7 +91,6 @@ import type {
   InvoiceValidationResult,
   MenuConfigItem,
   MenuRole,
-  StatusSystemRole,
   StatusTone,
 } from "./types";
 
@@ -149,11 +147,6 @@ function numberValue(formData: FormData, key: string, fallback = 0) {
 function toneValue(formData: FormData) {
   const selected = value(formData, "tone") as StatusTone;
   return STATUS_TONES.includes(selected) ? selected : "slate";
-}
-
-function defaultStatusForRole(role: StatusSystemRole | "") {
-  if (!role) return undefined;
-  return defaultStatuses().find((status) => statusRoles(status).includes(role));
 }
 
 function decisionWorkflowActionValue(formData: FormData) {
@@ -2660,23 +2653,9 @@ export async function updateInvoiceStatus(formData: FormData) {
       status.includeInPaymentFile = false;
       status.systemRole = "processedForPayment";
       status.systemRoles = undefined;
-    } else if (protectedStatus) {
-      const defaultStatus = defaultStatusForRole(statusRoles(status)[0] || "");
-      status.active = true;
-      status.tone = toneValue(formData);
-      status.showInFilter = defaultStatus?.showInFilter ?? status.showInFilter;
-      status.showInApWorkQueue =
-        defaultStatus?.showInApWorkQueue ?? status.showInApWorkQueue;
-      status.showInDepartmentWork =
-        defaultStatus?.showInDepartmentWork ?? status.showInDepartmentWork;
-      status.showInCompleted = defaultStatus?.showInCompleted ?? status.showInCompleted;
-      status.includeInEscalation =
-        defaultStatus?.includeInEscalation ?? status.includeInEscalation;
-      status.includeInPaymentFile =
-        defaultStatus?.includeInPaymentFile ?? status.includeInPaymentFile;
     } else {
       status.tone = toneValue(formData);
-      status.active = status.active !== false;
+      status.active = protectedStatus ? true : status.active !== false;
       status.showInFilter = checkbox(formData, "showInFilter");
       status.showInApWorkQueue = checkbox(formData, "showInApWorkQueue");
       status.showInDepartmentWork = checkbox(formData, "showInDepartmentWork");

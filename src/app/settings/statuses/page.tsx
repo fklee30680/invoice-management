@@ -8,7 +8,6 @@ import {
   STATUS_TONES,
   STATUS_TONE_CLASSES,
   isProtectedStatus,
-  statusRoleLabel,
   statusRoles,
 } from "@/lib/status-config";
 import { readData } from "@/lib/store";
@@ -56,8 +55,8 @@ export default async function StatusSettingsPage() {
       <div>
         <h2 className="text-xl font-semibold">Statuses</h2>
         <p className="mt-1 max-w-3xl text-sm text-[var(--muted)]">
-          Configure invoice status names, badge colors, filter choices, and which
-          records show in the AP, department, and completed invoice areas.
+          Configure invoice status names, badge colors, filter choices, and where
+          invoices in each status should appear.
         </p>
         <p className="mt-2 max-w-3xl text-sm text-[var(--muted)]">
           Statuses are made inactive instead of deleted so historical invoices
@@ -115,12 +114,11 @@ export default async function StatusSettingsPage() {
       <section className="overflow-x-auto border border-[var(--line)] bg-[var(--panel)]">
         <table className="w-full min-w-[1120px] table-fixed border-collapse text-left text-sm">
           <colgroup>
-            <col className="w-[22%]" />
+            <col className="w-[24%]" />
             <col className="w-[10%]" />
             <col className="w-[16%]" />
-            <col className="w-[28%]" />
-            <col className="w-[8%]" />
-            <col className="w-[16%]" />
+            <col className="w-[32%]" />
+            <col className="w-[18%]" />
           </colgroup>
           <thead className="bg-[var(--panel-strong)] text-xs uppercase text-[var(--muted)]">
             <tr>
@@ -130,7 +128,6 @@ export default async function StatusSettingsPage() {
               <th className="border-b border-[var(--line)] px-3 py-3">
                 Workflow Options
               </th>
-              <th className="border-b border-[var(--line)] px-3 py-3">System Role</th>
               <th className="border-b border-[var(--line)] px-3 py-3">Actions</th>
             </tr>
           </thead>
@@ -140,13 +137,12 @@ export default async function StatusSettingsPage() {
               const deactivateFormId = `deactivate-${status.id}`;
               const reactivateFormId = `reactivate-${status.id}`;
               const count = usageCount(status.label, data);
-              const roleLabel = statusRoleLabel(status);
               const protectedProcessedForPayment = statusRoles(status).includes(
                 "processedForPayment",
               );
               const protectedStatus = isProtectedStatus(status);
               const inactive = status.active === false;
-              const workflowDisabled = protectedStatus || inactive;
+              const workflowDisabled = protectedProcessedForPayment || inactive;
 
               return (
                 <tr
@@ -164,20 +160,15 @@ export default async function StatusSettingsPage() {
                         defaultValue={status.label}
                         required
                       />
-                      {roleLabel ? (
-                        <div className="mt-1 break-words text-xs text-[var(--muted)]">
-                          Workflow: {roleLabel}
-                        </div>
-                      ) : null}
                       {protectedProcessedForPayment ? (
                         <div className="mt-1 text-xs text-[var(--muted)]">
-                          This system status is used when AP processes invoices for
-                          payment. Only the name can be changed.
+                          This status is used when AP processes invoices for payment.
+                          Only the name can be changed.
                         </div>
                       ) : protectedStatus ? (
                         <div className="mt-1 text-xs text-[var(--muted)]">
-                          This system status is required by workflow automation and
-                          cannot be deactivated.
+                          This status is required by the workflow and cannot be
+                          removed, but its display and list options can be changed.
                         </div>
                       ) : inactive ? (
                         <div className="mt-1 text-xs text-[var(--muted)]">
@@ -268,9 +259,6 @@ export default async function StatusSettingsPage() {
                     </div>
                   </td>
                   <td className="border-b border-[var(--line)] px-3 py-3">
-                    {roleLabel || "Custom"}
-                  </td>
-                  <td className="border-b border-[var(--line)] px-3 py-3">
                     <div className="flex flex-wrap gap-2">
                       <button
                         className="focus-ring border border-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-[var(--accent)] hover:bg-teal-50"
@@ -299,7 +287,7 @@ export default async function StatusSettingsPage() {
                     </div>
                     {protectedStatus ? (
                       <div className="mt-2 text-xs text-[var(--muted)]">
-                        Protected system status.
+                        Required status.
                       </div>
                     ) : inactive ? (
                       <div className="mt-2 text-xs text-[var(--muted)]">
