@@ -56,8 +56,12 @@ export default async function ReviewPage({
     ? data.invoiceExtractions.find((item) => item.id === invoice.extractionId)
     : undefined;
   const fieldCandidates = data.invoiceFieldCandidates
-    .filter((candidate) => candidate.invoiceId === invoice.id && candidate.selected)
-    .sort((left, right) => left.fieldName.localeCompare(right.fieldName));
+    .filter((candidate) => candidate.invoiceId === invoice.id)
+    .sort((left, right) => {
+      const fieldCompare = left.fieldName.localeCompare(right.fieldName);
+      if (fieldCompare !== 0) return fieldCompare;
+      return Number(right.selected) - Number(left.selected);
+    });
   const validationResults = data.invoiceValidationResults
     .filter((result) => result.invoiceId === invoice.id)
     .sort((left, right) => {
@@ -403,7 +407,10 @@ export default async function ReviewPage({
                       <th className="px-3 py-2">Extracted</th>
                       <th className="px-3 py-2">Normalized</th>
                       <th className="px-3 py-2">Confidence</th>
+                      <th className="px-3 py-2">Selected</th>
                       <th className="px-3 py-2">Source</th>
+                      <th className="px-3 py-2">Validation</th>
+                      <th className="px-3 py-2">Reason</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--line)] bg-white">
@@ -413,12 +420,28 @@ export default async function ReviewPage({
                         <td className="px-3 py-2">{candidate.rawValue || "Not extracted"}</td>
                         <td className="px-3 py-2">{candidate.normalizedValue || "Not set"}</td>
                         <td className="px-3 py-2">{Math.round(candidate.confidence * 100)}%</td>
+                        <td className="px-3 py-2">{candidate.selected ? "Yes" : "No"}</td>
                         <td className="px-3 py-2">{candidate.nearbyLabel || candidate.extractionSource}</td>
+                        <td className="px-3 py-2">{candidate.validationStatus}</td>
+                        <td className="px-3 py-2">
+                          {candidate.validationMessage ||
+                            (candidate.scoringReasons || []).join(" ") ||
+                            "No scoring reason recorded."}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+            ) : null}
+
+            {extraction?.rawText ? (
+              <details className="mt-4 border border-[var(--line)] bg-white p-3 text-sm">
+                <summary className="cursor-pointer font-semibold">Raw OCR Text</summary>
+                <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-words text-xs text-[var(--muted)]">
+                  {extraction.rawText}
+                </pre>
+              </details>
             ) : null}
           </section>
         ) : null}

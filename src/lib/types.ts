@@ -458,6 +458,7 @@ export type InvoiceFieldCandidate = {
   selected: boolean;
   validationStatus: ValidationStatus;
   validationMessage?: string;
+  scoringReasons?: string[];
 };
 
 export type InvoiceValidationResult = {

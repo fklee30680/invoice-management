@@ -58,6 +58,7 @@ import {
   findVendorByNumber,
   invoiceVendorValidated,
   validateVendorAgainstFile,
+  type VendorValidationResult,
 } from "./vendor-validation";
 import {
   addAudit,
@@ -451,6 +452,25 @@ function processingValidation(
     );
   }
 
+  const selectedCandidateByField = new Map(
+    input.extracted.candidates
+      .filter((candidate) => candidate.selected)
+      .map((candidate) => [candidate.fieldName, candidate]),
+  );
+  const lowConfidenceReasonCodes: Array<[string, string, string]> = [
+    ["vendor_name", "low_vendor_confidence", "Vendor candidate confidence is below the auto-route threshold."],
+    ["invoice_number", "low_invoice_number_confidence", "Invoice number candidate confidence is below the auto-route threshold."],
+    ["po_number", "low_po_number_confidence", "PO number candidate confidence is below the auto-route threshold."],
+    ["invoice_date", "low_invoice_date_confidence", "Invoice date candidate confidence is below the auto-route threshold."],
+    ["total_due", "low_total_due_confidence", "Total due candidate confidence is below the auto-route threshold."],
+  ];
+  for (const [fieldName, code, message] of lowConfidenceReasonCodes) {
+    const candidate = selectedCandidateByField.get(fieldName);
+    if (candidate && candidate.confidence < 0.9) {
+      addResult(code, "warning", "blocking", message, fieldName);
+    }
+  }
+
   const selectedCandidateConfidence = input.extracted.candidates
     .filter((candidate) => candidate.selected)
     .map((candidate) => candidate.confidence);
@@ -473,6 +493,59 @@ function processingValidation(
     invoiceConfidence: Math.round(confidence * 100) / 100,
     canAutoRoute: !routeBlocking && requiredConfidencePassed,
   };
+}
+
+function applyMasterDataCandidateScoring(
+  extracted: ExtractedInvoiceMetadata,
+  purchaseOrder: ReturnType<typeof findPurchaseOrder>,
+  vendorValidation: VendorValidationResult,
+) {
+  let changed = false;
+  const addReason = (candidate: ExtractedInvoiceMetadata["candidates"][number], reason: string) => {
+    candidate.scoringReasons = [...(candidate.scoringReasons || []), reason];
+  };
+  for (const candidate of extracted.candidates) {
+    if (!candidate.selected || !candidate.normalizedValue) continue;
+    if (
+      candidate.fieldName === "po_number" &&
+      purchaseOrder &&
+      normalizePoNumber(candidate.normalizedValue) === purchaseOrder.normalizedPoNumber
+    ) {
+      candidate.confidence = Math.min(1, Math.round((candidate.confidence + 0.1) * 100) / 100);
+      addReason(candidate, "Candidate was boosted because it matched the uploaded PO list.");
+      changed = true;
+    }
+    if (
+      candidate.fieldName === "vendor_name" &&
+      vendorValidation.found &&
+      vendorValidation.vendor &&
+      normalizeVendorName(candidate.normalizedValue) === vendorValidation.vendor.normalizedVendorName
+    ) {
+      candidate.confidence = Math.min(1, Math.round((candidate.confidence + 0.1) * 100) / 100);
+      addReason(candidate, "Candidate was boosted because it matched the vendor file.");
+      changed = true;
+    }
+    if (
+      candidate.fieldName === "vendor_name" &&
+      purchaseOrder?.vendorName &&
+      normalizeVendorName(candidate.normalizedValue) === normalizeVendorName(purchaseOrder.vendorName)
+    ) {
+      candidate.confidence = Math.min(1, Math.round((candidate.confidence + 0.05) * 100) / 100);
+      addReason(candidate, "Candidate was boosted because it matched the PO vendor.");
+      changed = true;
+    }
+  }
+  if (changed) {
+    const selected = extracted.candidates.filter((candidate) => candidate.selected);
+    extracted.extractionConfidence =
+      selected.length > 0
+        ? Math.round(
+            (selected.reduce((sum, candidate) => sum + candidate.confidence, 0) /
+              selected.length) *
+              100,
+          ) / 100
+        : extracted.extractionConfidence;
+  }
 }
 
 function validateAmountMath(extracted: ExtractedInvoiceMetadata) {
@@ -1444,6 +1517,7 @@ export async function uploadInvoices(formData: FormData) {
         const vendorValidation = validateVendorAgainstFile(data, vendorName, {
           vendorNumber: extracted.vendorNumber,
         });
+        applyMasterDataCandidateScoring(extracted, purchaseOrder, vendorValidation);
         const departmentId = purchaseOrder?.departmentId || "";
         const department = data.departments.find((item) => item.id === departmentId);
         const fileHashDuplicate = data.invoiceFiles.some(
@@ -1622,8 +1696,9 @@ export async function uploadInvoices(formData: FormData) {
             extractionSource: candidate.extractionSource,
             confidence: candidate.confidence,
             selected: candidate.selected,
-            validationStatus: candidate.normalizedValue ? "passed" : candidate.validationStatus,
+            validationStatus: candidate.validationStatus,
             validationMessage: candidate.validationMessage || "",
+            scoringReasons: candidate.scoringReasons || [],
           })),
         );
         data.invoiceValidationResults.push(

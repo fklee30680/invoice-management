@@ -527,6 +527,7 @@ function normalizeData(data: AppData): AppData {
       selected: candidate.selected === true,
       validationStatus: candidate.validationStatus || "not_checked",
       validationMessage: candidate.validationMessage || "",
+      scoringReasons: candidate.scoringReasons || [],
     })),
     invoiceValidationResults: (data.invoiceValidationResults || []).map((result) => ({
       ...result,
