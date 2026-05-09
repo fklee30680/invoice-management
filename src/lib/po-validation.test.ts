@@ -5,6 +5,7 @@ import { normalizeInvoiceFields } from "./invoice-fields";
 import { defaultMenuSettings } from "./menu-registry";
 import { defaultPoImportSettings } from "./po-parser";
 import { defaultVendorImportSettings } from "./vendor-parser";
+import { defaultDepartmentImportSettings } from "./department-parser";
 import {
   defaultPoValidationSettings,
   validateInvoicePoNumber,
@@ -80,6 +81,7 @@ function baseData(): AppData {
     poValidationSettings: { ...defaultPoValidationSettings(), enabled: true },
     poImportSettings: defaultPoImportSettings(),
     vendorImportSettings: defaultVendorImportSettings(),
+    departmentImportSettings: defaultDepartmentImportSettings(),
     departmentDecisions: defaultDepartmentDecisions(),
     escalationContacts: [],
   };

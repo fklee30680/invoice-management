@@ -11,6 +11,7 @@ import {
 } from "./payment-file";
 import { defaultPoImportSettings } from "./po-parser";
 import { defaultVendorImportSettings } from "./vendor-parser";
+import { defaultDepartmentImportSettings } from "./department-parser";
 import { defaultPoValidationSettings } from "./po-validation";
 import { defaultStatuses, statusLabelForRole } from "./status-config";
 import type { AppData, Invoice } from "./types";
@@ -100,6 +101,7 @@ function baseData(): AppData {
     poValidationSettings: defaultPoValidationSettings(),
     poImportSettings: defaultPoImportSettings(),
     vendorImportSettings: defaultVendorImportSettings(),
+    departmentImportSettings: defaultDepartmentImportSettings(),
     departmentDecisions: defaultDepartmentDecisions(),
     escalationContacts: [],
   };

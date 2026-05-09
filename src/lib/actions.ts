@@ -52,6 +52,7 @@ import {
 import { parsePoUpload } from "./po-parser";
 import { canAccessInvoice, requireApUser, requireUser } from "./session";
 import { parseVendorUpload } from "./vendor-parser";
+import { parseDepartmentUpload } from "./department-parser";
 import {
   applyVendorToInvoice,
   applyVendorValidationWarning,
@@ -140,6 +141,15 @@ function vendorListRedirect(params: Record<string, string | number>) {
   redirect(`/uploads/vendors?${query.toString()}`);
 }
 
+function departmentSettingsRedirect(params: Record<string, string | number>) {
+  const query = new URLSearchParams();
+  for (const [key, rawValue] of Object.entries(params)) {
+    const item = String(rawValue);
+    if (item) query.set(key, item);
+  }
+  redirect(`/settings/departments?${query.toString()}`);
+}
+
 function numberValue(formData: FormData, key: string, fallback = 0) {
   const parsed = Number(value(formData, key));
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -202,6 +212,10 @@ function validEmail(value: string) {
 
 function normalizedVendorNumber(value: string) {
   return value.trim().toLowerCase();
+}
+
+function normalizedDepartmentName(value: string) {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
 function setInvoiceStatus(invoice: Invoice, status: string, now = new Date()) {
@@ -2165,6 +2179,7 @@ export async function updateAndRouteInvoice(formData: FormData) {
 }
 
 export async function addDepartment(formData: FormData) {
+  await requireApUser();
   const name = value(formData, "name");
   const email = value(formData, "email").toLowerCase();
   if (!name || !email) return;
@@ -2187,6 +2202,7 @@ export async function addDepartment(formData: FormData) {
 }
 
 export async function updateDepartment(formData: FormData) {
+  await requireApUser();
   const departmentId = value(formData, "departmentId");
   const name = value(formData, "name");
   const email = value(formData, "email").toLowerCase();
@@ -2210,6 +2226,158 @@ export async function updateDepartment(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/settings");
+}
+
+export async function uploadDepartmentEmails(formData: FormData) {
+  await requireApUser();
+  const file = formData.get("departmentFile");
+  if (!(file instanceof File) || file.size === 0) {
+    departmentSettingsRedirect({
+      message: "Select a department file to import.",
+      messageType: "error",
+    });
+  }
+  const departmentFile = file as File;
+
+  const settings = {
+    headerRow: Math.max(Number(value(formData, "headerRow")) || 1, 1),
+    departmentNameColumn: value(formData, "departmentNameColumn") || "Department",
+    departmentEmailColumn: value(formData, "departmentEmailColumn"),
+    departmentHeadNameColumn: value(formData, "departmentHeadNameColumn"),
+    departmentHeadEmailColumn: value(formData, "departmentHeadEmailColumn"),
+    escalationNameColumn: value(formData, "escalationNameColumn"),
+    escalationEmailColumn: value(formData, "escalationEmailColumn"),
+    updateExisting: checkbox(formData, "updateExisting"),
+    fillMissingData: checkbox(formData, "fillMissingData"),
+  };
+  const result = await parseDepartmentUpload(departmentFile, settings);
+  let imported = 0;
+  let updated = 0;
+  let filled = 0;
+  let skipped = 0;
+  const warnings = [...result.warnings];
+
+  await mutateData((data) => {
+    data.departmentImportSettings = settings;
+
+    if (result.errors.length > 0) {
+      addAudit(data, {
+        actor: "AP",
+        type: "department_import_failed",
+        message: `Department import from ${departmentFile.name} failed: ${result.errors.join(" ")}`,
+      });
+      return;
+    }
+
+    for (const row of result.rows) {
+      const existing = data.departments.find(
+        (department) =>
+          normalizedDepartmentName(department.name) ===
+          normalizedDepartmentName(row.departmentName),
+      );
+
+      if (existing) {
+        let changed = false;
+        let rowFilled = false;
+        let rowUpdated = false;
+        const applyField = (
+          currentValue: string | undefined,
+          incomingValue: string,
+          setter: (value: string) => void,
+        ) => {
+          const nextValue = incomingValue.trim();
+          if (!nextValue) return;
+          const current = (currentValue || "").trim();
+          if (settings.updateExisting) {
+            if (current !== nextValue) {
+              setter(nextValue);
+              changed = true;
+              if (current) rowUpdated = true;
+              else rowFilled = true;
+            }
+            return;
+          }
+          if (settings.fillMissingData && !current) {
+            setter(nextValue);
+            changed = true;
+            rowFilled = true;
+          }
+        };
+
+        applyField(existing.name, row.departmentName, (next) => {
+          existing.name = next;
+        });
+        applyField(existing.email, row.departmentEmail, (next) => {
+          existing.email = next.toLowerCase();
+        });
+        applyField(existing.departmentHeadName, row.departmentHeadName, (next) => {
+          existing.departmentHeadName = next;
+        });
+        applyField(existing.departmentHeadEmail, row.departmentHeadEmail, (next) => {
+          existing.departmentHeadEmail = next.toLowerCase();
+        });
+        applyField(existing.escalationName, row.escalationName, (next) => {
+          existing.escalationName = next;
+        });
+        applyField(existing.escalationEmail, row.escalationEmail, (next) => {
+          existing.escalationEmail = next.toLowerCase();
+        });
+
+        if (changed) {
+          if (rowUpdated) updated += 1;
+          if (rowFilled) filled += 1;
+        } else {
+          skipped += 1;
+          if (!settings.updateExisting && !settings.fillMissingData) {
+            warnings.push(
+              `Row ${row.rowNumber}: Department ${row.departmentName} already exists and was skipped.`,
+            );
+          }
+        }
+      } else {
+        data.departments.push({
+          id: createId("department"),
+          name: row.departmentName.trim(),
+          email: row.departmentEmail.trim().toLowerCase(),
+          departmentHeadName: row.departmentHeadName.trim(),
+          departmentHeadEmail: row.departmentHeadEmail.trim().toLowerCase(),
+          escalationName: row.escalationName.trim(),
+          escalationEmail: row.escalationEmail.trim().toLowerCase(),
+        });
+        imported += 1;
+      }
+    }
+
+    addAudit(data, {
+      actor: "AP",
+      type: "department_import",
+      message: `Imported ${imported} departments. Updated ${updated}. Filled missing data on ${filled}. Skipped ${skipped}. Warnings: ${warnings.length}.`,
+    });
+    if (warnings.length > 0) {
+      addAudit(data, {
+        actor: "System",
+        type: "department_import_warnings",
+        message: warnings.slice(0, 20).join(" "),
+      });
+    }
+  });
+
+  revalidatePath("/");
+  revalidatePath("/settings");
+  revalidatePath("/settings/departments");
+  const params = new URLSearchParams({
+    imported: String(imported),
+    updated: String(updated),
+    filled: String(filled),
+    skipped: String(skipped),
+    warnings: String(warnings.length),
+    errors: String(result.errors.length),
+  });
+  if (result.errors.length > 0) {
+    params.set("message", result.errors.join(" "));
+    params.set("messageType", "error");
+  }
+  redirect(`/settings/departments?${params.toString()}`);
 }
 
 export async function addEscalationContact(formData: FormData) {
@@ -3470,8 +3638,15 @@ export async function removeBrandingLogo() {
 }
 
 export async function deleteDepartment(formData: FormData) {
+  await requireApUser();
   const departmentId = value(formData, "departmentId");
   if (!departmentId) return;
+  if (value(formData, "confirmDelete") !== "yes") {
+    departmentSettingsRedirect({
+      message: "Department delete confirmation was missing.",
+      messageType: "error",
+    });
+  }
 
   await mutateData((data) => {
     const inUse =

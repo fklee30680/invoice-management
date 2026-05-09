@@ -7,6 +7,7 @@ import type {
   BrandingSettings,
   DashboardBox,
   Department,
+  DepartmentImportSettings,
   EscalationSchedulerSettings,
   Invoice,
   InvoiceFieldConfig,
@@ -48,6 +49,10 @@ import {
   defaultVendorImportSettings,
   normalizeVendorImportSettings,
 } from "./vendor-parser";
+import {
+  defaultDepartmentImportSettings,
+  normalizeDepartmentImportSettings,
+} from "./department-parser";
 import {
   normalizePoValidationSettings,
   normalizePoValidationStatus,
@@ -575,6 +580,10 @@ function normalizeData(data: AppData): AppData {
       (data as AppData & { vendorImportSettings?: VendorImportSettings })
         .vendorImportSettings,
     ),
+    departmentImportSettings: normalizeDepartmentImportSettings(
+      (data as AppData & { departmentImportSettings?: DepartmentImportSettings })
+        .departmentImportSettings,
+    ),
     departmentDecisions: normalizeDepartmentDecisions(data.departmentDecisions),
     escalationSchedules,
     escalationTemplates: (data.escalationTemplates || [])
@@ -896,6 +905,7 @@ function seedData(): AppData {
     poValidationSettings: normalizePoValidationSettings(undefined),
     poImportSettings: defaultPoImportSettings(),
     vendorImportSettings: defaultVendorImportSettings(),
+    departmentImportSettings: defaultDepartmentImportSettings(),
     departmentDecisions: defaultDepartmentDecisions(),
     escalationContacts: defaultEscalationContacts(),
   };

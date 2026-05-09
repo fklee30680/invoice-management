@@ -83,6 +83,18 @@ export type VendorImportSettings = {
   fillMissingData: boolean;
 };
 
+export type DepartmentImportSettings = {
+  headerRow: number;
+  departmentNameColumn: string;
+  departmentEmailColumn: string;
+  departmentHeadNameColumn: string;
+  departmentHeadEmailColumn: string;
+  escalationNameColumn: string;
+  escalationEmailColumn: string;
+  updateExisting: boolean;
+  fillMissingData: boolean;
+};
+
 export type DashboardBoxMetricType = "count" | "dollars" | "countAndDollars";
 
 export type DashboardBoxLinkedView =
@@ -602,6 +614,7 @@ export type AppData = {
   poValidationSettings: PoValidationSettings;
   poImportSettings: PoImportSettings;
   vendorImportSettings: VendorImportSettings;
+  departmentImportSettings: DepartmentImportSettings;
   departmentDecisions: DepartmentDecisionDefinition[];
   escalationContacts: EscalationContact[];
 };
