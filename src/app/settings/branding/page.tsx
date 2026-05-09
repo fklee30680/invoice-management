@@ -3,6 +3,7 @@ import {
   updateBrandingSettings,
   uploadBrandingLogo,
 } from "@/lib/actions";
+import { BrandingColorEditor } from "@/components/branding-color-editor";
 import Image from "next/image";
 import { readData } from "@/lib/store";
 
@@ -31,36 +32,6 @@ const fontOptions = [
     value: "Georgia, 'Times New Roman', serif",
   },
 ];
-
-function ColorField({
-  label,
-  name,
-  value,
-}: {
-  label: string;
-  name: string;
-  value: string;
-}) {
-  return (
-    <label className="text-xs font-semibold uppercase text-[var(--muted)]">
-      {label}
-      <div className="mt-1 grid grid-cols-[48px_1fr] gap-2">
-        <input
-          className="focus-ring h-10 w-12 border border-[var(--line)] bg-white p-1"
-          name={name}
-          type="color"
-          defaultValue={value}
-        />
-        <input
-          className="focus-ring min-h-10 w-full border border-[var(--line)] bg-white px-3 text-sm font-normal normal-case text-[var(--foreground)]"
-          aria-label={`${label} hex value`}
-          defaultValue={value}
-          readOnly
-        />
-      </div>
-    </label>
-  );
-}
 
 export default async function BrandingSettingsPage() {
   const data = await readData();
@@ -128,33 +99,6 @@ export default async function BrandingSettingsPage() {
               </button>
             </form>
           ) : null}
-
-          <div className="border border-[var(--line)] bg-[var(--panel)] p-4">
-            <h3 className="font-semibold">Preview</h3>
-            <div className="mt-4 border border-[var(--line)] bg-[var(--background)] p-4">
-              <div className="flex items-center gap-3">
-                {branding.logo ? (
-                  <Image
-                    alt={`${branding.appTitle} logo`}
-                    className="max-h-10 max-w-28 object-contain"
-                    height={40}
-                    src="/branding/logo"
-                    unoptimized
-                    width={112}
-                  />
-                ) : null}
-                <div>
-                  <div className="text-xs font-semibold uppercase text-[var(--accent)]">
-                    {branding.divisionLabel}
-                  </div>
-                  <div className="text-lg font-semibold">{branding.appTitle}</div>
-                </div>
-              </div>
-              <button className="mt-4 bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white">
-                Sample Button
-              </button>
-            </div>
-          </div>
         </div>
 
         <form
@@ -196,44 +140,18 @@ export default async function BrandingSettingsPage() {
             </label>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <ColorField
-              label="Primary Accent"
-              name="accentColor"
-              value={branding.accentColor}
-            />
-            <ColorField
-              label="Primary Hover"
-              name="accentStrongColor"
-              value={branding.accentStrongColor}
-            />
-            <ColorField
-              label="Page Background"
-              name="backgroundColor"
-              value={branding.backgroundColor}
-            />
-            <ColorField
-              label="Panel Background"
-              name="panelColor"
-              value={branding.panelColor}
-            />
-            <ColorField
-              label="Table Header"
-              name="panelStrongColor"
-              value={branding.panelStrongColor}
-            />
-            <ColorField
-              label="Border"
-              name="lineColor"
-              value={branding.lineColor}
-            />
-            <ColorField label="Main Text" name="textColor" value={branding.textColor} />
-            <ColorField
-              label="Muted Text"
-              name="mutedColor"
-              value={branding.mutedColor}
-            />
-          </div>
+          <BrandingColorEditor
+            colors={{
+              accentColor: branding.accentColor,
+              accentStrongColor: branding.accentStrongColor,
+              backgroundColor: branding.backgroundColor,
+              panelColor: branding.panelColor,
+              panelStrongColor: branding.panelStrongColor,
+              textColor: branding.textColor,
+              mutedColor: branding.mutedColor,
+              lineColor: branding.lineColor,
+            }}
+          />
 
           <div className="flex justify-end">
             <button className="focus-ring bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--accent-strong)]">

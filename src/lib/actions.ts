@@ -9,6 +9,7 @@ import {
   renderEscalationTemplate,
   runEscalationCheck,
 } from "./escalations";
+import { normalizeHex } from "./color-utils";
 import { sendDepartmentNotification, sendEscalationNotification } from "./email";
 import {
   deleteStoredBrandingLogo,
@@ -101,7 +102,7 @@ function value(formData: FormData, key: string) {
 
 function colorValue(formData: FormData, key: string, fallback: string) {
   const candidate = value(formData, key);
-  return /^#[0-9a-f]{6}$/i.test(candidate) ? candidate : fallback;
+  return normalizeHex(candidate) || fallback;
 }
 
 function fontValue(formData: FormData) {
