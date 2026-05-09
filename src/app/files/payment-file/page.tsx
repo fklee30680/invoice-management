@@ -27,6 +27,48 @@ export default async function PaymentFilePage() {
           </p>
         </header>
 
+        <section className="border border-[var(--line)] bg-[var(--panel)] p-4">
+          <div className="mb-3">
+            <h2 className="text-base font-semibold">Add Column</h2>
+            <p className="mt-1 text-sm text-[var(--muted)]">
+              Choose the invoice field to export and provide the column header
+              that should appear in the file.
+            </p>
+          </div>
+          <form
+            action={addPaymentFileColumn}
+            className="grid gap-3 lg:grid-cols-[1fr_1fr_auto]"
+          >
+            <label className="text-xs font-semibold uppercase text-[var(--muted)]">
+              New Header
+              <input
+                className="focus-ring mt-1 min-h-10 w-full border border-[var(--line)] bg-white px-3 text-sm font-normal normal-case text-[var(--foreground)]"
+                name="header"
+                placeholder="Payment Reference"
+              />
+            </label>
+            <label className="text-xs font-semibold uppercase text-[var(--muted)]">
+              Invoice Field
+              <select
+                className="focus-ring mt-1 min-h-10 w-full border border-[var(--line)] bg-white px-3 text-sm font-normal normal-case text-[var(--foreground)]"
+                name="source"
+                required
+              >
+                {PAYMENT_FILE_FIELD_OPTIONS.map((option) => (
+                  <option key={option.source} value={option.source}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="flex items-end">
+              <button className="focus-ring w-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700">
+                Add Column
+              </button>
+            </div>
+          </form>
+        </section>
+
         <form
           action={updatePaymentFileSettings}
           className="space-y-4 border border-[var(--line)] bg-[var(--panel)] p-4"
@@ -120,39 +162,6 @@ export default async function PaymentFilePage() {
             <input name="columnId" type="hidden" value={column.id} />
           </form>
         ))}
-
-        <form
-          action={addPaymentFileColumn}
-          className="grid gap-3 border border-[var(--line)] bg-[var(--panel)] p-4 lg:grid-cols-[1fr_1fr_auto]"
-        >
-          <label className="text-xs font-semibold uppercase text-[var(--muted)]">
-            New Header
-            <input
-              className="focus-ring mt-1 min-h-10 w-full border border-[var(--line)] bg-white px-3 text-sm font-normal normal-case text-[var(--foreground)]"
-              name="header"
-              placeholder="Payment Reference"
-            />
-          </label>
-          <label className="text-xs font-semibold uppercase text-[var(--muted)]">
-            Invoice Field
-            <select
-              className="focus-ring mt-1 min-h-10 w-full border border-[var(--line)] bg-white px-3 text-sm font-normal normal-case text-[var(--foreground)]"
-              name="source"
-              required
-            >
-              {PAYMENT_FILE_FIELD_OPTIONS.map((option) => (
-                <option key={option.source} value={option.source}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="flex items-end">
-            <button className="focus-ring w-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700">
-              Add Column
-            </button>
-          </div>
-        </form>
       </div>
     </main>
   );

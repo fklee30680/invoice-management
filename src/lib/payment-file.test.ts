@@ -7,6 +7,7 @@ import {
   buildPaymentCsv,
   defaultPaymentFileSettings,
   invoiceEligibleForPaymentFile,
+  PAYMENT_FILE_FIELD_OPTIONS,
 } from "./payment-file";
 import { defaultPoImportSettings } from "./po-parser";
 import { defaultVendorImportSettings } from "./vendor-parser";
@@ -182,5 +183,177 @@ describe("processed for payment configuration", () => {
     );
 
     assert.equal(csv, '"Date Processed for Payment"\r\n"Apr 30, 2026"');
+  });
+});
+
+describe("expanded payment file export fields", () => {
+  it("includes validation, workflow, attention, and file metadata options", () => {
+    const labels = new Set(PAYMENT_FILE_FIELD_OPTIONS.map((option) => option.label));
+
+    for (const label of [
+      "Status",
+      "Routed Date",
+      "Notification Sent Date",
+      "OCR Summary",
+      "Validation Summary",
+      "AP Review Reason Codes",
+      "Vendor Validation Status",
+      "Vendor Validation Message",
+      "PO Validation Status",
+      "PO Validation Message",
+      "PO Vendor Name",
+      "Duplicate Check Status",
+      "Duplicate Check Message",
+      "Duplicate Check Date",
+      "Requires AP Attention",
+      "AP Attention Reason",
+      "Processing Status",
+      "Extraction Confidence",
+      "File Name",
+      "File Hash",
+    ]) {
+      assert.equal(labels.has(label), true);
+    }
+  });
+
+  it("exports newly available invoice metadata values", () => {
+    const data = baseData();
+    data.invoiceFiles = [
+      {
+        id: "file-1",
+        invoiceId: "invoice-1",
+        originalName: "invoice-100.pdf",
+        storedName: "invoice-100.pdf",
+        mimeType: "application/pdf",
+        size: 1234,
+        fileHash: "sha256-test",
+        uploadedAt: "2026-04-01T12:00:00.000Z",
+      },
+    ];
+    data.paymentFile.columns = [
+      { id: "status", header: "Status", source: "status", included: true },
+      { id: "routed", header: "Routed Date", source: "routedAt", included: true },
+      {
+        id: "notified",
+        header: "Notification Sent Date",
+        source: "notificationSentAt",
+        included: true,
+      },
+      { id: "ocr", header: "OCR Summary", source: "ocrSummary", included: true },
+      {
+        id: "validation",
+        header: "Validation Summary",
+        source: "validationSummary",
+        included: true,
+      },
+      {
+        id: "review-codes",
+        header: "AP Review Reason Codes",
+        source: "apReviewReasonCodes",
+        included: true,
+      },
+      {
+        id: "vendor-status",
+        header: "Vendor Validation Status",
+        source: "vendorValidationStatus",
+        included: true,
+      },
+      {
+        id: "vendor-message",
+        header: "Vendor Validation Message",
+        source: "vendorValidationMessage",
+        included: true,
+      },
+      {
+        id: "po-status",
+        header: "PO Validation Status",
+        source: "poValidationStatus",
+        included: true,
+      },
+      {
+        id: "po-message",
+        header: "PO Validation Message",
+        source: "poValidationMessage",
+        included: true,
+      },
+      { id: "po-vendor", header: "PO Vendor Name", source: "poVendorName", included: true },
+      {
+        id: "duplicate-status",
+        header: "Duplicate Check Status",
+        source: "duplicateCheckStatus",
+        included: true,
+      },
+      {
+        id: "duplicate-message",
+        header: "Duplicate Check Message",
+        source: "duplicateCheckMessage",
+        included: true,
+      },
+      {
+        id: "duplicate-date",
+        header: "Duplicate Check Date",
+        source: "duplicateCheckCheckedAt",
+        included: true,
+      },
+      {
+        id: "attention",
+        header: "Requires AP Attention",
+        source: "requiresApAttention",
+        included: true,
+      },
+      {
+        id: "attention-reason",
+        header: "AP Attention Reason",
+        source: "apAttentionReason",
+        included: true,
+      },
+      {
+        id: "processing",
+        header: "Processing Status",
+        source: "processingStatus",
+        included: true,
+      },
+      {
+        id: "confidence",
+        header: "Extraction Confidence",
+        source: "extractionConfidence",
+        included: true,
+      },
+      { id: "file-name", header: "File Name", source: "fileOriginalName", included: true },
+      { id: "file-hash", header: "File Hash", source: "fileHash", included: true },
+    ];
+
+    const csv = buildPaymentCsv(
+      data,
+      [
+        baseInvoice({
+          routedAt: "2026-04-15T13:30:00.000Z",
+          notificationSentAt: "2026-04-16T14:30:00.000Z",
+          ocrSummary: "OCR complete",
+          validationSummary: "Validation complete",
+          apReviewReasonCodes: ["vendor_not_found", "duplicate_suspected"],
+          vendorValidationStatus: "Warning",
+          vendorValidationMessage: "Vendor needs selection",
+          poValidationStatus: "Vendor Mismatch",
+          poValidationMessage: "PO vendor mismatch",
+          poVendorName: "PO Vendor",
+          duplicateCheckStatus: "Potential Duplicate",
+          duplicateCheckMessage: "Potential duplicate invoice found.",
+          duplicateCheckCheckedAt: "2026-04-17T15:30:00.000Z",
+          requiresApAttention: true,
+          apAttentionReason: "Potential duplicate invoice.",
+          processingStatus: "validation_completed",
+          extractionConfidence: 0.92,
+        }),
+      ],
+    );
+
+    assert.equal(
+      csv,
+      [
+        '"Status","Routed Date","Notification Sent Date","OCR Summary","Validation Summary","AP Review Reason Codes","Vendor Validation Status","Vendor Validation Message","PO Validation Status","PO Validation Message","PO Vendor Name","Duplicate Check Status","Duplicate Check Message","Duplicate Check Date","Requires AP Attention","AP Attention Reason","Processing Status","Extraction Confidence","File Name","File Hash"',
+        '"Approved/Completed","Apr 15, 2026","Apr 16, 2026","OCR complete","Validation complete","vendor_not_found; duplicate_suspected","Warning","Vendor needs selection","Vendor Mismatch","PO vendor mismatch","PO Vendor","Potential Duplicate","Potential duplicate invoice found.","Apr 17, 2026","Yes","Potential duplicate invoice.","validation_completed","0.92","invoice-100.pdf","sha256-test"',
+      ].join("\r\n"),
+    );
   });
 });
