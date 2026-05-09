@@ -191,7 +191,7 @@ function normalizeEscalationSchedules(data: AppData) {
     ? data.escalationSchedules
     : [];
   const escalationStatusIds = (data.statuses || defaultStatuses())
-    .filter((status) => status.includeInEscalation)
+    .filter((status) => status.active !== false && status.includeInEscalation)
     .map((status) => status.id);
   const normalized = schedules.map((schedule) => ({
     id: schedule.id || createId("schedule"),
@@ -706,8 +706,9 @@ function mergeStatuses(
       configured || {
         id: createId("status"),
         label: invoice.status,
+        active: false,
         tone: "blue",
-        showInFilter: true,
+        showInFilter: false,
         showInApWorkQueue: false,
         showInDepartmentWork: false,
         showInCompleted: false,
@@ -721,6 +722,21 @@ function mergeStatuses(
     const roles = statusRoles(status);
     const normalized = {
       ...status,
+      active: status.active !== false,
+      showInFilter:
+        typeof status.showInFilter === "boolean" ? status.showInFilter : true,
+      showInApWorkQueue:
+        typeof status.showInApWorkQueue === "boolean"
+          ? status.showInApWorkQueue
+          : roles.includes("apReview") || roles.includes("apRework"),
+      showInDepartmentWork:
+        typeof status.showInDepartmentWork === "boolean"
+          ? status.showInDepartmentWork
+          : roles.includes("routed"),
+      showInCompleted:
+        typeof status.showInCompleted === "boolean"
+          ? status.showInCompleted
+          : roles.includes("completed"),
       includeInEscalation:
         typeof status.includeInEscalation === "boolean"
           ? status.includeInEscalation
@@ -740,6 +756,7 @@ function mergeStatuses(
       ...(protectedDefault || normalized),
       id: protectedDefault?.id || normalized.id,
       label: normalized.label || protectedDefault?.label || "Processed for Payment",
+      active: true,
       systemRole: "processedForPayment" as const,
     };
   });

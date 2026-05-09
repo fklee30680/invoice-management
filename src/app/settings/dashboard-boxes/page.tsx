@@ -53,9 +53,11 @@ function departmentSummary(
 }
 
 function statusSummary(statusIds: string[], data: Awaited<ReturnType<typeof readData>>) {
-  const labels = statusIds.map(
-    (id) => data.statuses.find((status) => status.id === id)?.label || `${id} (inactive)`,
-  );
+  const labels = statusIds.map((id) => {
+    const status = data.statuses.find((item) => item.id === id);
+    if (!status) return `${id} (unavailable)`;
+    return status.active ? status.label : `${status.label} (inactive)`;
+  });
   if (labels.length === 0) return "No statuses selected";
   if (labels.length <= 2) return labels.join(", ");
   return `${labels.length} statuses selected`;

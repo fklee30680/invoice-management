@@ -60,7 +60,9 @@ function statusSummary(
   const labels = statusIds.map((id) => {
     const status = statuses.find((item) => item.id === id);
     if (!status) return `${id} (unavailable)`;
-    return status.includeInEscalation ? status.label : `${status.label} (inactive)`;
+    return status.active && status.includeInEscalation
+      ? status.label
+      : `${status.label} (inactive)`;
   });
   if (labels.length <= 2) return labels.join(", ");
   return `${labels.length} statuses selected`;
@@ -72,7 +74,7 @@ function hasUnavailableStatus(
 ) {
   return statusIds.some((id) => {
     const status = statuses.find((item) => item.id === id);
-    return !status || !status.includeInEscalation;
+    return !status || !status.active || !status.includeInEscalation;
   });
 }
 

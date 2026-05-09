@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 export type MultiSelectDropdownOption = {
+  disabled?: boolean;
   group?: string;
   id: string;
   inactive?: boolean;
@@ -132,14 +133,19 @@ export function MultiSelectDropdown({
                   ) : null}
                   {group.options.map((option) => (
                     <label
-                      className={`flex cursor-pointer items-center gap-2 px-2 py-1.5 text-sm ${
+                      className={`flex items-center gap-2 px-2 py-1.5 text-sm ${
                         option.inactive ? "text-[var(--muted)]" : "text-[var(--foreground)]"
-                      } hover:bg-slate-100`}
+                      } ${
+                        option.disabled
+                          ? "cursor-not-allowed opacity-60"
+                          : "cursor-pointer hover:bg-slate-100"
+                      }`}
                       key={option.id}
                     >
                       <input
                         checked={selected.includes(option.id)}
                         className="h-4 w-4 accent-[var(--accent)]"
+                        disabled={option.disabled}
                         onChange={(event) => {
                           const next = event.currentTarget.checked
                             ? [...selected, option.id]

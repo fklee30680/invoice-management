@@ -50,20 +50,20 @@ export function defaultStatusIdsForDashboardView(
 ) {
   if (view === "needs-ap-work") {
     return data.statuses
-      .filter((status) => status.showInApWorkQueue)
+      .filter((status) => status.active && status.showInApWorkQueue)
       .map((status) => status.id);
   }
   if (view === "with-departments") {
     return data.statuses
-      .filter((status) => status.showInDepartmentWork)
+      .filter((status) => status.active && status.showInDepartmentWork)
       .map((status) => status.id);
   }
   if (view === "completed") {
     return data.statuses
-      .filter((status) => status.showInCompleted)
+      .filter((status) => status.active && status.showInCompleted)
       .map((status) => status.id);
   }
-  return data.statuses.map((status) => status.id);
+  return data.statuses.filter((status) => status.active).map((status) => status.id);
 }
 
 export function isDashboardBoxLinkedView(value: string): value is DashboardBoxLinkedView {
@@ -76,7 +76,11 @@ export function dashboardBoxInvoices(data: AppData, box: DashboardBox): Invoice[
 
   const selectedStatusLabels = new Set(
     box.statusIds
-      .map((statusId) => data.statuses.find((status) => status.id === statusId)?.label)
+      .map(
+        (statusId) =>
+          data.statuses.find((status) => status.id === statusId && status.active)
+            ?.label,
+      )
       .filter((label): label is string => Boolean(label)),
   );
   if (selectedStatusLabels.size === 0) return [];
@@ -97,9 +101,16 @@ export function dashboardBoxHref(data: AppData, box: DashboardBox) {
       params.append("department", departmentId);
     }
   }
+  let activeStatusCount = 0;
   for (const statusId of box.statusIds) {
     const status = data.statuses.find((item) => item.id === statusId);
-    if (status) params.append("status", status.label);
+    if (status?.active) {
+      params.append("status", status.label);
+      activeStatusCount += 1;
+    }
+  }
+  if (box.statusIds.length > 0 && activeStatusCount === 0) {
+    params.append("status", "__inactive_status_filter__");
   }
   const query = params.toString();
   const path = summaryViewPath(box.linkedViewId);

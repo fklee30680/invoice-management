@@ -148,6 +148,7 @@ function baseData(): AppData {
       {
         id: "status-routed",
         label: "Routed",
+        active: true,
         tone: "teal",
         showInFilter: true,
         showInApWorkQueue: false,

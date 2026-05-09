@@ -28,11 +28,23 @@ export const STATUS_TONE_CLASSES: Record<StatusTone, string> = {
   blue: "border-blue-300 bg-blue-50 text-blue-800",
 };
 
+export const PROTECTED_STATUS_ROLES: StatusSystemRole[] = [
+  "uploaded",
+  "apReview",
+  "apRework",
+  "routed",
+  "completed",
+  "processedForPayment",
+  "rejected",
+  "hold",
+];
+
 export function defaultStatuses(): InvoiceStatusDefinition[] {
   return [
     {
       id: "status-uploaded",
       label: "Uploaded",
+      active: true,
       tone: "slate",
       showInFilter: true,
       showInApWorkQueue: false,
@@ -45,6 +57,7 @@ export function defaultStatuses(): InvoiceStatusDefinition[] {
     {
       id: "status-needs-ap-review",
       label: "Needs AP Review",
+      active: true,
       tone: "amber",
       showInFilter: true,
       showInApWorkQueue: true,
@@ -57,6 +70,7 @@ export function defaultStatuses(): InvoiceStatusDefinition[] {
     {
       id: "status-needs-ap-rework",
       label: "Needs AP Rework",
+      active: true,
       tone: "orange",
       showInFilter: true,
       showInApWorkQueue: true,
@@ -69,6 +83,7 @@ export function defaultStatuses(): InvoiceStatusDefinition[] {
     {
       id: "status-routed",
       label: "Routed",
+      active: true,
       tone: "teal",
       showInFilter: true,
       showInApWorkQueue: false,
@@ -81,6 +96,7 @@ export function defaultStatuses(): InvoiceStatusDefinition[] {
     {
       id: "status-completed",
       label: "Approved/Completed",
+      active: true,
       tone: "emerald",
       showInFilter: true,
       showInApWorkQueue: false,
@@ -93,6 +109,7 @@ export function defaultStatuses(): InvoiceStatusDefinition[] {
     {
       id: "status-processed-for-payment",
       label: "Processed for Payment",
+      active: true,
       tone: "blue",
       showInFilter: true,
       showInApWorkQueue: false,
@@ -105,6 +122,7 @@ export function defaultStatuses(): InvoiceStatusDefinition[] {
     {
       id: "status-rejected",
       label: "Rejected",
+      active: true,
       tone: "red",
       showInFilter: true,
       showInApWorkQueue: false,
@@ -117,6 +135,7 @@ export function defaultStatuses(): InvoiceStatusDefinition[] {
     {
       id: "status-hold",
       label: "Hold",
+      active: true,
       tone: "purple",
       showInFilter: true,
       showInApWorkQueue: false,
@@ -144,36 +163,36 @@ export function statusBadgeClass(data: AppData, status: WorkflowStatus) {
 }
 
 export function filterableStatuses(data: AppData) {
-  return data.statuses.filter((status) => status.showInFilter);
+  return data.statuses.filter((status) => status.active && status.showInFilter);
 }
 
 export function statusesForApWorkQueue(data: AppData) {
   return data.statuses
-    .filter((status) => status.showInApWorkQueue)
+    .filter((status) => status.active && status.showInApWorkQueue)
     .map((status) => status.label);
 }
 
 export function statusesForDepartmentWork(data: AppData) {
   return data.statuses
-    .filter((status) => status.showInDepartmentWork)
+    .filter((status) => status.active && status.showInDepartmentWork)
     .map((status) => status.label);
 }
 
 export function statusesForCompleted(data: AppData) {
   return data.statuses
-    .filter((status) => status.showInCompleted)
+    .filter((status) => status.active && status.showInCompleted)
     .map((status) => status.label);
 }
 
 export function statusesForEscalation(data: AppData) {
   return data.statuses
-    .filter((status) => status.includeInEscalation)
+    .filter((status) => status.active && status.includeInEscalation)
     .map((status) => status.label);
 }
 
 export function statusesForPaymentFile(data: AppData) {
   return data.statuses
-    .filter((status) => status.includeInPaymentFile)
+    .filter((status) => status.active && status.includeInPaymentFile)
     .map((status) => status.label);
 }
 
@@ -189,4 +208,8 @@ export function statusRoles(status: InvoiceStatusDefinition) {
 export function statusRoleLabel(status: InvoiceStatusDefinition) {
   const roles = statusRoles(status);
   return roles.length ? roles.join(", ") : "";
+}
+
+export function isProtectedStatus(status: InvoiceStatusDefinition) {
+  return statusRoles(status).some((role) => PROTECTED_STATUS_ROLES.includes(role));
 }

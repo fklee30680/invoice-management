@@ -284,7 +284,9 @@ function placeholderValues(
 }
 
 function evaluateEscalations(data: AppData, now = new Date()) {
-  const eligibleStatuses = data.statuses.filter((status) => status.includeInEscalation);
+  const eligibleStatuses = data.statuses.filter(
+    (status) => status.active && status.includeInEscalation,
+  );
   const eligibleStatusLabels = eligibleStatuses.map((status) => status.label);
   const eligibleStatusIds = new Set(eligibleStatuses.map((status) => status.id));
   const schedules = [...data.escalationSchedules]

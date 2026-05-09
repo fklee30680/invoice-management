@@ -132,6 +132,7 @@ export type StatusSystemRole =
 export type InvoiceStatusDefinition = {
   id: string;
   label: string;
+  active: boolean;
   tone: StatusTone;
   showInFilter: boolean;
   showInApWorkQueue: boolean;

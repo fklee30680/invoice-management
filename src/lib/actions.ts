@@ -75,6 +75,8 @@ import {
 import { normalizePoNumber, normalizeVendorName } from "./utils";
 import {
   STATUS_TONES,
+  defaultStatuses,
+  isProtectedStatus,
   statusLabelForRole,
   statusRoles,
   statusesForCompleted,
@@ -89,6 +91,7 @@ import type {
   InvoiceValidationResult,
   MenuConfigItem,
   MenuRole,
+  StatusSystemRole,
   StatusTone,
 } from "./types";
 
@@ -145,6 +148,11 @@ function numberValue(formData: FormData, key: string, fallback = 0) {
 function toneValue(formData: FormData) {
   const selected = value(formData, "tone") as StatusTone;
   return STATUS_TONES.includes(selected) ? selected : "slate";
+}
+
+function defaultStatusForRole(role: StatusSystemRole | "") {
+  if (!role) return undefined;
+  return defaultStatuses().find((status) => statusRoles(status).includes(role));
 }
 
 function decisionWorkflowActionValue(formData: FormData) {
@@ -2599,6 +2607,7 @@ export async function addInvoiceStatus(formData: FormData) {
     data.statuses.push({
       id: createId("status"),
       label,
+      active: true,
       tone: toneValue(formData),
       showInFilter: checkbox(formData, "showInFilter"),
       showInApWorkQueue: checkbox(formData, "showInApWorkQueue"),
@@ -2635,11 +2644,12 @@ export async function updateInvoiceStatus(formData: FormData) {
     if (duplicate) return;
 
     const oldLabel = status.label;
-    const protectedProcessedForPayment = statusRoles(status).includes(
-      "processedForPayment",
-    );
+    const protectedProcessedForPayment =
+      statusRoles(status).includes("processedForPayment");
+    const protectedStatus = isProtectedStatus(status);
     status.label = label;
     if (protectedProcessedForPayment) {
+      status.active = true;
       status.tone = "blue";
       status.showInFilter = true;
       status.showInApWorkQueue = false;
@@ -2649,8 +2659,23 @@ export async function updateInvoiceStatus(formData: FormData) {
       status.includeInPaymentFile = false;
       status.systemRole = "processedForPayment";
       status.systemRoles = undefined;
+    } else if (protectedStatus) {
+      const defaultStatus = defaultStatusForRole(statusRoles(status)[0] || "");
+      status.active = true;
+      status.tone = toneValue(formData);
+      status.showInFilter = defaultStatus?.showInFilter ?? status.showInFilter;
+      status.showInApWorkQueue =
+        defaultStatus?.showInApWorkQueue ?? status.showInApWorkQueue;
+      status.showInDepartmentWork =
+        defaultStatus?.showInDepartmentWork ?? status.showInDepartmentWork;
+      status.showInCompleted = defaultStatus?.showInCompleted ?? status.showInCompleted;
+      status.includeInEscalation =
+        defaultStatus?.includeInEscalation ?? status.includeInEscalation;
+      status.includeInPaymentFile =
+        defaultStatus?.includeInPaymentFile ?? status.includeInPaymentFile;
     } else {
       status.tone = toneValue(formData);
+      status.active = status.active !== false;
       status.showInFilter = checkbox(formData, "showInFilter");
       status.showInApWorkQueue = checkbox(formData, "showInApWorkQueue");
       status.showInDepartmentWork = checkbox(formData, "showInDepartmentWork");
@@ -2682,70 +2707,64 @@ export async function updateInvoiceStatus(formData: FormData) {
   revalidatePath("/settings/statuses");
 }
 
-export async function deleteInvoiceStatus(formData: FormData) {
+export async function deactivateInvoiceStatus(formData: FormData) {
   await requireApUser();
   const statusId = value(formData, "statusId");
-  const replacementStatusId = value(formData, "replacementStatusId");
   if (!statusId) return;
 
   await mutateData((data) => {
     const status = data.statuses.find((item) => item.id === statusId);
     if (!status) return;
-    if (statusRoles(status).includes("processedForPayment")) {
+    if (isProtectedStatus(status)) {
       addAudit(data, {
         actor: "AP",
-        type: "status_delete_blocked",
-        message: "Could not delete Processed for Payment; it is a system status.",
-      });
-      return;
-    }
-    const replacement = data.statuses.find(
-      (item) => item.id === replacementStatusId && item.id !== statusId,
-    );
-    const inUseCount = data.invoices.filter(
-      (invoice) => invoice.status === status.label,
-    ).length;
-    const rolesToMove = statusRoles(status);
-    const needsReplacement = Boolean(rolesToMove.length > 0 || inUseCount > 0);
-
-    if (needsReplacement && !replacement) {
-      addAudit(data, {
-        actor: "AP",
-        type: "status_delete_blocked",
-        message: `Could not delete ${status.label}; choose a replacement status first.`,
+        type: "status_inactivation_blocked",
+        message: `Could not mark ${status.label} inactive; it is a protected system status.`,
       });
       return;
     }
 
-    if (replacement) {
-      for (const invoice of data.invoices) {
-        if (invoice.status === status.label) {
-          invoice.status = replacement.label;
-          invoice.statusDate = new Date().toISOString().slice(0, 10);
-          invoice.updatedAt = new Date().toISOString();
-        }
-      }
-
-      if (rolesToMove.length > 0) {
-        replacement.systemRoles = Array.from(
-          new Set([...statusRoles(replacement), ...rolesToMove]),
-        );
-        replacement.systemRole = replacement.systemRoles[0];
-      }
-    }
-
-    data.statuses = data.statuses.filter((item) => item.id !== statusId);
+    status.active = false;
+    status.showInFilter = false;
+    status.showInApWorkQueue = false;
+    status.showInDepartmentWork = false;
+    status.showInCompleted = false;
+    status.includeInEscalation = false;
+    status.includeInPaymentFile = false;
     addAudit(data, {
       actor: "AP",
-      type: "status_deleted",
-      message: replacement
-        ? `Deleted invoice status ${status.label}; moved ${inUseCount} invoices and workflow role to ${replacement.label}.`
-        : `Deleted invoice status ${status.label}.`,
+      type: "status_inactivated",
+      message: `AP marked status ${status.label} inactive.`,
     });
   });
 
   revalidatePath("/");
+  revalidatePath("/department");
   revalidatePath("/invoices", "layout");
+  revalidatePath("/reports");
+  revalidatePath("/settings/statuses");
+}
+
+export async function reactivateInvoiceStatus(formData: FormData) {
+  await requireApUser();
+  const statusId = value(formData, "statusId");
+  if (!statusId) return;
+
+  await mutateData((data) => {
+    const status = data.statuses.find((item) => item.id === statusId);
+    if (!status) return;
+    status.active = true;
+    addAudit(data, {
+      actor: "AP",
+      type: "status_reactivated",
+      message: `AP reactivated status ${status.label}.`,
+    });
+  });
+
+  revalidatePath("/");
+  revalidatePath("/department");
+  revalidatePath("/invoices", "layout");
+  revalidatePath("/reports");
   revalidatePath("/settings/statuses");
 }
 

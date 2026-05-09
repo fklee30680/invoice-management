@@ -3,6 +3,7 @@
 import { MultiSelectDropdown } from "./multi-select-dropdown";
 
 type StatusOption = {
+  active: boolean;
   id: string;
   includeInEscalation: boolean;
   label: string;
@@ -24,10 +25,14 @@ export function StatusMultiSelect({
   const selectedSet = new Set(initialSelected);
   const options = [
     ...statuses
-      .filter((status) => status.includeInEscalation || selectedSet.has(status.id))
+      .filter(
+        (status) =>
+          (status.active && status.includeInEscalation) || selectedSet.has(status.id),
+      )
       .map((status) => ({
         id: status.id,
-        inactive: !status.includeInEscalation,
+        inactive: !status.active || !status.includeInEscalation,
+        disabled: !status.active || !status.includeInEscalation,
         label: status.label,
       })),
     ...initialSelected
