@@ -11,6 +11,7 @@ import { normalizeInvoiceFields } from "./invoice-fields";
 import { defaultMenuSettings } from "./menu-registry";
 import { defaultPaymentFileSettings } from "./payment-file";
 import { defaultPoImportSettings } from "./po-parser";
+import { defaultVendorImportSettings } from "./vendor-parser";
 import { defaultPoValidationSettings } from "./po-validation";
 import { defaultStatuses } from "./status-config";
 import type { AppData, DashboardBox, Invoice } from "./types";
@@ -122,6 +123,7 @@ function data(): AppData {
     menuSettings: defaultMenuSettings(),
     poValidationSettings: defaultPoValidationSettings(),
     poImportSettings: defaultPoImportSettings(),
+    vendorImportSettings: defaultVendorImportSettings(),
     departmentDecisions: defaultDepartmentDecisions(),
     escalationContacts: [],
   };

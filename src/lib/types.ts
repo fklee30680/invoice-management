@@ -73,6 +73,16 @@ export type PoImportSettings = {
   fillMissingData: boolean;
 };
 
+export type VendorImportSettings = {
+  headerRow: number;
+  vendorNameColumn: string;
+  vendorNumberColumn: string;
+  vendorEmailColumn: string;
+  activeColumn: string;
+  updateExisting: boolean;
+  fillMissingData: boolean;
+};
+
 export type DashboardBoxMetricType = "count" | "dollars" | "countAndDollars";
 
 export type DashboardBoxLinkedView =
@@ -352,6 +362,7 @@ export type Vendor = {
   email: string;
   active: boolean;
   uploadedAt: string;
+  updatedAt?: string;
 };
 
 export type InvoiceComment = {
@@ -568,6 +579,7 @@ export type AppData = {
   menuSettings: MenuSettings;
   poValidationSettings: PoValidationSettings;
   poImportSettings: PoImportSettings;
+  vendorImportSettings: VendorImportSettings;
   departmentDecisions: DepartmentDecisionDefinition[];
   escalationContacts: EscalationContact[];
 };

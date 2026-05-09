@@ -19,6 +19,7 @@ import type {
   PurchaseOrder,
   User,
   Vendor,
+  VendorImportSettings,
 } from "./types";
 import { defaultDepartmentDecisions } from "./constants";
 import {
@@ -43,6 +44,10 @@ import {
   defaultPoImportSettings,
   normalizePoImportSettings,
 } from "./po-parser";
+import {
+  defaultVendorImportSettings,
+  normalizeVendorImportSettings,
+} from "./vendor-parser";
 import {
   normalizePoValidationSettings,
   normalizePoValidationStatus,
@@ -416,6 +421,7 @@ function normalizeData(data: AppData): AppData {
     email: vendor.email || "",
     active: vendor.active !== false,
     uploadedAt: vendor.uploadedAt || new Date().toISOString(),
+    updatedAt: vendor.updatedAt || "",
   }));
   const vendorData = { ...data, vendors } as AppData;
   const purchaseOrders = (data.purchaseOrders || []).map((po) => ({
@@ -563,6 +569,10 @@ function normalizeData(data: AppData): AppData {
     ),
     poImportSettings: normalizePoImportSettings(
       (data as AppData & { poImportSettings?: PoImportSettings }).poImportSettings,
+    ),
+    vendorImportSettings: normalizeVendorImportSettings(
+      (data as AppData & { vendorImportSettings?: VendorImportSettings })
+        .vendorImportSettings,
     ),
     departmentDecisions: normalizeDepartmentDecisions(data.departmentDecisions),
     escalationSchedules,
@@ -867,6 +877,7 @@ function seedData(): AppData {
     menuSettings: defaultMenuSettings(),
     poValidationSettings: normalizePoValidationSettings(undefined),
     poImportSettings: defaultPoImportSettings(),
+    vendorImportSettings: defaultVendorImportSettings(),
     departmentDecisions: defaultDepartmentDecisions(),
     escalationContacts: defaultEscalationContacts(),
   };
@@ -1033,6 +1044,7 @@ export function upsertVendor(
     email: email.trim().toLowerCase(),
     active,
     uploadedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
   data.vendors.push(vendor);
   return vendor;

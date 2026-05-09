@@ -71,7 +71,6 @@ import {
   normalizeOrganizationDepartmentScope,
   readData,
   upsertDepartment,
-  upsertVendor,
 } from "./store";
 import { normalizePoNumber, normalizeVendorName } from "./utils";
 import {
@@ -127,6 +126,15 @@ function poListRedirect(params: Record<string, string | number>) {
     if (item) query.set(key, item);
   }
   redirect(`/uploads/po-list?${query.toString()}`);
+}
+
+function vendorListRedirect(params: Record<string, string | number>) {
+  const query = new URLSearchParams();
+  for (const [key, rawValue] of Object.entries(params)) {
+    const item = String(rawValue);
+    if (item) query.set(key, item);
+  }
+  redirect(`/uploads/vendors?${query.toString()}`);
 }
 
 function numberValue(formData: FormData, key: string, fallback = 0) {
@@ -187,6 +195,10 @@ function departmentScopeFromForm(formData: FormData) {
 
 function validEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function normalizedVendorNumber(value: string) {
+  return value.trim().toLowerCase();
 }
 
 function setInvoiceStatus(invoice: Invoice, status: string, now = new Date()) {
@@ -828,38 +840,267 @@ export async function deleteAllPurchaseOrders(formData: FormData) {
 }
 
 export async function uploadVendorList(formData: FormData) {
+  await requireApUser();
   const file = formData.get("vendorFile");
   if (!(file instanceof File) || file.size === 0) {
     return;
   }
 
-  const rows = await parseVendorUpload(file, {
+  const settings = {
     headerRow: Math.max(Number(value(formData, "headerRow")) || 1, 1),
-    vendorName: value(formData, "vendorNameColumn") || "Vendor Name",
-    vendorNumber: value(formData, "vendorNumberColumn"),
-    email: value(formData, "vendorEmailColumn"),
-    active: value(formData, "activeColumn"),
-  });
+    vendorNameColumn: value(formData, "vendorNameColumn") || "Vendor Name",
+    vendorNumberColumn: value(formData, "vendorNumberColumn") || "Vendor Number",
+    vendorEmailColumn: value(formData, "vendorEmailColumn") || "Email",
+    activeColumn: value(formData, "activeColumn") || "Active",
+    updateExisting: checkbox(formData, "updateExisting"),
+    fillMissingData: checkbox(formData, "fillMissingData"),
+  };
+  const result = await parseVendorUpload(file, settings);
+  let imported = 0;
+  let updated = 0;
+  let filled = 0;
+  let skipped = 0;
+  const warnings = [...result.warnings];
 
   await mutateData((data) => {
-    for (const row of rows) {
-      upsertVendor(
-        data,
-        row.vendorName,
-        row.vendorNumber,
-        row.email,
-        row.active,
+    data.vendorImportSettings = settings;
+
+    if (result.errors.length > 0) {
+      addAudit(data, {
+        actor: "AP",
+        type: "vendor_upload_failed",
+        message: `Vendor import from ${file.name} failed: ${result.errors.join(" ")}`,
+      });
+      return;
+    }
+
+    const nowIso = new Date().toISOString();
+    for (const row of result.rows) {
+      const existing = data.vendors.find(
+        (vendor) =>
+          normalizedVendorNumber(vendor.vendorNumber) ===
+          normalizedVendorNumber(row.vendorNumber),
       );
+      if (row.email && !validEmail(row.email)) {
+        warnings.push(`Row ${row.rowNumber}: Vendor Email '${row.email}' is not a valid email address.`);
+      }
+
+      if (existing) {
+        let changed = false;
+        let rowFilled = false;
+        let rowUpdated = false;
+        const applyField = (
+          currentValue: string,
+          incomingValue: string,
+          setter: (value: string) => void,
+        ) => {
+          const nextValue = incomingValue.trim();
+          if (!nextValue) return;
+          const current = currentValue.trim();
+          if (settings.updateExisting) {
+            if (current !== nextValue) {
+              setter(nextValue);
+              changed = true;
+              if (current) rowUpdated = true;
+              else rowFilled = true;
+            }
+            return;
+          }
+          if (settings.fillMissingData && !current) {
+            setter(nextValue);
+            changed = true;
+            rowFilled = true;
+          }
+        };
+
+        applyField(existing.vendorName, row.vendorName, (next) => {
+          existing.vendorName = next;
+          existing.normalizedVendorName = normalizeVendorName(next);
+        });
+        applyField(existing.vendorNumber, row.vendorNumber, (next) => {
+          existing.vendorNumber = next;
+        });
+        applyField(existing.email, row.email, (next) => {
+          existing.email = next.toLowerCase();
+        });
+        if (settings.updateExisting && row.activeProvided && existing.active !== row.active) {
+          existing.active = row.active;
+          changed = true;
+          rowUpdated = true;
+        }
+
+        if (changed) {
+          existing.updatedAt = nowIso;
+          if (rowUpdated) updated += 1;
+          if (rowFilled) filled += 1;
+        } else {
+          skipped += 1;
+          if (!settings.updateExisting && !settings.fillMissingData) {
+            warnings.push(
+              `Row ${row.rowNumber}: Vendor ${row.vendorNumber} already exists and was skipped.`,
+            );
+          }
+        }
+      } else {
+        data.vendors.push({
+          id: createId("vendor"),
+          vendorName: row.vendorName.trim(),
+          normalizedVendorName: normalizeVendorName(row.vendorName),
+          vendorNumber: row.vendorNumber.trim(),
+          email: row.email.trim().toLowerCase(),
+          active: row.active,
+          uploadedAt: nowIso,
+          updatedAt: nowIso,
+        });
+        imported += 1;
+      }
     }
     addAudit(data, {
       actor: "AP",
       type: "vendor_upload",
-      message: `Imported ${rows.length} vendor rows from ${file.name}.`,
+      message: `Imported ${imported} vendors from ${file.name}. Updated ${updated}. Filled missing data on ${filled}. Skipped ${skipped}. Warnings: ${warnings.length}.`,
+    });
+    if (warnings.length > 0) {
+      addAudit(data, {
+        actor: "System",
+        type: "vendor_upload_warnings",
+        message: warnings.slice(0, 20).join(" "),
+      });
+    }
+  });
+
+  revalidatePath("/");
+  revalidatePath("/uploads/vendors");
+  revalidatePath("/invoices", "layout");
+  const params = new URLSearchParams({
+    imported: String(imported),
+    updated: String(updated),
+    filled: String(filled),
+    skipped: String(skipped),
+    warnings: String(warnings.length),
+    errors: String(result.errors.length),
+  });
+  redirect(`/uploads/vendors?${params.toString()}`);
+}
+
+export async function updateVendor(formData: FormData) {
+  await requireApUser();
+  const vendorId = value(formData, "vendorId");
+  const vendorName = value(formData, "vendorName");
+  const vendorNumber = value(formData, "vendorNumber");
+  const email = value(formData, "email").toLowerCase();
+  const active = checkbox(formData, "active");
+  if (!vendorId || !vendorName || !vendorNumber) {
+    vendorListRedirect({
+      message: "Vendor Name and Vendor Number are required.",
+      messageType: "error",
+    });
+  }
+  if (email && !validEmail(email)) {
+    vendorListRedirect({
+      message: "Vendor email is not valid.",
+      messageType: "error",
+    });
+  }
+
+  let message = "";
+  let messageType = "success";
+  await mutateData((data) => {
+    const vendor = data.vendors.find((item) => item.id === vendorId);
+    if (!vendor) {
+      message = "Vendor was not found.";
+      messageType = "error";
+      return;
+    }
+    const duplicate = data.vendors.find(
+      (item) =>
+        item.id !== vendorId &&
+        normalizedVendorNumber(item.vendorNumber) === normalizedVendorNumber(vendorNumber),
+    );
+    if (duplicate) {
+      message = `Vendor Number ${vendorNumber} already exists.`;
+      messageType = "error";
+      return;
+    }
+
+    vendor.vendorName = vendorName;
+    vendor.normalizedVendorName = normalizeVendorName(vendorName);
+    vendor.vendorNumber = vendorNumber;
+    vendor.email = email;
+    vendor.active = active;
+    vendor.updatedAt = new Date().toISOString();
+    addAudit(data, {
+      actor: "AP",
+      type: "vendor_updated",
+      message: `AP updated vendor ${vendor.vendorName} (${vendor.vendorNumber}).`,
+    });
+    message = `Updated vendor ${vendor.vendorName}.`;
+  });
+
+  revalidatePath("/");
+  revalidatePath("/uploads/vendors");
+  revalidatePath("/invoices", "layout");
+  vendorListRedirect({ message, messageType });
+}
+
+export async function deleteVendor(formData: FormData) {
+  await requireApUser();
+  const vendorId = value(formData, "vendorId");
+  if (!vendorId || value(formData, "confirmDelete") !== "yes") {
+    vendorListRedirect({
+      message: "Vendor delete confirmation was missing.",
+      messageType: "error",
+    });
+  }
+
+  let deletedVendor = "";
+  await mutateData((data) => {
+    const vendor = data.vendors.find((item) => item.id === vendorId);
+    if (!vendor) return;
+    deletedVendor = `${vendor.vendorName} (${vendor.vendorNumber || "No number"})`;
+    data.vendors = data.vendors.filter((item) => item.id !== vendorId);
+    addAudit(data, {
+      actor: "AP",
+      type: "vendor_deleted",
+      message: `AP deleted vendor ${deletedVendor}.`,
     });
   });
 
   revalidatePath("/");
   revalidatePath("/uploads/vendors");
+  revalidatePath("/invoices", "layout");
+  vendorListRedirect({
+    message: deletedVendor ? `Deleted vendor ${deletedVendor}.` : "Vendor was not found.",
+    messageType: deletedVendor ? "success" : "error",
+  });
+}
+
+export async function deleteAllVendors(formData: FormData) {
+  await requireApUser();
+  if (value(formData, "confirmPhrase") !== "DELETE") {
+    vendorListRedirect({
+      message: "Type DELETE to confirm deleting all vendors.",
+      messageType: "error",
+    });
+  }
+
+  let deletedCount = 0;
+  await mutateData((data) => {
+    deletedCount = data.vendors.length;
+    data.vendors = [];
+    addAudit(data, {
+      actor: "AP",
+      type: "vendor_all_deleted",
+      message: `AP deleted all vendors from the vendor file. ${deletedCount} records removed.`,
+    });
+  });
+
+  revalidatePath("/");
+  revalidatePath("/uploads/vendors");
+  vendorListRedirect({
+    message: `Deleted all vendors. ${deletedCount} records removed.`,
+    messageType: "success",
+  });
 }
 
 export async function updatePaymentFileSettings(formData: FormData) {
