@@ -1,6 +1,18 @@
 import ExcelJS from "exceljs";
 import type { VendorImportSettings } from "./types";
 
+export type VendorImportHeader = {
+  index: number;
+  letter: string;
+  label: string;
+};
+
+export type ResolvedColumn = {
+  index: number | null;
+  source: "header" | "letter" | "number" | "missing";
+  message?: string;
+};
+
 export type ParsedVendor = {
   vendorName: string;
   vendorNumber: string;
@@ -59,23 +71,59 @@ function columnLetterToIndex(value: string) {
   return index - 1;
 }
 
-export function resolveVendorColumnIndex(headers: string[], mappingValue: string) {
+function columnLetter(index: number) {
+  let value = "";
+  let current = index + 1;
+  while (current > 0) {
+    const remainder = (current - 1) % 26;
+    value = String.fromCharCode(65 + remainder) + value;
+    current = Math.floor((current - 1) / 26);
+  }
+  return value;
+}
+
+export function resolveColumnIndex(
+  headers: string[],
+  mappingValue: string,
+): ResolvedColumn {
   const mapped = mappingValue.trim();
-  if (!mapped) return null;
+  if (!mapped) return { index: null, source: "missing" };
+
+  const headerMatch = resolveByHeader(headers, mapped);
+  if (headerMatch.index !== null) return headerMatch;
 
   const letterIndex = columnLetterToIndex(mapped);
-  if (letterIndex >= 0) return letterIndex;
+  if (letterIndex >= 0) return { index: letterIndex, source: "letter" };
 
   if (/^\d+$/.test(mapped)) {
     const numberIndex = Number(mapped) - 1;
-    return numberIndex >= 0 ? numberIndex : null;
+    return numberIndex >= 0
+      ? { index: numberIndex, source: "number" }
+      : { index: null, source: "missing" };
   }
 
-  const normalized = normalizeHeader(mapped);
-  const headerIndex = headers
-    .map(normalizeHeader)
-    .findIndex((header) => header === normalized);
-  return headerIndex >= 0 ? headerIndex : null;
+  return resolveByHeader(headers, mapped);
+}
+
+export function resolveVendorColumnIndex(headers: string[], mappingValue: string) {
+  return resolveColumnIndex(headers, mappingValue).index;
+}
+
+function resolveByHeader(headers: string[], mappingValue: string): ResolvedColumn {
+  const normalized = normalizeHeader(mappingValue);
+  if (!normalized) return { index: null, source: "missing" };
+  const matches = headers
+    .map((header, index) => ({ header, index }))
+    .filter((item) => normalizeHeader(item.header) === normalized);
+  if (matches.length === 0) return { index: null, source: "missing" };
+  return {
+    index: matches[0].index,
+    source: "header",
+    message:
+      matches.length > 1
+        ? `Multiple headers matched ${mappingValue}. Using the first match.`
+        : undefined,
+  };
 }
 
 function parseCsvLine(line: string) {
@@ -116,6 +164,87 @@ export function parseVendorActiveValue(value: string) {
   return true;
 }
 
+export async function extractVendorImportHeaders(file: File, headerRow: number) {
+  const normalizedHeaderRow = Math.max(Number(headerRow) || 1, 1);
+  const rows = await readVendorImportRows(file, normalizedHeaderRow);
+  if (rows.errors.length > 0) return { headers: [], errors: rows.errors };
+  const headers = rows.rows[normalizedHeaderRow - 1];
+  if (!headers) {
+    return {
+      headers: [],
+      errors: [`Header row ${normalizedHeaderRow} was not found in the file.`],
+    };
+  }
+  return {
+    headers: headers.map((label, index) => ({
+      index,
+      letter: columnLetter(index),
+      label,
+    })),
+    errors: [],
+  };
+}
+
+async function readVendorImportRows(file: File, headerRow: number) {
+  if (!/\.(csv|xlsx|xls)$/i.test(file.name)) {
+    return {
+      rows: [],
+      errors: ["Vendor file must be a CSV or Excel file."],
+    };
+  }
+
+  if (file.name.toLowerCase().endsWith(".csv")) {
+    const text = await file.text();
+    return {
+      rows: text
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map(parseCsvLine),
+      errors: [],
+    };
+  }
+
+  const workbook = new ExcelJS.Workbook();
+  const buffer = Buffer.from(await file.arrayBuffer());
+  try {
+    await workbook.xlsx.load(
+      buffer as unknown as Parameters<typeof workbook.xlsx.load>[0],
+    );
+  } catch {
+    return {
+      rows: [],
+      errors: ["The Excel file could not be read. Upload a valid .xlsx file or use CSV."],
+    };
+  }
+  const worksheet = workbook.worksheets[0];
+  if (!worksheet) {
+    return { rows: [], errors: ["The workbook does not contain a worksheet."] };
+  }
+
+  const normalizedHeaderRow = Math.max(headerRow, 1);
+  const header = worksheet.getRow(normalizedHeaderRow);
+  const maxColumnCount = Math.max(
+    worksheet.columnCount,
+    Array.isArray(header.values) ? header.values.length - 1 : 0,
+  );
+  const rows: string[][] = [];
+  for (let rowNumber = 1; rowNumber <= worksheet.rowCount; rowNumber += 1) {
+    const row = worksheet.getRow(rowNumber);
+    const values: string[] = [];
+    for (let columnNumber = 1; columnNumber <= maxColumnCount; columnNumber += 1) {
+      values[columnNumber - 1] = row.getCell(columnNumber).text.trim();
+    }
+    rows[rowNumber - 1] = values;
+  }
+
+  return { rows, errors: [] };
+}
+
+function rowIsBlank(row: string[]) {
+  return row.every((value) => !value.trim());
+}
+
 function rowsToVendors(
   rows: string[][],
   settings: VendorImportSettings,
@@ -130,20 +259,28 @@ function rowsToVendors(
     };
   }
 
-  const vendorNumberIndex = resolveVendorColumnIndex(headerRow, settings.vendorNumberColumn);
-  const vendorNameIndex = resolveVendorColumnIndex(headerRow, settings.vendorNameColumn);
-  const emailIndex = resolveVendorColumnIndex(headerRow, settings.vendorEmailColumn);
-  const activeIndex = resolveVendorColumnIndex(headerRow, settings.activeColumn);
+  const vendorNumberColumn = resolveColumnIndex(headerRow, settings.vendorNumberColumn);
+  const vendorNameColumn = resolveColumnIndex(headerRow, settings.vendorNameColumn);
+  const emailColumn = resolveColumnIndex(headerRow, settings.vendorEmailColumn);
+  const activeColumn = resolveColumnIndex(headerRow, settings.activeColumn);
   const errors = [
-    vendorNumberIndex === null ? "Vendor Number column could not be found." : "",
-    vendorNameIndex === null ? "Vendor Name column could not be found." : "",
+    vendorNumberColumn.index === null
+      ? "Vendor Number Column could not be found. Select a column from the header row or enter a valid column letter."
+      : "",
+    vendorNameColumn.index === null
+      ? "Vendor Name Column could not be found. Select a column from the header row or enter a valid column letter."
+      : "",
   ].filter(Boolean);
   const warnings = [
-    settings.vendorEmailColumn && emailIndex === null
-      ? "Vendor Email column was not found. Rows were imported without email addresses."
+    vendorNumberColumn.message || "",
+    vendorNameColumn.message || "",
+    emailColumn.message || "",
+    activeColumn.message || "",
+    settings.vendorEmailColumn && emailColumn.index === null
+      ? "Vendor Email Column could not be found. Rows were imported without email addresses."
       : "",
-    settings.activeColumn && activeIndex === null
-      ? "Active column was not found. Rows defaulted to active."
+    settings.activeColumn && activeColumn.index === null
+      ? "Active Column could not be found. Rows defaulted to active."
       : "",
   ].filter(Boolean);
 
@@ -154,18 +291,19 @@ function rowsToVendors(
   const parsedRows: ParsedVendor[] = [];
   rows.slice(headerIndex + 1).forEach((row, index) => {
     const rowNumber = headerIndex + index + 2;
-    const vendorNumber = cell(row, vendorNumberIndex);
-    const vendorName = cell(row, vendorNameIndex);
-    const email = cell(row, emailIndex).toLowerCase();
-    const activeRaw = cell(row, activeIndex);
+    if (rowIsBlank(row)) return;
+    const vendorNumber = cell(row, vendorNumberColumn.index);
+    const vendorName = cell(row, vendorNameColumn.index);
+    const email = cell(row, emailColumn.index).toLowerCase();
+    const activeRaw = cell(row, activeColumn.index);
     const rowWarnings: string[] = [];
 
     if (!vendorNumber) {
-      warnings.push(`Row ${rowNumber}: Vendor Number is blank.`);
+      warnings.push(`Row ${rowNumber} skipped: Vendor Number is blank.`);
       return;
     }
     if (!vendorName) {
-      warnings.push(`Row ${rowNumber}: Vendor Name is blank.`);
+      warnings.push(`Row ${rowNumber} skipped: Vendor Name is blank.`);
       return;
     }
 
@@ -174,7 +312,7 @@ function rowsToVendors(
       vendorNumber,
       email,
       active: parseVendorActiveValue(activeRaw),
-      activeProvided: activeIndex !== null && Boolean(activeRaw),
+      activeProvided: activeColumn.index !== null && Boolean(activeRaw),
       rowNumber,
       warnings: rowWarnings,
     });
@@ -184,46 +322,13 @@ function rowsToVendors(
   return { rows: parsedRows, errors: [], warnings };
 }
 
-async function parseCsv(file: File, settings: VendorImportSettings) {
-  const text = await file.text();
-  const rows = text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map(parseCsvLine);
-  return rowsToVendors(rows, settings);
-}
-
-async function parseWorkbook(file: File, settings: VendorImportSettings) {
-  const workbook = new ExcelJS.Workbook();
-  const buffer = Buffer.from(await file.arrayBuffer());
-  await workbook.xlsx.load(
-    buffer as unknown as Parameters<typeof workbook.xlsx.load>[0],
-  );
-  const worksheet = workbook.worksheets[0];
-  if (!worksheet) {
-    return { rows: [], errors: ["The workbook does not contain a worksheet."], warnings: [] };
-  }
-
-  const rows: string[][] = [];
-  worksheet.eachRow((row) => {
-    const values: string[] = [];
-    row.eachCell({ includeEmpty: true }, (cellValue, columnNumber) => {
-      values[columnNumber - 1] = cellValue.text.trim();
-    });
-    rows.push(values);
-  });
-
-  return rowsToVendors(rows, settings);
-}
-
 export async function parseVendorUpload(
   file: File,
   settings: VendorImportSettings,
 ): Promise<VendorImportResult> {
-  if (file.name.toLowerCase().endsWith(".csv")) {
-    return parseCsv(file, settings);
+  const rows = await readVendorImportRows(file, settings.headerRow);
+  if (rows.errors.length > 0) {
+    return { rows: [], errors: rows.errors, warnings: [] };
   }
-
-  return parseWorkbook(file, settings);
+  return rowsToVendors(rows.rows, settings);
 }

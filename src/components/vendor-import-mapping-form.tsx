@@ -6,61 +6,26 @@ import type { VendorImportSettings } from "@/lib/types";
 type HeaderOption = {
   index: number;
   letter: string;
-  header: string;
+  label: string;
 };
-
-function columnLetter(index: number) {
-  let value = "";
-  let current = index + 1;
-  while (current > 0) {
-    const remainder = (current - 1) % 26;
-    value = String.fromCharCode(65 + remainder) + value;
-    current = Math.floor((current - 1) / 26);
-  }
-  return value;
-}
 
 function normalizeHeader(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
-}
-
-function parseCsvLine(line: string) {
-  const cells: string[] = [];
-  let current = "";
-  let quoted = false;
-
-  for (let index = 0; index < line.length; index += 1) {
-    const character = line[index];
-    const next = line[index + 1];
-    if (character === '"' && quoted && next === '"') {
-      current += '"';
-      index += 1;
-    } else if (character === '"') {
-      quoted = !quoted;
-    } else if (character === "," && !quoted) {
-      cells.push(current.trim());
-      current = "";
-    } else {
-      current += character;
-    }
-  }
-  cells.push(current.trim());
-  return cells.map((cell) => cell.replace(/^"|"$/g, ""));
 }
 
 function resolveSavedValue(options: HeaderOption[], saved: string) {
   const trimmed = saved.trim();
   if (!trimmed) return "";
   const normalized = normalizeHeader(trimmed);
-  const headerMatch = options.find((option) => normalizeHeader(option.header) === normalized);
-  if (headerMatch) return headerMatch.header;
+  const headerMatch = options.find((option) => normalizeHeader(option.label) === normalized);
+  if (headerMatch) return headerMatch.label;
   const letterMatch = options.find((option) => option.letter.toLowerCase() === trimmed.toLowerCase());
-  if (letterMatch) return letterMatch.header;
+  if (letterMatch) return letterMatch.label;
   if (/^\d+$/.test(trimmed)) {
     const numberMatch = options[Number(trimmed) - 1];
-    if (numberMatch) return numberMatch.header;
+    if (numberMatch) return numberMatch.label;
   }
-  return trimmed;
+  return "";
 }
 
 function MappingSelect({
@@ -87,13 +52,18 @@ function MappingSelect({
         onChange={(event) => onChange(name, event.target.value)}
         value={value}
       >
-        <option value="">Select column</option>
+        <option value="">{required ? "Select column" : "Do not import"}</option>
         {options.map((option) => (
-          <option key={`${option.letter}-${option.header}`} value={option.header}>
-            {option.header || "(blank header)"} - Column {option.letter}
+          <option key={`${option.letter}-${option.label}`} value={option.label}>
+            {option.label || "(blank header)"} - Column {option.letter}
           </option>
         ))}
       </select>
+      {options.length === 0 ? (
+        <span className="mt-1 block text-xs font-normal normal-case text-[var(--muted)]">
+          Select a file to load header options.
+        </span>
+      ) : null}
     </label>
   );
 }
@@ -104,7 +74,7 @@ export function VendorImportMappingForm({
   settings: VendorImportSettings;
 }) {
   const [headerRow, setHeaderRow] = useState(settings.headerRow);
-  const [headers, setHeaders] = useState<string[]>([]);
+  const [headers, setHeaders] = useState<HeaderOption[]>([]);
   const [previewMessage, setPreviewMessage] = useState("");
   const [mapping, setMapping] = useState({
     vendorNumberColumn: settings.vendorNumberColumn,
@@ -113,23 +83,10 @@ export function VendorImportMappingForm({
     activeColumn: settings.activeColumn,
   });
 
-  const options = useMemo(
-    () =>
-      headers.map((header, index) => ({
-        index,
-        letter: columnLetter(index),
-        header,
-      })),
-    [headers],
-  );
+  const options = useMemo(() => headers, [headers]);
 
-  function applyHeaders(nextHeaders: string[]) {
-    const nextOptions = nextHeaders.map((header, index) => ({
-      index,
-      letter: columnLetter(index),
-      header,
-    }));
-    setHeaders(nextHeaders);
+  function applyHeaders(nextOptions: HeaderOption[]) {
+    setHeaders(nextOptions);
     setMapping({
       vendorNumberColumn: resolveSavedValue(nextOptions, settings.vendorNumberColumn),
       vendorNameColumn: resolveSavedValue(nextOptions, settings.vendorNameColumn),
@@ -144,25 +101,25 @@ export function VendorImportMappingForm({
       setPreviewMessage("");
       return;
     }
-    if (!file.name.toLowerCase().endsWith(".csv")) {
+    const formData = new FormData();
+    formData.set("vendorFile", file);
+    formData.set("headerRow", String(nextHeaderRow));
+    setPreviewMessage("Loading header preview...");
+    const response = await fetch("/api/vendor-import/preview", {
+      method: "POST",
+      body: formData,
+    });
+    const result = (await response.json()) as {
+      headers?: HeaderOption[];
+      errors?: string[];
+    };
+    if (!response.ok || (result.errors && result.errors.length > 0)) {
       setHeaders([]);
-      setPreviewMessage("Header preview is available for CSV files. Use manual column entry for Excel files.");
-      return;
-    }
-    const text = await file.text();
-    const rows = text
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map(parseCsvLine);
-    const header = rows[Math.max(nextHeaderRow - 1, 0)];
-    if (!header) {
-      setHeaders([]);
-      setPreviewMessage(`Header row ${nextHeaderRow} was not found in the file.`);
+      setPreviewMessage(result.errors?.join(" ") || "Header preview failed.");
       return;
     }
     setPreviewMessage("");
-    applyHeaders(header);
+    applyHeaders(result.headers || []);
   }
 
   function updateMapping(name: keyof VendorImportSettings, value: string) {
@@ -258,9 +215,9 @@ export function VendorImportMappingForm({
               {options.map((option) => (
                 <span
                   className="border border-[var(--line)] px-2 py-1"
-                  key={`${option.letter}-${option.header}`}
+                  key={`${option.letter}-${option.label}`}
                 >
-                  {option.letter}: {option.header || "(blank)"}
+                  {option.letter}: {option.label || "(blank)"}
                 </span>
               ))}
             </div>
