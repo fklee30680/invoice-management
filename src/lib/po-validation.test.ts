@@ -6,6 +6,7 @@ import { defaultMenuSettings } from "./menu-registry";
 import { defaultPoImportSettings } from "./po-parser";
 import { defaultVendorImportSettings } from "./vendor-parser";
 import { defaultDepartmentImportSettings } from "./department-parser";
+import { defaultAuditLogSettings } from "./audit-log";
 import {
   defaultPoValidationSettings,
   validateInvoicePoNumber,
@@ -39,6 +40,7 @@ function baseData(): AppData {
     invoiceFieldCandidates: [],
     invoiceValidationResults: [],
     auditEvents: [],
+    auditLogSettings: defaultAuditLogSettings(),
     notificationTemplate: {
       departmentSubject: "",
       departmentBody: "",

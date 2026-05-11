@@ -9,6 +9,7 @@ import { defaultMenuSettings } from "./menu-registry";
 import { defaultPoImportSettings } from "./po-parser";
 import { defaultVendorImportSettings } from "./vendor-parser";
 import { defaultDepartmentImportSettings } from "./department-parser";
+import { defaultAuditLogSettings } from "./audit-log";
 import { defaultPoValidationSettings } from "./po-validation";
 import { normalizeOrganizationDepartmentScope } from "./store";
 import type { AppData, EscalationSchedulerSettings } from "./types";
@@ -81,6 +82,7 @@ function baseData(): AppData {
     invoiceFieldCandidates: [],
     invoiceValidationResults: [],
     auditEvents: [],
+    auditLogSettings: defaultAuditLogSettings(),
     invoiceFields: normalizeInvoiceFields(undefined),
     dashboardBoxes: [],
     menuSettings: defaultMenuSettings(),

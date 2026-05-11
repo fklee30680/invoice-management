@@ -13,6 +13,7 @@ import { defaultPaymentFileSettings } from "./payment-file";
 import { defaultPoImportSettings } from "./po-parser";
 import { defaultVendorImportSettings } from "./vendor-parser";
 import { defaultDepartmentImportSettings } from "./department-parser";
+import { defaultAuditLogSettings } from "./audit-log";
 import { defaultPoValidationSettings } from "./po-validation";
 import { defaultStatuses } from "./status-config";
 import type { AppData, DashboardBox, Invoice } from "./types";
@@ -83,6 +84,7 @@ function data(): AppData {
     invoiceFieldCandidates: [],
     invoiceValidationResults: [],
     auditEvents: [],
+    auditLogSettings: defaultAuditLogSettings(),
     notificationTemplate: {
       departmentSubject: "",
       departmentBody: "",

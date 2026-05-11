@@ -494,6 +494,13 @@ export type AuditEvent = {
   createdAt: string;
 };
 
+export type AuditLogSettings = {
+  retentionYears: number;
+  retainSecurityEventsPermanently: boolean;
+  retainInvoiceEventsPermanently: boolean;
+  allowManualPurge: boolean;
+};
+
 export type Invoice = {
   id: string;
   documentId?: string;
@@ -598,6 +605,7 @@ export type AppData = {
   invoiceFieldCandidates: InvoiceFieldCandidate[];
   invoiceValidationResults: InvoiceValidationResult[];
   auditEvents: AuditEvent[];
+  auditLogSettings: AuditLogSettings;
   notificationTemplate: NotificationTemplate;
   escalationSchedules: EscalationSchedule[];
   escalationTemplates: EscalationTemplate[];

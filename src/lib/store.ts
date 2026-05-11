@@ -3,6 +3,7 @@ import path from "node:path";
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import type {
   AppData,
+  AuditLogSettings,
   AuditEvent,
   BrandingSettings,
   DashboardBox,
@@ -40,6 +41,10 @@ import {
   normalizePaymentFileSettings,
 } from "./payment-file";
 import { normalizeInvoiceDuplicateState } from "./duplicate-invoices";
+import {
+  defaultAuditLogSettings,
+  normalizeAuditLogSettings,
+} from "./audit-log";
 import { defaultMenuSettings, normalizeMenuSettings } from "./menu-registry";
 import {
   defaultPoImportSettings,
@@ -542,6 +547,9 @@ function normalizeData(data: AppData): AppData {
       severity: result.severity || "info",
       createdAt: result.createdAt || new Date().toISOString(),
     })),
+    auditLogSettings: normalizeAuditLogSettings(
+      (data as AppData & { auditLogSettings?: AuditLogSettings }).auditLogSettings,
+    ),
     purchaseOrders,
     departments: (data.departments || []).map((department) => ({
       ...department,
@@ -889,6 +897,7 @@ function seedData(): AppData {
         createdAt: new Date().toISOString(),
       },
     ],
+    auditLogSettings: defaultAuditLogSettings(),
     notificationTemplate: defaultNotificationTemplate(),
     escalationSchedules: [],
     escalationTemplates: [],
