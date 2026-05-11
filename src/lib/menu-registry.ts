@@ -13,6 +13,7 @@ const BASE_MENU_TARGETS: MenuLinkTarget[] = [
   { id: "payment-file", label: "Payment File", href: "/files/payment-file", roles: ["AP"], category: "Files" },
   { id: "po-list-update", label: "PO List Update", href: "/uploads/po-list", roles: ["AP"], category: "Files" },
   { id: "vendor-file", label: "Vendor File", href: "/uploads/vendors", roles: ["AP"], category: "Files" },
+  { id: "audit-log-setup", label: "Audit Log", href: "/settings/audit-log", roles: ["AP"], category: "Setup" },
   { id: "branding", label: "Branding", href: "/settings/branding", roles: ["AP"], category: "Setup" },
   { id: "dashboard-boxes", label: "Dashboard Boxes", href: "/settings/dashboard-boxes", roles: ["AP"], category: "Setup" },
   { id: "decision-types", label: "Decision Types", href: "/settings/decisions", roles: ["AP"], category: "Setup" },
@@ -69,20 +70,21 @@ export function defaultMenuSettings(): MenuSettings {
       menuGroup("invoices", "Invoices", 4, ["AP"], invoiceMenuLinks()),
       menuLink("reports", 5),
       menuGroup("setup", "Setup", 6, ["AP"], [
-        menuLink("branding", 1),
-        menuLink("dashboard-boxes", 2),
-        menuLink("decision-types", 3),
-        menuLink("department-emails", 4),
-        menuLink("email-templates", 5),
-        menuLink("environment", 6),
-        menuLink("escalation-schedules", 7),
-        menuLink("holidays-business-days", 8),
-        menuLink("invoice-fields", 9),
-        menuLink("menu-setup", 10),
-        menuLink("organization-escalation-contacts", 11),
-        menuLink("po-validation", 12),
-        menuLink("scheduler-runtime", 13),
-        menuLink("statuses", 14),
+        menuLink("audit-log-setup", 1),
+        menuLink("branding", 2),
+        menuLink("dashboard-boxes", 3),
+        menuLink("decision-types", 4),
+        menuLink("department-emails", 5),
+        menuLink("email-templates", 6),
+        menuLink("environment", 7),
+        menuLink("escalation-schedules", 8),
+        menuLink("holidays-business-days", 9),
+        menuLink("invoice-fields", 10),
+        menuLink("menu-setup", 11),
+        menuLink("organization-escalation-contacts", 12),
+        menuLink("po-validation", 13),
+        menuLink("scheduler-runtime", 14),
+        menuLink("statuses", 15),
       ]),
       menuLink("department-dashboard", 7),
     ],
@@ -113,7 +115,7 @@ export function normalizeMenuSettings(settings: MenuSettings | undefined): MenuS
   }
   const setupGroup = items.find((item) => item.id === "setup" && item.type === "group");
   if (setupGroup) {
-    for (const targetId of ["dashboard-boxes", "po-validation"]) {
+    for (const targetId of ["audit-log-setup", "dashboard-boxes", "po-validation"]) {
       const target = menuTargetById(targetId);
       if (!target) continue;
       if (flattenMenuItems(items).some((item) => item.href === target.href)) continue;

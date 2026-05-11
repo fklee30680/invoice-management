@@ -34,6 +34,11 @@ import {
   findDuplicateInvoices,
 } from "./duplicate-invoices";
 import {
+  defaultAuditLogSettings,
+  isAuditLogFilterField,
+  normalizeAuditLogSettings,
+} from "./audit-log";
+import {
   DEFAULT_INVOICE_FIELDS,
   invoiceFieldEnabled,
   normalizeInvoiceFields,
@@ -3797,6 +3802,63 @@ export async function markInvoiceDuplicateReviewed(formData: FormData) {
   revalidatePath("/reports");
   revalidatePath("/files/payment-file");
   revalidatePath(`/review/${invoiceId}`);
+}
+
+export async function updateAuditLogSettings(formData: FormData) {
+  const user = await requireApUser();
+  const retentionYears = Number(value(formData, "retentionYears"));
+  if (!Number.isFinite(retentionYears) || retentionYears < 3 || retentionYears > 25) {
+    redirect("/settings/audit-log?error=invalid-retention");
+  }
+
+  const enabledFilterFields = formData
+    .getAll("enabledFilterFields")
+    .map((item) => String(item))
+    .filter(isAuditLogFilterField);
+
+  if (enabledFilterFields.length === 0) {
+    redirect("/settings/audit-log?error=filters-required");
+  }
+
+  const settings = normalizeAuditLogSettings({
+    retentionYears,
+    retainSecurityEventsPermanently: checkbox(formData, "retainSecurityEventsPermanently"),
+    retainInvoiceEventsPermanently: checkbox(formData, "retainInvoiceEventsPermanently"),
+    retainSetupEventsPermanently: checkbox(formData, "retainSetupEventsPermanently"),
+    allowManualPurge: checkbox(formData, "allowManualPurge"),
+    enabledFilterFields,
+  });
+
+  await mutateData((data) => {
+    data.auditLogSettings = settings;
+    addAudit(data, {
+      actor: user.name || user.email || "AP",
+      type: "audit_log_settings_updated",
+      message: "Updated audit log settings.",
+    });
+  });
+
+  revalidatePath("/settings/audit-log");
+  revalidatePath("/audit");
+  redirect("/settings/audit-log?saved=1");
+}
+
+export async function restoreAuditLogSettings(_formData: FormData) {
+  void _formData;
+  const user = await requireApUser();
+
+  await mutateData((data) => {
+    data.auditLogSettings = defaultAuditLogSettings();
+    addAudit(data, {
+      actor: user.name || user.email || "AP",
+      type: "audit_log_settings_restored",
+      message: "Restored default audit log settings.",
+    });
+  });
+
+  revalidatePath("/settings/audit-log");
+  revalidatePath("/audit");
+  redirect("/settings/audit-log?restored=1");
 }
 
 export async function deleteInvoice(formData: FormData) {

@@ -1,4 +1,10 @@
-import type { AppData, AuditEvent, AuditLogSettings, Invoice } from "./types";
+import type {
+  AppData,
+  AuditEvent,
+  AuditLogFilterField,
+  AuditLogSettings,
+  Invoice,
+} from "./types";
 import { normalizePoNumber } from "./utils";
 
 export type AuditLogSortKey =
@@ -19,6 +25,7 @@ export type AuditLogFilters = {
   auditTo: string;
   departmentId: string;
   vendor: string;
+  vendorNumber: string;
   invoiceDateFrom: string;
   invoiceDateTo: string;
   amountMin: string;
@@ -27,6 +34,10 @@ export type AuditLogFilters = {
   invoiceNumber: string;
   actor: string;
   type: string;
+  status: string;
+  ocrProvider: string;
+  apAttention: string;
+  paymentProcessed: string;
   q: string;
 };
 
@@ -64,11 +75,45 @@ export const auditLogSortKeys: AuditLogSortKey[] = [
 
 export const auditLogPageSizes = [25, 50, 100, 250];
 
+export const auditLogFilterFields: Array<{ key: AuditLogFilterField; label: string }> = [
+  { key: "auditDate", label: "Audit Date" },
+  { key: "actor", label: "Actor" },
+  { key: "eventType", label: "Event Type" },
+  { key: "department", label: "Department" },
+  { key: "vendor", label: "Vendor" },
+  { key: "vendorNumber", label: "Vendor Number" },
+  { key: "invoiceNumber", label: "Invoice Number" },
+  { key: "invoiceDate", label: "Invoice Date" },
+  { key: "amount", label: "Amount" },
+  { key: "poNumber", label: "PO Number" },
+  { key: "status", label: "Invoice Status" },
+  { key: "messageSearch", label: "Message Search" },
+  { key: "ocrProvider", label: "OCR Provider" },
+  { key: "apAttention", label: "AP Attention" },
+  { key: "paymentProcessed", label: "Payment Processed" },
+];
+
+export const defaultAuditLogFilterFields: AuditLogFilterField[] = [
+  "auditDate",
+  "department",
+  "vendor",
+  "invoiceNumber",
+  "invoiceDate",
+  "amount",
+  "poNumber",
+  "actor",
+  "eventType",
+  "messageSearch",
+];
+
+const validFilterFields = new Set(auditLogFilterFields.map((field) => field.key));
+
 const defaultFilters: AuditLogFilters = {
   auditFrom: "",
   auditTo: "",
   departmentId: "",
   vendor: "",
+  vendorNumber: "",
   invoiceDateFrom: "",
   invoiceDateTo: "",
   amountMin: "",
@@ -77,6 +122,10 @@ const defaultFilters: AuditLogFilters = {
   invoiceNumber: "",
   actor: "",
   type: "",
+  status: "",
+  ocrProvider: "",
+  apAttention: "",
+  paymentProcessed: "",
   q: "",
 };
 
@@ -84,23 +133,37 @@ export function defaultAuditLogSettings(): AuditLogSettings {
   return {
     retentionYears: 7,
     retainSecurityEventsPermanently: true,
-    retainInvoiceEventsPermanently: true,
+    retainInvoiceEventsPermanently: false,
+    retainSetupEventsPermanently: true,
     allowManualPurge: false,
+    enabledFilterFields: defaultAuditLogFilterFields,
   };
+}
+
+export function isAuditLogFilterField(value: string): value is AuditLogFilterField {
+  return validFilterFields.has(value as AuditLogFilterField);
 }
 
 export function normalizeAuditLogSettings(
   settings: Partial<AuditLogSettings> | undefined,
 ): AuditLogSettings {
   const defaults = defaultAuditLogSettings();
-  const retentionYears = Math.max(Number(settings?.retentionYears) || defaults.retentionYears, 3);
+  const rawRetentionYears = Number(settings?.retentionYears);
+  const retentionYears = Number.isFinite(rawRetentionYears)
+    ? Math.min(Math.max(rawRetentionYears, 3), 25)
+    : defaults.retentionYears;
+  const enabledFilterFields = (settings?.enabledFilterFields || []).filter(isAuditLogFilterField);
   return {
     retentionYears,
     retainSecurityEventsPermanently:
       settings?.retainSecurityEventsPermanently ?? defaults.retainSecurityEventsPermanently,
     retainInvoiceEventsPermanently:
       settings?.retainInvoiceEventsPermanently ?? defaults.retainInvoiceEventsPermanently,
+    retainSetupEventsPermanently:
+      settings?.retainSetupEventsPermanently ?? defaults.retainSetupEventsPermanently,
     allowManualPurge: settings?.allowManualPurge ?? defaults.allowManualPurge,
+    enabledFilterFields:
+      enabledFilterFields.length > 0 ? enabledFilterFields : defaults.enabledFilterFields,
   };
 }
 
@@ -116,27 +179,81 @@ function numberParam(params: SearchParamsLike, key: string, fallback: number) {
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
 }
 
-export function auditLogQueryFromSearchParams(params: SearchParamsLike): AuditLogQuery {
+export function auditLogEnabledFilterFields(settings: AuditLogSettings | undefined) {
+  return normalizeAuditLogSettings(settings).enabledFilterFields;
+}
+
+export function auditLogFilterEnabled(
+  settings: AuditLogSettings | undefined,
+  field: AuditLogFilterField,
+) {
+  return auditLogEnabledFilterFields(settings).includes(field);
+}
+
+function filterKeysForField(field: AuditLogFilterField): Array<keyof AuditLogFilters> {
+  switch (field) {
+    case "auditDate":
+      return ["auditFrom", "auditTo"];
+    case "eventType":
+      return ["type"];
+    case "invoiceDate":
+      return ["invoiceDateFrom", "invoiceDateTo"];
+    case "amount":
+      return ["amountMin", "amountMax"];
+    case "messageSearch":
+      return ["q"];
+    case "department":
+      return ["departmentId"];
+    default:
+      return [field];
+  }
+}
+
+export function applyEnabledAuditLogFilters(
+  filters: AuditLogFilters,
+  settings: AuditLogSettings | undefined,
+): AuditLogFilters {
+  const enabled = new Set(auditLogEnabledFilterFields(settings));
+  const next = { ...defaultFilters };
+  for (const field of auditLogFilterFields) {
+    if (!enabled.has(field.key)) continue;
+    for (const filterKey of filterKeysForField(field.key)) {
+      next[filterKey] = filters[filterKey];
+    }
+  }
+  return next;
+}
+
+export function auditLogQueryFromSearchParams(
+  params: SearchParamsLike,
+  settings?: AuditLogSettings,
+): AuditLogQuery {
   const sortValue = firstParam(params, "sort") as AuditLogSortKey;
   const directionValue = firstParam(params, "direction") as AuditLogDirection;
   const pageSizeValue = numberParam(params, "pageSize", 50);
+  const filters: AuditLogFilters = {
+    ...defaultFilters,
+    auditFrom: firstParam(params, "auditFrom"),
+    auditTo: firstParam(params, "auditTo"),
+    departmentId: firstParam(params, "departmentId"),
+    vendor: firstParam(params, "vendor"),
+    vendorNumber: firstParam(params, "vendorNumber"),
+    invoiceDateFrom: firstParam(params, "invoiceDateFrom"),
+    invoiceDateTo: firstParam(params, "invoiceDateTo"),
+    amountMin: firstParam(params, "amountMin"),
+    amountMax: firstParam(params, "amountMax"),
+    poNumber: firstParam(params, "poNumber"),
+    invoiceNumber: firstParam(params, "invoiceNumber"),
+    actor: firstParam(params, "actor"),
+    type: firstParam(params, "type"),
+    status: firstParam(params, "status"),
+    ocrProvider: firstParam(params, "ocrProvider"),
+    apAttention: firstParam(params, "apAttention"),
+    paymentProcessed: firstParam(params, "paymentProcessed"),
+    q: firstParam(params, "q"),
+  };
   return {
-    filters: {
-      ...defaultFilters,
-      auditFrom: firstParam(params, "auditFrom"),
-      auditTo: firstParam(params, "auditTo"),
-      departmentId: firstParam(params, "departmentId"),
-      vendor: firstParam(params, "vendor"),
-      invoiceDateFrom: firstParam(params, "invoiceDateFrom"),
-      invoiceDateTo: firstParam(params, "invoiceDateTo"),
-      amountMin: firstParam(params, "amountMin"),
-      amountMax: firstParam(params, "amountMax"),
-      poNumber: firstParam(params, "poNumber"),
-      invoiceNumber: firstParam(params, "invoiceNumber"),
-      actor: firstParam(params, "actor"),
-      type: firstParam(params, "type"),
-      q: firstParam(params, "q"),
-    },
+    filters: settings ? applyEnabledAuditLogFilters(filters, settings) : filters,
     sort: auditLogSortKeys.includes(sortValue) ? sortValue : "auditDate",
     direction: directionValue === "asc" ? "asc" : "desc",
     page: numberParam(params, "page", 1),
@@ -171,6 +288,11 @@ export function auditEventInvoice(data: AppData, event: AuditEvent) {
 export function auditEventDepartment(data: AppData, invoice: Invoice | undefined) {
   if (!invoice?.departmentId) return undefined;
   return data.departments.find((department) => department.id === invoice.departmentId);
+}
+
+export function auditEventExtraction(data: AppData, invoice: Invoice | undefined) {
+  if (!invoice?.extractionId) return undefined;
+  return data.invoiceExtractions.find((extraction) => extraction.id === invoice.extractionId);
 }
 
 function lower(value: string | undefined) {
@@ -213,14 +335,17 @@ function matchesAmountRange(value: string, min: string, max: string) {
 
 export function filterAuditEvents(data: AppData, filters: AuditLogFilters) {
   const vendor = lower(filters.vendor);
+  const vendorNumber = lower(filters.vendorNumber);
   const poNumber = normalizePoNumber(filters.poNumber || "");
   const invoiceNumber = lower(filters.invoiceNumber);
   const actor = lower(filters.actor);
+  const status = lower(filters.status);
   const q = lower(filters.q);
 
   return data.auditEvents.filter((event) => {
     const invoice = auditEventInvoice(data, event);
     const department = auditEventDepartment(data, invoice);
+    const extraction = auditEventExtraction(data, invoice);
 
     if (!matchesDateRange(dateOnly(event.createdAt), filters.auditFrom, filters.auditTo)) {
       return false;
@@ -230,11 +355,11 @@ export function filterAuditEvents(data: AppData, filters: AuditLogFilters) {
     if (
       vendor &&
       invoice &&
-      !lower(invoice.vendorName).includes(vendor) &&
-      !lower(invoice.vendorNumber).includes(vendor)
+      !lower(invoice.vendorName).includes(vendor)
     ) {
       return false;
     }
+    if (vendorNumber && !lower(invoice?.vendorNumber).includes(vendorNumber)) return false;
     if (!matchesDateRange(invoice?.invoiceDate || "", filters.invoiceDateFrom, filters.invoiceDateTo)) {
       return false;
     }
@@ -245,6 +370,12 @@ export function filterAuditEvents(data: AppData, filters: AuditLogFilters) {
     if (invoiceNumber && !lower(invoice?.invoiceNumber).includes(invoiceNumber)) return false;
     if (actor && !lower(event.actor).includes(actor)) return false;
     if (filters.type && event.type !== filters.type) return false;
+    if (status && !lower(invoice?.status).includes(status)) return false;
+    if (filters.ocrProvider && extraction?.provider !== filters.ocrProvider) return false;
+    if (filters.apAttention === "yes" && invoice?.requiresApAttention !== true) return false;
+    if (filters.apAttention === "no" && invoice?.requiresApAttention === true) return false;
+    if (filters.paymentProcessed === "yes" && invoice?.paymentProcessed !== true) return false;
+    if (filters.paymentProcessed === "no" && invoice?.paymentProcessed === true) return false;
     if (q) {
       const haystack = [
         event.message,

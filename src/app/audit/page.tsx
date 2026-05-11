@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   auditEventDepartment,
   auditEventInvoice,
+  auditLogFilterEnabled,
   auditLogPageSizes,
   auditLogQueryFromSearchParams,
   auditLogQueryToSearchParams,
@@ -110,6 +111,10 @@ function RetentionSummary({ data }: { data: AppData }) {
             Invoice events:{" "}
             {settings.retainInvoiceEventsPermanently ? "retained permanently" : "standard retention"}
           </span>
+          <span>
+            Setup changes:{" "}
+            {settings.retainSetupEventsPermanently ? "retained permanently" : "standard retention"}
+          </span>
           <span>Manual purge: {settings.allowManualPurge ? "allowed" : "disabled"}</span>
         </div>
       </div>
@@ -120,18 +125,22 @@ function RetentionSummary({ data }: { data: AppData }) {
 export default async function AuditPage({ searchParams }: AuditPageProps) {
   await requireApUser();
   const data = await readData();
-  const query = auditLogQueryFromSearchParams((await searchParams) || {});
+  const settings = data.auditLogSettings;
+  const query = auditLogQueryFromSearchParams((await searchParams) || {}, settings);
   const filteredEvents = filterAuditEvents(data, query.filters);
   const sortedEvents = sortAuditEvents(data, filteredEvents, query.sort, query.direction);
   const page = paginateAuditEvents(sortedEvents, query.page, query.pageSize);
   const actorOptions = uniqueSorted(data.auditEvents.map((event) => event.actor));
   const typeOptions = uniqueSorted(data.auditEvents.map((event) => event.type));
+  const statusOptions = uniqueSorted(data.invoices.map((invoice) => invoice.status));
+  const hasFilter = (field: Parameters<typeof auditLogFilterEnabled>[1]) =>
+    auditLogFilterEnabled(settings, field);
   const activeFilterCount = Object.values(query.filters).filter(Boolean).length;
 
   return (
     <main className="min-h-screen px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl space-y-6">
-        <header className="border-b border-[var(--line)] pb-5">
+        <header className="flex flex-col gap-4 border-b border-[var(--line)] pb-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-normal">Audit Log</h1>
             <p className="mt-2 max-w-3xl text-sm text-[var(--muted)]">
@@ -139,6 +148,12 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
               changes, and deletion activity.
             </p>
           </div>
+          <Link
+            className="focus-ring inline-flex self-start border border-[var(--line)] bg-white px-3 py-2 text-sm font-semibold hover:bg-slate-100 sm:self-auto"
+            href="/settings/audit-log"
+          >
+            Configure Audit Log Filters
+          </Link>
         </header>
 
         <section className="border border-[var(--line)] bg-[var(--panel)]">
@@ -180,135 +195,228 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
               <form action="/audit" className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <input name="sort" type="hidden" value={query.sort} />
             <input name="direction" type="hidden" value={query.direction} />
-            <label className={filterLabelClass}>
-              Department
-              <select
-                className={filterInputClass}
-                defaultValue={query.filters.departmentId}
-                name="departmentId"
-              >
-                <option value="">All departments</option>
-                {data.departments.map((department) => (
-                  <option key={department.id} value={department.id}>
-                    {department.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className={filterLabelClass}>
-              Vendor
-              <input
-                className={filterInputClass}
-                defaultValue={query.filters.vendor}
-                name="vendor"
-                placeholder="Vendor"
-              />
-            </label>
-            <label className={filterLabelClass}>
-              Invoice Date From
-              <input
-                className={filterInputClass}
-                defaultValue={query.filters.invoiceDateFrom}
-                name="invoiceDateFrom"
-                type="date"
-              />
-            </label>
-            <label className={filterLabelClass}>
-              Invoice Date To
-              <input
-                className={filterInputClass}
-                defaultValue={query.filters.invoiceDateTo}
-                name="invoiceDateTo"
-                type="date"
-              />
-            </label>
-            <label className={filterLabelClass}>
-              Amount Min
-              <input
-                className={filterInputClass}
-                defaultValue={query.filters.amountMin}
-                inputMode="decimal"
-                name="amountMin"
-                placeholder="0.00"
-              />
-            </label>
-            <label className={filterLabelClass}>
-              Amount Max
-              <input
-                className={filterInputClass}
-                defaultValue={query.filters.amountMax}
-                inputMode="decimal"
-                name="amountMax"
-                placeholder="0.00"
-              />
-            </label>
-            <label className={filterLabelClass}>
-              PO Number
-              <input
-                className={filterInputClass}
-                defaultValue={query.filters.poNumber}
-                name="poNumber"
-                placeholder="PO number"
-              />
-            </label>
-            <label className={filterLabelClass}>
-              Invoice Number
-              <input
-                className={filterInputClass}
-                defaultValue={query.filters.invoiceNumber}
-                name="invoiceNumber"
-                placeholder="Invoice number"
-              />
-            </label>
-            <label className={filterLabelClass}>
-              Audit Date From
-              <input
-                className={filterInputClass}
-                defaultValue={query.filters.auditFrom}
-                name="auditFrom"
-                type="date"
-              />
-            </label>
-            <label className={filterLabelClass}>
-              Audit Date To
-              <input
-                className={filterInputClass}
-                defaultValue={query.filters.auditTo}
-                name="auditTo"
-                type="date"
-              />
-            </label>
-            <label className={filterLabelClass}>
-              Actor
-              <select className={filterInputClass} defaultValue={query.filters.actor} name="actor">
-                <option value="">All actors</option>
-                {actorOptions.map((actor) => (
-                  <option key={actor} value={actor}>
-                    {actor}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className={filterLabelClass}>
-              Event Type
-              <select className={filterInputClass} defaultValue={query.filters.type} name="type">
-                <option value="">All types</option>
-                {typeOptions.map((type) => (
-                  <option key={type} value={type}>
-                    {type}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className={`${filterLabelClass} md:col-span-2 xl:col-span-3`}>
-              Search
-              <input
-                className={filterInputClass}
-                defaultValue={query.filters.q}
-                name="q"
-                placeholder="Search message, actor, type, vendor, invoice, PO, or department"
-              />
-            </label>
+            {hasFilter("department") ? (
+              <label className={filterLabelClass}>
+                Department
+                <select
+                  className={filterInputClass}
+                  defaultValue={query.filters.departmentId}
+                  name="departmentId"
+                >
+                  <option value="">All departments</option>
+                  {data.departments.map((department) => (
+                    <option key={department.id} value={department.id}>
+                      {department.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            {hasFilter("vendor") ? (
+              <label className={filterLabelClass}>
+                Vendor
+                <input
+                  className={filterInputClass}
+                  defaultValue={query.filters.vendor}
+                  name="vendor"
+                  placeholder="Vendor"
+                />
+              </label>
+            ) : null}
+            {hasFilter("vendorNumber") ? (
+              <label className={filterLabelClass}>
+                Vendor Number
+                <input
+                  className={filterInputClass}
+                  defaultValue={query.filters.vendorNumber}
+                  name="vendorNumber"
+                  placeholder="Vendor number"
+                />
+              </label>
+            ) : null}
+            {hasFilter("invoiceDate") ? (
+              <>
+                <label className={filterLabelClass}>
+                  Invoice Date From
+                  <input
+                    className={filterInputClass}
+                    defaultValue={query.filters.invoiceDateFrom}
+                    name="invoiceDateFrom"
+                    type="date"
+                  />
+                </label>
+                <label className={filterLabelClass}>
+                  Invoice Date To
+                  <input
+                    className={filterInputClass}
+                    defaultValue={query.filters.invoiceDateTo}
+                    name="invoiceDateTo"
+                    type="date"
+                  />
+                </label>
+              </>
+            ) : null}
+            {hasFilter("amount") ? (
+              <>
+                <label className={filterLabelClass}>
+                  Amount Min
+                  <input
+                    className={filterInputClass}
+                    defaultValue={query.filters.amountMin}
+                    inputMode="decimal"
+                    name="amountMin"
+                    placeholder="0.00"
+                  />
+                </label>
+                <label className={filterLabelClass}>
+                  Amount Max
+                  <input
+                    className={filterInputClass}
+                    defaultValue={query.filters.amountMax}
+                    inputMode="decimal"
+                    name="amountMax"
+                    placeholder="0.00"
+                  />
+                </label>
+              </>
+            ) : null}
+            {hasFilter("poNumber") ? (
+              <label className={filterLabelClass}>
+                PO Number
+                <input
+                  className={filterInputClass}
+                  defaultValue={query.filters.poNumber}
+                  name="poNumber"
+                  placeholder="PO number"
+                />
+              </label>
+            ) : null}
+            {hasFilter("invoiceNumber") ? (
+              <label className={filterLabelClass}>
+                Invoice Number
+                <input
+                  className={filterInputClass}
+                  defaultValue={query.filters.invoiceNumber}
+                  name="invoiceNumber"
+                  placeholder="Invoice number"
+                />
+              </label>
+            ) : null}
+            {hasFilter("auditDate") ? (
+              <>
+                <label className={filterLabelClass}>
+                  Audit Date From
+                  <input
+                    className={filterInputClass}
+                    defaultValue={query.filters.auditFrom}
+                    name="auditFrom"
+                    type="date"
+                  />
+                </label>
+                <label className={filterLabelClass}>
+                  Audit Date To
+                  <input
+                    className={filterInputClass}
+                    defaultValue={query.filters.auditTo}
+                    name="auditTo"
+                    type="date"
+                  />
+                </label>
+              </>
+            ) : null}
+            {hasFilter("actor") ? (
+              <label className={filterLabelClass}>
+                Actor
+                <select className={filterInputClass} defaultValue={query.filters.actor} name="actor">
+                  <option value="">All actors</option>
+                  {actorOptions.map((actor) => (
+                    <option key={actor} value={actor}>
+                      {actor}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            {hasFilter("eventType") ? (
+              <label className={filterLabelClass}>
+                Event Type
+                <select className={filterInputClass} defaultValue={query.filters.type} name="type">
+                  <option value="">All types</option>
+                  {typeOptions.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            {hasFilter("status") ? (
+              <label className={filterLabelClass}>
+                Invoice Status
+                <select className={filterInputClass} defaultValue={query.filters.status} name="status">
+                  <option value="">All statuses</option>
+                  {statusOptions.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            {hasFilter("ocrProvider") ? (
+              <label className={filterLabelClass}>
+                OCR Provider
+                <select
+                  className={filterInputClass}
+                  defaultValue={query.filters.ocrProvider}
+                  name="ocrProvider"
+                >
+                  <option value="">All providers</option>
+                  <option value="azure_document_intelligence">Azure Document Intelligence</option>
+                  <option value="embedded_pdf_text">Embedded PDF Text</option>
+                  <option value="filename_fallback">Filename Fallback</option>
+                </select>
+              </label>
+            ) : null}
+            {hasFilter("apAttention") ? (
+              <label className={filterLabelClass}>
+                AP Attention
+                <select
+                  className={filterInputClass}
+                  defaultValue={query.filters.apAttention}
+                  name="apAttention"
+                >
+                  <option value="">All</option>
+                  <option value="yes">Requires AP attention</option>
+                  <option value="no">No AP attention</option>
+                </select>
+              </label>
+            ) : null}
+            {hasFilter("paymentProcessed") ? (
+              <label className={filterLabelClass}>
+                Payment Processed
+                <select
+                  className={filterInputClass}
+                  defaultValue={query.filters.paymentProcessed}
+                  name="paymentProcessed"
+                >
+                  <option value="">All</option>
+                  <option value="yes">Processed</option>
+                  <option value="no">Not processed</option>
+                </select>
+              </label>
+            ) : null}
+            {hasFilter("messageSearch") ? (
+              <label className={`${filterLabelClass} md:col-span-2 xl:col-span-3`}>
+                Search
+                <input
+                  className={filterInputClass}
+                  defaultValue={query.filters.q}
+                  name="q"
+                  placeholder="Search message, actor, type, vendor, invoice, PO, or department"
+                />
+              </label>
+            ) : null}
             <label className={filterLabelClass}>
               Page Size
               <select className={filterInputClass} defaultValue={query.pageSize} name="pageSize">

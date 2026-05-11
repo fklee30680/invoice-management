@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  auditLogQueryFromSearchParams,
   auditLogCsv,
+  defaultAuditLogFilterFields,
   defaultAuditLogSettings,
   filterAuditEvents,
   normalizeAuditLogSettings,
@@ -158,6 +160,7 @@ const emptyFilters = {
   auditTo: "",
   departmentId: "",
   vendor: "",
+  vendorNumber: "",
   invoiceDateFrom: "",
   invoiceDateTo: "",
   amountMin: "",
@@ -166,6 +169,10 @@ const emptyFilters = {
   invoiceNumber: "",
   actor: "",
   type: "",
+  status: "",
+  ocrProvider: "",
+  apAttention: "",
+  paymentProcessed: "",
   q: "",
 };
 
@@ -232,11 +239,35 @@ describe("audit log helpers", () => {
   });
 
   it("normalizes retention settings without deleting records", () => {
+    const normalized = normalizeAuditLogSettings({
+      retentionYears: 40,
+      enabledFilterFields: ["vendor", "invalid" as never],
+    });
+    assert.deepEqual(normalized, {
+      ...defaultAuditLogSettings(),
+      retentionYears: 25,
+      enabledFilterFields: ["vendor"],
+    });
     assert.deepEqual(normalizeAuditLogSettings({ retentionYears: 1 }), {
       retentionYears: 3,
       retainSecurityEventsPermanently: true,
-      retainInvoiceEventsPermanently: true,
+      retainInvoiceEventsPermanently: false,
+      retainSetupEventsPermanently: true,
       allowManualPurge: false,
+      enabledFilterFields: defaultAuditLogFilterFields,
     });
+  });
+
+  it("ignores query params for disabled filters", () => {
+    const query = auditLogQueryFromSearchParams(
+      new URLSearchParams("vendor=northstar&actor=AP&q=upload"),
+      {
+        ...defaultAuditLogSettings(),
+        enabledFilterFields: ["actor"],
+      },
+    );
+    assert.equal(query.filters.actor, "AP");
+    assert.equal(query.filters.vendor, "");
+    assert.equal(query.filters.q, "");
   });
 });

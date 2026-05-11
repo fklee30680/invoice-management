@@ -494,11 +494,30 @@ export type AuditEvent = {
   createdAt: string;
 };
 
+export type AuditLogFilterField =
+  | "auditDate"
+  | "actor"
+  | "eventType"
+  | "department"
+  | "vendor"
+  | "vendorNumber"
+  | "invoiceNumber"
+  | "invoiceDate"
+  | "amount"
+  | "poNumber"
+  | "status"
+  | "messageSearch"
+  | "ocrProvider"
+  | "apAttention"
+  | "paymentProcessed";
+
 export type AuditLogSettings = {
   retentionYears: number;
   retainSecurityEventsPermanently: boolean;
   retainInvoiceEventsPermanently: boolean;
+  retainSetupEventsPermanently: boolean;
   allowManualPurge: boolean;
+  enabledFilterFields: AuditLogFilterField[];
 };
 
 export type Invoice = {

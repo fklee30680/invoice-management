@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   await requireApUser();
   const data = await readData();
-  const query = auditLogQueryFromSearchParams(request.nextUrl.searchParams);
+  const query = auditLogQueryFromSearchParams(request.nextUrl.searchParams, data.auditLogSettings);
   const filteredEvents = filterAuditEvents(data, query.filters);
   const sortedEvents = sortAuditEvents(data, filteredEvents, query.sort, query.direction);
   const csv = auditLogCsv(data, sortedEvents);
