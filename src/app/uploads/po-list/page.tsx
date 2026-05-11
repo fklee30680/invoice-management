@@ -3,6 +3,7 @@ import {
   updatePurchaseOrder,
   uploadPoList,
 } from "@/lib/actions";
+import { CollapsibleSection } from "@/components/collapsible-section";
 import { DeletePoConfirmation } from "@/components/delete-po-confirmation";
 import { requireApUser } from "@/lib/session";
 import { readData } from "@/lib/store";
@@ -83,6 +84,8 @@ export default async function PoListUploadPage({
   const messageType = one(query.messageType);
   const search = one(query.search).toLowerCase();
   const hasResult = Object.values(result).some(Boolean);
+  const importSectionOpen =
+    hasResult || messageType === "error" || messageType === "warning";
   const filteredPurchaseOrders = data.purchaseOrders.filter((po) =>
     [po.poNumber, po.vendorName, po.vendorNumber, po.departmentName]
       .join(" ")
@@ -131,18 +134,26 @@ export default async function PoListUploadPage({
           </section>
         ) : null}
 
-        <form
-          action={uploadPoList}
-          className="space-y-4 border border-[var(--line)] bg-[var(--panel)] p-4"
+        <CollapsibleSection
+          defaultOpen={importSectionOpen}
+          summaryText={
+            hasResult
+              ? "Recent import result available"
+              : importSectionOpen
+                ? "Review message available"
+                : "Collapsed"
+          }
+          title="Import PO List"
         >
-          <div>
-            <h2 className="text-base font-semibold">Import PO List</h2>
-            <p className="mt-1 text-sm text-[var(--muted)]">
-              For column fields, enter the column header name or spreadsheet
-              column letter, such as A, B, C. Upload Date is recorded
-              automatically and is not imported from the file.
-            </p>
-          </div>
+          <form action={uploadPoList} className="space-y-4">
+            <div>
+              <h2 className="text-base font-semibold">Import PO List</h2>
+              <p className="mt-1 text-sm text-[var(--muted)]">
+                For column fields, enter the column header name or spreadsheet
+                column letter, such as A, B, C. Upload Date is recorded
+                automatically and is not imported from the file.
+              </p>
+            </div>
 
           <section>
             <h3 className="text-sm font-semibold">Import Mapping</h3>
@@ -231,7 +242,8 @@ export default async function PoListUploadPage({
               </button>
             </div>
           </section>
-        </form>
+          </form>
+        </CollapsibleSection>
 
         <section className="space-y-3">
           <div>
@@ -241,17 +253,27 @@ export default async function PoListUploadPage({
               routing.
             </p>
           </div>
-          <form className="flex max-w-lg gap-2" method="get">
-            <input
-              className="focus-ring min-h-10 flex-1 border border-[var(--line)] bg-white px-3 text-sm"
-              defaultValue={one(query.search)}
-              name="search"
-              placeholder="Search PO, vendor, vendor number, or department"
-            />
-            <button className="focus-ring border border-[var(--line)] px-4 py-2 text-sm font-semibold hover:bg-slate-100">
-              Search
-            </button>
-          </form>
+          <CollapsibleSection
+            defaultOpen={Boolean(search)}
+            summaryText={
+              search
+                ? `${filteredPurchaseOrders.length} of ${data.purchaseOrders.length} shown`
+                : "Collapsed"
+            }
+            title="Search Purchase Orders"
+          >
+            <form className="flex max-w-lg gap-2" method="get">
+              <input
+                className="focus-ring min-h-10 flex-1 border border-[var(--line)] bg-white px-3 text-sm"
+                defaultValue={one(query.search)}
+                name="search"
+                placeholder="Search PO, vendor, vendor number, or department"
+              />
+              <button className="focus-ring border border-[var(--line)] px-4 py-2 text-sm font-semibold hover:bg-slate-100">
+                Search
+              </button>
+            </form>
+          </CollapsibleSection>
 
           <div className="overflow-x-auto border border-[var(--line)] bg-[var(--panel)]">
             <table className="w-full min-w-[1120px] border-collapse text-left text-sm">

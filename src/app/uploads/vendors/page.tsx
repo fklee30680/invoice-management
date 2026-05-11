@@ -3,6 +3,7 @@ import {
   updateVendor,
   uploadVendorList,
 } from "@/lib/actions";
+import { CollapsibleSection } from "@/components/collapsible-section";
 import { DeleteVendorConfirmation } from "@/components/delete-vendor-confirmation";
 import { VendorImportMappingForm } from "@/components/vendor-import-mapping-form";
 import { requireApUser } from "@/lib/session";
@@ -54,6 +55,8 @@ export default async function VendorUploadPage({
   const messageType = one(query.messageType);
   const search = one(query.search).toLowerCase();
   const hasResult = Object.values(result).some(Boolean);
+  const importSectionOpen =
+    hasResult || messageType === "error" || messageType === "warning";
   const filteredVendors = data.vendors.filter((vendor) =>
     [
       vendor.vendorName,
@@ -108,19 +111,27 @@ export default async function VendorUploadPage({
           </section>
         ) : null}
 
-        <form
-          action={uploadVendorList}
-          className="space-y-5 border border-[var(--line)] bg-[var(--panel)] p-4"
+        <CollapsibleSection
+          defaultOpen={importSectionOpen}
+          summaryText={
+            hasResult
+              ? "Recent import result available"
+              : importSectionOpen
+                ? "Review message available"
+                : "Collapsed"
+          }
+          title="Import Vendor File"
         >
-          <div>
-            <h2 className="text-base font-semibold">Import Vendor File</h2>
-            <p className="mt-1 max-w-3xl text-sm text-[var(--muted)]">
-              Choose the file and header row, then map each vendor field to a
-              column from that row. Column selections are saved for the next
-              import. Imported blank values will not overwrite existing vendor
-              data.
-            </p>
-          </div>
+          <form action={uploadVendorList} className="space-y-5">
+            <div>
+              <h2 className="text-base font-semibold">Import Vendor File</h2>
+              <p className="mt-1 max-w-3xl text-sm text-[var(--muted)]">
+                Choose the file and header row, then map each vendor field to a
+                column from that row. Column selections are saved for the next
+                import. Imported blank values will not overwrite existing vendor
+                data.
+              </p>
+            </div>
 
           <VendorImportMappingForm settings={settings} />
 
@@ -168,7 +179,8 @@ export default async function VendorUploadPage({
               Import Vendor File
             </button>
           </section>
-        </form>
+          </form>
+        </CollapsibleSection>
 
         <section className="space-y-3">
           <div>
@@ -177,17 +189,27 @@ export default async function VendorUploadPage({
               {data.vendors.length} vendors available for invoice validation.
             </p>
           </div>
-          <form className="flex max-w-lg gap-2" method="get">
-            <input
-              className="focus-ring min-h-10 flex-1 border border-[var(--line)] bg-white px-3 text-sm"
-              defaultValue={one(query.search)}
-              name="search"
-              placeholder="Search vendor, vendor number, email, or status"
-            />
-            <button className="focus-ring border border-[var(--line)] px-4 py-2 text-sm font-semibold hover:bg-slate-100">
-              Search
-            </button>
-          </form>
+          <CollapsibleSection
+            defaultOpen={Boolean(search)}
+            summaryText={
+              search
+                ? `${filteredVendors.length} of ${data.vendors.length} shown`
+                : "Collapsed"
+            }
+            title="Search Vendors"
+          >
+            <form className="flex max-w-lg gap-2" method="get">
+              <input
+                className="focus-ring min-h-10 flex-1 border border-[var(--line)] bg-white px-3 text-sm"
+                defaultValue={one(query.search)}
+                name="search"
+                placeholder="Search vendor, vendor number, email, or status"
+              />
+              <button className="focus-ring border border-[var(--line)] px-4 py-2 text-sm font-semibold hover:bg-slate-100">
+                Search
+              </button>
+            </form>
+          </CollapsibleSection>
 
           <div className="overflow-x-auto border border-[var(--line)] bg-[var(--panel)]">
             <table className="w-full min-w-[1120px] border-collapse text-left text-sm">
