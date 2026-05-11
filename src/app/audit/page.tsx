@@ -77,7 +77,7 @@ function SortHeader({
       })}
     >
       {label}
-      {active ? <span aria-hidden="true">{query.direction === "asc" ? "↑" : "↓"}</span> : null}
+      {active ? <span aria-hidden="true">{query.direction === "asc" ? "ASC" : "DESC"}</span> : null}
     </Link>
   );
 }
@@ -126,6 +126,7 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
   const page = paginateAuditEvents(sortedEvents, query.page, query.pageSize);
   const actorOptions = uniqueSorted(data.auditEvents.map((event) => event.actor));
   const typeOptions = uniqueSorted(data.auditEvents.map((event) => event.type));
+  const activeFilterCount = Object.values(query.filters).filter(Boolean).length;
 
   return (
     <main className="min-h-screen px-4 py-6 sm:px-6 lg:px-8">
@@ -140,31 +141,43 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
           </div>
         </header>
 
-        <section className="border border-[var(--line)] bg-[var(--panel)] p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h2 className="font-semibold">Filters</h2>
-              <p className="mt-1 text-sm text-[var(--muted)]">
-                Filter audit events by audit details and related invoice fields.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Link
-                className="focus-ring inline-flex border border-[var(--line)] bg-white px-3 py-2 text-sm font-semibold hover:bg-slate-100"
-                href="/audit"
-              >
-                Clear Filters
-              </Link>
-              <Link
-                className="focus-ring inline-flex border border-[var(--accent)] bg-white px-3 py-2 text-sm font-semibold text-[var(--accent)] hover:bg-teal-50"
-                href={exportHref(query)}
-              >
-                Export CSV
-              </Link>
-            </div>
-          </div>
+        <section className="border border-[var(--line)] bg-[var(--panel)]">
+          <details open={activeFilterCount > 0}>
+            <summary className="focus-ring flex cursor-pointer list-none flex-col gap-1 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+              <span>
+                <span className="font-semibold">Filters</span>
+                <span className="ml-2 text-[var(--muted)]">
+                  {activeFilterCount > 0
+                    ? `${activeFilterCount} active filter${activeFilterCount === 1 ? "" : "s"}`
+                    : "Collapsed"}
+                </span>
+              </span>
+              <span className="text-xs font-semibold uppercase text-[var(--muted)]">
+                Expand / Collapse
+              </span>
+            </summary>
+            <div className="border-t border-[var(--line)] p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <p className="text-sm text-[var(--muted)]">
+                  Filter audit events by audit details and related invoice fields.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Link
+                    className="focus-ring inline-flex border border-[var(--line)] bg-white px-3 py-2 text-sm font-semibold hover:bg-slate-100"
+                    href="/audit"
+                  >
+                    Clear Filters
+                  </Link>
+                  <Link
+                    className="focus-ring inline-flex border border-[var(--accent)] bg-white px-3 py-2 text-sm font-semibold text-[var(--accent)] hover:bg-teal-50"
+                    href={exportHref(query)}
+                  >
+                    Export CSV
+                  </Link>
+                </div>
+              </div>
 
-          <form action="/audit" className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <form action="/audit" className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <input name="sort" type="hidden" value={query.sort} />
             <input name="direction" type="hidden" value={query.direction} />
             <label className={filterLabelClass}>
@@ -311,7 +324,9 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
                 Apply Filters
               </button>
             </div>
-          </form>
+              </form>
+            </div>
+          </details>
         </section>
 
         <RetentionSummary data={data} />
