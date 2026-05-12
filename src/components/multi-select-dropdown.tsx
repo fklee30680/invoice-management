@@ -23,6 +23,7 @@ export function MultiSelectDropdown({
   options,
   placeholder,
   summaryPluralLabel,
+  triggerClassName,
 }: {
   clearLabel?: string;
   emptyLabel: string;
@@ -36,6 +37,7 @@ export function MultiSelectDropdown({
   options: MultiSelectDropdownOption[];
   placeholder: string;
   summaryPluralLabel: string;
+  triggerClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<string[]>(initialSelected);
@@ -109,7 +111,10 @@ export function MultiSelectDropdown({
       })}
       <button
         aria-expanded={open}
-        className="focus-ring flex min-h-10 w-full items-center justify-between gap-3 border border-[var(--line)] bg-white px-3 py-2 text-left text-sm font-normal normal-case text-[var(--foreground)]"
+        className={
+          triggerClassName ||
+          "focus-ring flex min-h-10 w-full items-center justify-between gap-3 border border-[var(--line)] bg-white px-3 py-2 text-left text-sm font-normal normal-case text-[var(--foreground)]"
+        }
         onClick={() => setOpen((value) => !value)}
         type="button"
       >

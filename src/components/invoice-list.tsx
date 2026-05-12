@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CollapsibleSection } from "@/components/collapsible-section";
 import { DeleteInvoiceConfirmation } from "@/components/delete-invoice-confirmation";
 import { MultiSelectDropdown } from "@/components/multi-select-dropdown";
 import { invoiceFieldEnabled } from "@/lib/invoice-fields";
@@ -28,6 +29,13 @@ export type InvoiceSortKey =
   | "received";
 
 export type InvoiceSortDirection = "asc" | "desc";
+
+const filterLabelClass = "text-xs font-semibold uppercase text-[var(--muted)]";
+const filterControlClass =
+  "focus-ring mt-1 min-h-11 w-full border border-[var(--line)] bg-white px-3 text-sm font-normal normal-case text-[var(--foreground)]";
+const multiSelectTriggerClass =
+  "focus-ring flex min-h-11 w-full items-center justify-between gap-3 border border-[var(--line)] bg-white px-3 py-2 text-left text-sm font-normal normal-case text-[var(--foreground)]";
+const filterButtonClass = "focus-ring min-h-11 px-4 text-sm font-semibold";
 
 export function one(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value || "";
@@ -216,90 +224,116 @@ export function FilterBar({
     filters.statuses.length === 0
       ? "All statuses"
       : `${filters.statuses.length} selected`;
+  const activeFilterCount =
+    (filters.search ? 1 : 0) +
+    (filters.decisionType ? 1 : 0) +
+    filters.statuses.length +
+    filters.departments.length;
+  const summaryText =
+    activeFilterCount > 0
+      ? `${activeFilterCount} active filter${activeFilterCount === 1 ? "" : "s"}`
+      : "Collapsed";
 
   return (
-    <form
-      className={`grid gap-4 border border-[var(--line)] bg-[var(--panel)] p-4 ${
-        showDecisionTypeFilter
-          ? "xl:grid-cols-[1fr_2fr_220px_220px_auto_auto]"
-          : "xl:grid-cols-[1fr_2fr_220px_auto_auto]"
-      }`}
-      key={filterKey || "clear"}
+    <CollapsibleSection
+      defaultOpen={activeFilterCount > 0}
+      summaryText={summaryText}
+      title="Filters"
     >
-      <input name="sort" type="hidden" value={filters.sort} />
-      <input name="direction" type="hidden" value={filters.direction} />
-      <input
-        className="focus-ring min-h-10 border border-[var(--line)] bg-white px-3 text-sm"
-        name="search"
-        placeholder="Search vendor, PO, invoice, status"
-        defaultValue={filters.search}
-      />
-      <details className="relative text-xs font-semibold uppercase text-[var(--muted)]">
-        <summary className="focus-ring mt-1 flex min-h-10 cursor-pointer list-none items-center justify-between border border-[var(--line)] bg-white px-3 text-sm font-normal normal-case text-[var(--foreground)]">
-          <span>{statusSummary}</span>
-          <span aria-hidden="true">v</span>
-        </summary>
-        <div className="absolute z-10 mt-1 grid max-h-64 w-full min-w-64 gap-2 overflow-auto border border-[var(--line)] bg-white p-3 shadow-lg">
-          {statusOptions.map((status) => (
-            <label className="flex items-center gap-2 text-xs font-medium normal-case text-[var(--foreground)]" key={status.id}>
-              <input
-                className="h-4 w-4 accent-[var(--accent)]"
-                defaultChecked={filters.statuses.includes(status.label)}
-                name="status"
-                type="checkbox"
-                value={status.label}
-              />
-              {status.label}
-            </label>
-          ))}
-        </div>
-      </details>
-      <label className="text-xs font-semibold uppercase text-[var(--muted)]">
-        Department
-        <div className="mt-1">
-          <MultiSelectDropdown
-            emptyLabel="No departments are available."
-            initialSelected={filters.departments}
-            name="department"
-            options={data.departments.map((department) => ({
-              id: department.id,
-              label: department.name,
-            }))}
-            placeholder="All departments"
-            summaryPluralLabel="departments"
-          />
-        </div>
-      </label>
-      {showDecisionTypeFilter ? (
-        <label className="text-xs font-semibold uppercase text-[var(--muted)]">
-          Decision Type
-          <select
-            className="focus-ring mt-1 min-h-10 w-full border border-[var(--line)] bg-white px-3 text-sm font-normal normal-case text-[var(--foreground)]"
-            defaultValue={filters.decisionType}
-            name="decisionType"
-          >
-            <option value="">All Decision Types</option>
-            {data.departmentDecisions.map((decision) => (
-              <option key={decision.id} value={decision.label}>
-                {decision.label}
-                {decision.active ? "" : " (inactive)"}
-              </option>
-            ))}
-          </select>
-        </label>
-      ) : null}
-      <button className="focus-ring bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700">
-        Filter
-      </button>
-      <Link
-        className="focus-ring inline-flex items-center justify-center border border-[var(--line)] bg-white px-4 py-2 text-sm font-semibold hover:bg-slate-100"
-        href={clearHref}
-        prefetch={false}
-        replace
+      <form
+        className={`grid gap-4 md:grid-cols-2 ${
+          showDecisionTypeFilter
+            ? "xl:grid-cols-[minmax(240px,1fr)_minmax(220px,1fr)_minmax(220px,1fr)_minmax(220px,1fr)_auto]"
+            : "xl:grid-cols-[minmax(240px,1fr)_minmax(220px,1fr)_minmax(220px,1fr)_auto]"
+        }`}
+        key={filterKey || "clear"}
       >
-        Clear Filters
-      </Link>
-    </form>
+        <input name="sort" type="hidden" value={filters.sort} />
+        <input name="direction" type="hidden" value={filters.direction} />
+        <label className={filterLabelClass}>
+          Search
+          <input
+            className={filterControlClass}
+            name="search"
+            placeholder="Search vendor, PO, invoice, status"
+            defaultValue={filters.search}
+          />
+        </label>
+        <div className={filterLabelClass}>
+          Status
+          <details className="relative">
+            <summary className={`${filterControlClass} flex cursor-pointer list-none items-center justify-between`}>
+              <span>{statusSummary}</span>
+              <span aria-hidden="true">v</span>
+            </summary>
+            <div className="absolute z-10 mt-1 grid max-h-64 w-full min-w-64 gap-2 overflow-auto border border-[var(--line)] bg-white p-3 shadow-lg">
+              {statusOptions.map((status) => (
+                <label className="flex items-center gap-2 text-xs font-medium normal-case text-[var(--foreground)]" key={status.id}>
+                  <input
+                    className="h-4 w-4 accent-[var(--accent)]"
+                    defaultChecked={filters.statuses.includes(status.label)}
+                    name="status"
+                    type="checkbox"
+                    value={status.label}
+                  />
+                  {status.label}
+                </label>
+              ))}
+            </div>
+          </details>
+        </div>
+        <div>
+          <div className={filterLabelClass}>Department</div>
+          <div className="mt-1">
+            <MultiSelectDropdown
+              emptyLabel="No departments are available."
+              initialSelected={filters.departments}
+              name="department"
+              options={data.departments.map((department) => ({
+                id: department.id,
+                label: department.name,
+              }))}
+              placeholder="All departments"
+              summaryPluralLabel="departments"
+              triggerClassName={multiSelectTriggerClass}
+            />
+          </div>
+        </div>
+        {showDecisionTypeFilter ? (
+          <label className={filterLabelClass}>
+            Decision Type
+            <select
+              className={filterControlClass}
+              defaultValue={filters.decisionType}
+              name="decisionType"
+            >
+              <option value="">All Decision Types</option>
+              {data.departmentDecisions.map((decision) => (
+                <option key={decision.id} value={decision.label}>
+                  {decision.label}
+                  {decision.active ? "" : " (inactive)"}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        <div className="flex items-end gap-2 self-end">
+          <button
+            className={`${filterButtonClass} bg-[var(--accent)] text-white hover:bg-[var(--accent-strong)]`}
+          >
+            Filter
+          </button>
+          <Link
+            className={`${filterButtonClass} inline-flex items-center justify-center border border-[var(--line)] bg-white text-[var(--foreground)] hover:bg-slate-100`}
+            href={clearHref}
+            prefetch={false}
+            replace
+          >
+            Clear Filters
+          </Link>
+        </div>
+      </form>
+    </CollapsibleSection>
   );
 }
 
