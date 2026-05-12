@@ -187,6 +187,19 @@ function days(value: number | null) {
   return value === null ? "N/A" : `${value.toFixed(value % 1 ? 1 : 0)} days`;
 }
 
+function reportDate(value: string) {
+  const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (dateOnlyMatch) {
+    const [, year, month, day] = dateOnlyMatch;
+    return new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }).format(new Date(Number(year), Number(month) - 1, Number(day)));
+  }
+  return formatDate(value);
+}
+
 function parseJpegSize(bytes: Buffer) {
   let offset = 2;
   while (offset < bytes.length) {
@@ -231,11 +244,25 @@ export async function buildReportPdf({
 }) {
   const logo = await logoImage(data.branding.logo);
   const accent = hexToRgb(data.branding.accentColor);
+  const accentStrong = hexToRgb(data.branding.accentStrongColor);
   const line = hexToRgb(data.branding.lineColor);
+  const textColor = hexToRgb(data.branding.textColor);
+  const muted = hexToRgb(data.branding.mutedColor);
+  const white = { r: 1, g: 1, b: 1 };
+  const alternate = { r: 0.975, g: 0.98, b: 0.985 };
   const objects: string[] = [];
   const pages: number[] = [];
   let content = "";
-  let y = 760;
+  let y = 680;
+
+  const PAGE_WIDTH = 612;
+  const PAGE_HEIGHT = 792;
+  const MARGIN_X = 40;
+  const CONTENT_WIDTH = 532;
+  const BOTTOM_MARGIN = 52;
+  const HEADER_TOP = 760;
+  const HEADER_BOTTOM = 692;
+  const FOOTER_Y = 28;
 
   function addObject(value: string | Buffer) {
     objects.push(value.toString("binary"));
@@ -257,40 +284,126 @@ export async function buildReportPdf({
       )
     : null;
 
-  function text(value: string, x: number, size = 10, bold = false) {
-    content += `BT /F${bold ? "B" : "R"} ${size} Tf ${x} ${y} Td (${escapePdfText(value)}) Tj ET\n`;
+  function color(rgb: { r: number; g: number; b: number }) {
+    return `${rgb.r.toFixed(3)} ${rgb.g.toFixed(3)} ${rgb.b.toFixed(3)}`;
   }
 
-  function lineText(label: string, value: string, x: number) {
-    text(label, x, 9, true);
-    y -= 13;
-    text(value, x, 11);
+  function drawText(
+    value: string,
+    x: number,
+    baseline: number,
+    {
+      size = 10,
+      bold = false,
+      rgb = textColor,
+    }: { size?: number; bold?: boolean; rgb?: { r: number; g: number; b: number } } = {},
+  ) {
+    content += `${color(rgb)} rg BT /F${bold ? "B" : "R"} ${size} Tf ${x} ${baseline} Td (${escapePdfText(value)}) Tj ET\n`;
   }
 
-  function rect(x: number, top: number, width: number, height: number, rgb = line) {
-    content += `${rgb.r.toFixed(3)} ${rgb.g.toFixed(3)} ${rgb.b.toFixed(3)} rg ${x} ${top - height} ${width} ${height} re f\n`;
-  }
-
-  function startPage() {
-    content = "";
-    y = 760;
-    rect(40, 792, 532, 56, accent);
-    content += "1 1 1 rg\n";
-    if (imageObject) {
-      const width = 72;
-      const height = Math.min(36, (logo!.height / logo!.width) * width);
-      content += `q ${width} 0 0 ${height} 48 ${748} cm /Logo Do Q\n`;
-      text(data.branding.appTitle, 130, 18, true);
-    } else {
-      text(data.branding.appTitle, 52, 18, true);
+  function drawRect(
+    x: number,
+    top: number,
+    width: number,
+    height: number,
+    {
+      fill,
+      stroke,
+    }: {
+      fill?: { r: number; g: number; b: number };
+      stroke?: { r: number; g: number; b: number };
+    } = {},
+  ) {
+    const bottom = top - height;
+    if (fill) {
+      content += `${color(fill)} rg ${x} ${bottom} ${width} ${height} re f\n`;
     }
-    y -= 24;
-    text(reportTitle(filters.reportType), imageObject ? 130 : 52, 12);
-    content += "0 0 0 rg\n";
-    y = 704;
+    if (stroke) {
+      content += `${color(stroke)} RG ${x} ${bottom} ${width} ${height} re S\n`;
+    }
+  }
+
+  function drawLine(x1: number, lineY: number, x2: number, rgb = line, width = 1) {
+    content += `${color(rgb)} RG ${width} w ${x1} ${lineY} m ${x2} ${lineY} l S\n`;
+  }
+
+  function truncate(value: string, maxLength: number) {
+    return value.length > maxLength ? `${value.slice(0, Math.max(0, maxLength - 1))}...` : value;
+  }
+
+  function rightText(
+    value: string,
+    rightX: number,
+    baseline: number,
+    options: { size?: number; bold?: boolean; rgb?: { r: number; g: number; b: number } } = {},
+  ) {
+    const size = options.size || 10;
+    drawText(value, rightX - value.length * size * 0.48, baseline, options);
+  }
+
+  function dateRangeLabel() {
+    if (filters.fromDate && filters.toDate) {
+      return `${reportDate(filters.fromDate)} to ${reportDate(filters.toDate)}`;
+    }
+    if (filters.fromDate) return `From ${reportDate(filters.fromDate)}`;
+    if (filters.toDate) return `Through ${reportDate(filters.toDate)}`;
+    return "Any";
+  }
+
+  function drawFooter(pageNumber: number) {
+    drawLine(MARGIN_X, 42, MARGIN_X + CONTENT_WIDTH, line, 0.5);
+    drawText(`Generated ${reportDate(generatedAt.toISOString())}`, MARGIN_X, FOOTER_Y, {
+      size: 8,
+      rgb: muted,
+    });
+    rightText(`Page ${pageNumber}`, MARGIN_X + CONTENT_WIDTH, FOOTER_Y, {
+      size: 8,
+      rgb: muted,
+    });
+  }
+
+  function startPage(compact = false) {
+    content = "";
+    y = compact ? 688 : 672;
+
+    drawRect(0, PAGE_HEIGHT, PAGE_WIDTH, PAGE_HEIGHT, { fill: white });
+    if (imageObject) {
+      const logoWidth = Math.min(90, logo!.width);
+      const logoHeight = Math.min(45, (logo!.height / logo!.width) * logoWidth);
+      content += `q ${logoWidth} 0 0 ${logoHeight} ${MARGIN_X} ${HEADER_TOP - logoHeight} cm /Logo Do Q\n`;
+      drawText(data.branding.appTitle, MARGIN_X + 110, HEADER_TOP - 7, {
+        size: compact ? 14 : 16,
+        bold: true,
+      });
+      drawText(reportTitle(filters.reportType), MARGIN_X + 110, HEADER_TOP - 26, {
+        size: compact ? 10 : 12,
+        rgb: muted,
+      });
+    } else {
+      drawText(data.branding.appTitle, MARGIN_X, HEADER_TOP - 7, {
+        size: compact ? 14 : 17,
+        bold: true,
+      });
+      drawText(reportTitle(filters.reportType), MARGIN_X, HEADER_TOP - 27, {
+        size: compact ? 10 : 12,
+        rgb: muted,
+      });
+    }
+    rightText(reportDate(generatedAt.toISOString()), MARGIN_X + CONTENT_WIDTH, HEADER_TOP - 7, {
+      size: 9,
+      bold: true,
+      rgb: muted,
+    });
+    drawText("Generated", MARGIN_X + CONTENT_WIDTH - 70, HEADER_TOP - 24, {
+      size: 8,
+      rgb: muted,
+    });
+    drawLine(MARGIN_X, HEADER_BOTTOM, MARGIN_X + CONTENT_WIDTH, accent, 3);
+    drawLine(MARGIN_X, HEADER_BOTTOM - 5, MARGIN_X + CONTENT_WIDTH, line, 0.5);
   }
 
   function endPage() {
+    drawFooter(pages.length + 1);
     const contentObject = addObject(`<< /Length ${Buffer.byteLength(content, "binary")} >>\nstream\n${content}endstream`);
     const resources = imageObject
       ? `<< /Font << /FR ${fontRegular} 0 R /FB ${fontBold} 0 R >> /XObject << /Logo ${imageObject} 0 R >> >>`
@@ -301,77 +414,127 @@ export async function buildReportPdf({
     pages.push(pageObject);
   }
 
-  function ensureSpace(required: number) {
-    if (y >= required) return;
+  function ensureSpace(requiredHeight: number) {
+    if (y - requiredHeight >= BOTTOM_MARGIN) return;
     endPage();
-    startPage();
+    startPage(true);
   }
 
   startPage();
-  text(`Generated: ${formatDate(generatedAt.toISOString())}`, 40, 10);
-  y -= 26;
-  lineText("Date Field", dateFieldLabel(filters.dateField), 40);
-  y += 13;
-  lineText("Date Range", `${filters.fromDate || "Any"} to ${filters.toDate || "Any"}`, 180);
-  y += 13;
-  lineText("Vendor Filter", filters.vendor || "All vendors", 340);
-  y -= 28;
-  lineText(
-    "Department Filter",
-    filters.departmentId ? departmentName(data, filters.departmentId) : "All departments",
-    40,
-  );
-  y -= 34;
 
-  text("Summary", 40, 14, true);
-  y -= 14;
-  rect(40, y + 8, 532, 1);
-  y -= 18;
+  function sectionTitle(title: string) {
+    ensureSpace(30);
+    drawText(title, MARGIN_X, y, { size: 14, bold: true });
+    drawLine(MARGIN_X, y - 8, MARGIN_X + CONTENT_WIDTH, accent, 1.5);
+    y -= 26;
+  }
 
+  function keyValueCard(label: string, value: string, x: number, top: number, width: number) {
+    drawRect(x, top, width, 44, { fill: white, stroke: line });
+    drawText(label.toUpperCase(), x + 10, top - 15, { size: 7.5, bold: true, rgb: muted });
+    drawText(truncate(value, Math.floor(width / 5.5)), x + 10, top - 31, {
+      size: 10,
+      bold: true,
+    });
+  }
+
+  sectionTitle("Report Filters");
+  const filterCardWidth = (CONTENT_WIDTH - 24) / 4;
+  const filterTop = y;
+  const filterValues = [
+    ["Date Field", dateFieldLabel(filters.dateField)],
+    ["Date Range", dateRangeLabel()],
+    ["Vendor", filters.vendor || "All vendors"],
+    [
+      "Department",
+      filters.departmentId ? departmentName(data, filters.departmentId) : "All departments",
+    ],
+  ];
+  filterValues.forEach(([label, value], index) => {
+    keyValueCard(label, value, MARGIN_X + index * (filterCardWidth + 8), filterTop, filterCardWidth);
+  });
+  y -= 64;
+
+  function metricCard(label: string, value: string, x: number, top: number, width: number) {
+    drawRect(x, top, width, 58, { fill: white, stroke: line });
+    drawRect(x, top, width, 4, { fill: accent });
+    drawText(label.toUpperCase(), x + 10, top - 19, { size: 7.5, bold: true, rgb: muted });
+    drawText(truncate(value, Math.floor(width / 7)), x + 10, top - 40, {
+      size: value.length > 14 ? 12 : 15,
+      bold: true,
+    });
+  }
+
+  sectionTitle("Summary");
   for (const metric of metrics) {
-    ensureSpace(130);
-    text(metric.label, 40, 12, true);
-    y -= 20;
-    const rows = [
-      ["Total invoices received", String(metric.totalInvoices)],
-      ["Total invoice dollars", money(metric.totalDollars)],
-      ["Invoices approved/completed", String(metric.approvedInvoices)],
-      ["Average time to approval", days(metric.averageApprovalDays)],
-      ["Median approval time", days(metric.medianApprovalDays)],
-    ];
-    for (const [label, value] of rows) {
-      text(label, 56, 10);
-      text(value, 360, 10, true);
+    ensureSpace(110);
+    if (metrics.length > 1 || metric.label !== "All selected invoices") {
+      drawText(metric.label, MARGIN_X, y, { size: 11, bold: true });
       y -= 16;
     }
-    y -= 12;
+    const cards = [
+      ["Total Invoices", String(metric.totalInvoices)],
+      ["Total Dollars", money(metric.totalDollars)],
+      ["Approved", String(metric.approvedInvoices)],
+      ["Avg Approval", days(metric.averageApprovalDays)],
+      ["Median Approval", days(metric.medianApprovalDays)],
+    ];
+    const cardGap = 8;
+    const cardWidth = (CONTENT_WIDTH - cardGap * 4) / 5;
+    const top = y;
+    cards.forEach(([label, value], index) => {
+      metricCard(label, value, MARGIN_X + index * (cardWidth + cardGap), top, cardWidth);
+    });
+    y -= 78;
   }
 
-  ensureSpace(180);
-  text("Invoice Detail", 40, 14, true);
-  y -= 18;
-  rect(40, y + 8, 532, 20, accent);
-  content += "1 1 1 rg\n";
-  text("Vendor", 48, 9, true);
-  text("Invoice", 190, 9, true);
-  text("Dept", 275, 9, true);
-  text("Amount", 382, 9, true);
-  text("Uploaded", 462, 9, true);
-  content += "0 0 0 rg\n";
-  y -= 18;
-
-  for (const invoice of invoices.slice(0, 150)) {
-    ensureSpace(70);
-    text((invoice.vendorName || "Unknown").slice(0, 26), 48, 8);
-    text((invoice.invoiceNumber || "Not set").slice(0, 16), 190, 8);
-    text(departmentName(data, invoice.departmentId).slice(0, 18), 275, 8);
-    text(currencyDisplay(invoice.amount), 382, 8);
-    text(formatDate(invoice.dateUploaded), 462, 8);
-    y -= 14;
+  function drawTableHeader() {
+    drawRect(MARGIN_X, y, CONTENT_WIDTH, 24, { fill: accentStrong });
+    drawText("Vendor", 48, y - 16, { size: 8, bold: true, rgb: white });
+    drawText("Invoice #", 218, y - 16, { size: 8, bold: true, rgb: white });
+    drawText("Department", 308, y - 16, { size: 8, bold: true, rgb: white });
+    rightText("Amount", 478, y - 16, { size: 8, bold: true, rgb: white });
+    drawText("Uploaded", 492, y - 16, { size: 8, bold: true, rgb: white });
+    y -= 24;
   }
-  if (invoices.length > 150) {
-    y -= 8;
-    text(`Detail limited to first 150 invoices of ${invoices.length}.`, 40, 9, true);
+
+  sectionTitle("Invoice Detail");
+  if (invoices.length === 0) {
+    drawRect(MARGIN_X, y, CONTENT_WIDTH, 48, { fill: white, stroke: line });
+    drawText("No invoices match the selected report filters.", MARGIN_X + 142, y - 28, {
+      size: 10,
+      rgb: muted,
+    });
+    y -= 60;
+  } else {
+    drawTableHeader();
+    const detailInvoices = invoices.slice(0, 150);
+    detailInvoices.forEach((invoice, index) => {
+      if (y - 22 < BOTTOM_MARGIN) {
+        endPage();
+        startPage(true);
+        drawTableHeader();
+      }
+      if (index % 2 === 1) {
+        drawRect(MARGIN_X, y, CONTENT_WIDTH, 22, { fill: alternate });
+      }
+      drawLine(MARGIN_X, y - 22, MARGIN_X + CONTENT_WIDTH, line, 0.4);
+      drawText(truncate(invoice.vendorName || "Unknown", 32), 48, y - 15, { size: 8.5 });
+      drawText(truncate(invoice.invoiceNumber || "Not set", 18), 218, y - 15, { size: 8.5 });
+      drawText(truncate(departmentName(data, invoice.departmentId), 24), 308, y - 15, { size: 8.5 });
+      rightText(currencyDisplay(invoice.amount), 478, y - 15, { size: 8.5, bold: true });
+      drawText(reportDate(invoice.dateUploaded), 492, y - 15, { size: 8.5 });
+      y -= 22;
+    });
+    if (invoices.length > 150) {
+      ensureSpace(28);
+      drawText(`Detail limited to first 150 invoices of ${invoices.length}.`, MARGIN_X, y - 10, {
+        size: 9,
+        bold: true,
+        rgb: muted,
+      });
+      y -= 24;
+    }
   }
   endPage();
 
