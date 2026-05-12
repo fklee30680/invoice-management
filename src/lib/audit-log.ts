@@ -1,5 +1,6 @@
 import type {
   AppData,
+  AuditEventCategory,
   AuditEvent,
   AuditLogFilterField,
   AuditLogSettings,
@@ -35,6 +36,7 @@ export type AuditLogFilters = {
   actor: string;
   type: string;
   status: string;
+  category: string;
   ocrProvider: string;
   apAttention: string;
   paymentProcessed: string;
@@ -47,6 +49,7 @@ export type AuditLogQuery = {
   direction: AuditLogDirection;
   page: number;
   pageSize: number;
+  includeSystemEvents: boolean;
 };
 
 export type AuditLogPage<T> = {
@@ -79,6 +82,7 @@ export const auditLogFilterFields: Array<{ key: AuditLogFilterField; label: stri
   { key: "auditDate", label: "Audit Date" },
   { key: "actor", label: "Actor" },
   { key: "eventType", label: "Event Type" },
+  { key: "category", label: "Category" },
   { key: "department", label: "Department" },
   { key: "vendor", label: "Vendor" },
   { key: "vendorNumber", label: "Vendor Number" },
@@ -127,7 +131,180 @@ const defaultFilters: AuditLogFilters = {
   apAttention: "",
   paymentProcessed: "",
   q: "",
+  category: "",
 };
+
+// The Audit Log is intended for staff/business traceability. System and
+// diagnostic events may still be recorded, but they are hidden by default
+// unless explicitly included for troubleshooting.
+const staffActionTypes = new Set([
+  "ap_attention_cleared",
+  "comment_added",
+  "complete_blocked",
+  "completed",
+  "department_decision",
+  "department_decision_blocked_vendor",
+  "department_import",
+  "department_import_failed",
+  "department_saved",
+  "department_updated",
+  "duplicate_check_reset",
+  "duplicate_detected_update",
+  "duplicate_resolved",
+  "duplicate_reviewed",
+  "file_uploaded",
+  "invoice_deleted",
+  "invoice_processed_for_payment",
+  "manual_payment_batch_processed_for_payment",
+  "payment_processed_blocked",
+  "payment_processed_updated",
+  "po_all_deleted",
+  "po_deleted",
+  "po_number_added",
+  "po_updated",
+  "po_upload",
+  "po_upload_failed",
+  "po_vendor_missing_vendor_file",
+  "po_vendor_updated",
+  "rework_returned",
+  "routing_blocked_department_email",
+  "routing_blocked_duplicate",
+  "routing_blocked_required_fields",
+  "routing_blocked_vendor",
+  "vendor_all_deleted",
+  "vendor_deleted",
+  "vendor_selected",
+  "vendor_updated",
+  "vendor_upload",
+  "vendor_upload_failed",
+]);
+
+const setupChangeTypes = new Set([
+  "audit_log_settings_restored",
+  "audit_log_settings_updated",
+  "branding_logo_removed",
+  "branding_logo_uploaded",
+  "branding_updated",
+  "dashboard_box_added",
+  "dashboard_box_deleted",
+  "dashboard_box_updated",
+  "decision_added",
+  "decision_delete_blocked",
+  "decision_deleted",
+  "decision_updated",
+  "department_delete_blocked",
+  "department_deleted",
+  "escalation_contact_added",
+  "escalation_contact_deleted",
+  "escalation_contact_updated",
+  "escalation_schedule_added",
+  "escalation_schedule_deleted",
+  "escalation_schedule_disabled",
+  "escalation_schedule_updated",
+  "escalation_scheduler_updated",
+  "escalation_template_added",
+  "escalation_template_deleted",
+  "escalation_template_updated",
+  "holiday_added",
+  "holiday_deleted",
+  "holiday_updated",
+  "invoice_fields_updated",
+  "menu_item_added",
+  "menu_item_deleted",
+  "menu_settings_reset",
+  "menu_settings_updated",
+  "notification_template_updated",
+  "organization_escalation_contact_added",
+  "organization_escalation_contact_deleted",
+  "organization_escalation_contact_disabled",
+  "organization_escalation_contact_updated",
+  "payment_file_column_added",
+  "payment_file_column_deleted",
+  "payment_file_updated",
+  "po_validation_settings_updated",
+  "status_added",
+  "status_inactivated",
+  "status_inactivation_blocked",
+  "status_reactivated",
+  "status_updated",
+  "submenu_item_added",
+]);
+
+const businessEventTypes = new Set([
+  "duplicate_detected",
+  "duplicate_detected_upload",
+  "escalation_failed",
+  "escalation_sent",
+  "invoice_routed",
+  "invoice_sent_to_ap_review",
+  "invoice_status_changed",
+  "notification_failed",
+  "notification_sent",
+  "po_matched",
+  "po_missing",
+  "vendor_missing",
+  "vendor_validated",
+]);
+
+const securityEventTypes = new Set([
+  "failed_sign_in",
+  "sign_in",
+  "sign_out",
+  "unauthorized_access_attempt",
+  "user_created",
+  "user_deleted",
+  "user_department_changed",
+  "user_role_changed",
+  "user_updated",
+]);
+
+const systemEventTypes = new Set([
+  "blob_download_failed",
+  "blob_upload_failed",
+  "cron_completed",
+  "cron_failed",
+  "cron_started",
+  "file_staged_for_processing",
+  "file_stored",
+  "ocr_completed",
+  "ocr_failed",
+  "processing_completed",
+  "processing_failed",
+  "processing_started",
+  "resend_api_failed",
+  "validation_completed",
+]);
+
+const diagnosticEventTypes = new Set([
+  "azure_fallback_used",
+  "azure_ocr_failed",
+  "config_diagnostic",
+  "document_classified",
+  "embedded_pdf_text_used",
+  "extraction_completed",
+  "field_selected",
+  "filename_fallback_used",
+  "normalization_completed",
+  "ocr_candidate_generated",
+  "ocr_candidate_selected",
+  "ocr_debug_snapshot",
+  "ocr_provider_used",
+  "ocr_started",
+  "raw_ocr_text_recorded",
+  "storage_diagnostic",
+]);
+
+export const auditEventCategoryOptions: Array<{
+  key: AuditEventCategory;
+  label: string;
+}> = [
+  { key: "staff_action", label: "Staff Action" },
+  { key: "business_event", label: "Business Event" },
+  { key: "setup_change", label: "Setup Change" },
+  { key: "security_event", label: "Security Event" },
+  { key: "system_event", label: "System Event" },
+  { key: "diagnostic_event", label: "Diagnostic Event" },
+];
 
 export function defaultAuditLogSettings(): AuditLogSettings {
   return {
@@ -136,6 +313,7 @@ export function defaultAuditLogSettings(): AuditLogSettings {
     retainInvoiceEventsPermanently: false,
     retainSetupEventsPermanently: true,
     allowManualPurge: false,
+    includeSystemEventsByDefault: false,
     enabledFilterFields: defaultAuditLogFilterFields,
   };
 }
@@ -162,6 +340,8 @@ export function normalizeAuditLogSettings(
     retainSetupEventsPermanently:
       settings?.retainSetupEventsPermanently ?? defaults.retainSetupEventsPermanently,
     allowManualPurge: settings?.allowManualPurge ?? defaults.allowManualPurge,
+    includeSystemEventsByDefault:
+      settings?.includeSystemEventsByDefault ?? defaults.includeSystemEventsByDefault,
     enabledFilterFields:
       enabledFilterFields.length > 0 ? enabledFilterFields : defaults.enabledFilterFields,
   };
@@ -196,6 +376,8 @@ function filterKeysForField(field: AuditLogFilterField): Array<keyof AuditLogFil
       return ["auditFrom", "auditTo"];
     case "eventType":
       return ["type"];
+    case "category":
+      return ["category"];
     case "invoiceDate":
       return ["invoiceDateFrom", "invoiceDateTo"];
     case "amount":
@@ -247,6 +429,7 @@ export function auditLogQueryFromSearchParams(
     actor: firstParam(params, "actor"),
     type: firstParam(params, "type"),
     status: firstParam(params, "status"),
+    category: firstParam(params, "category"),
     ocrProvider: firstParam(params, "ocrProvider"),
     apAttention: firstParam(params, "apAttention"),
     paymentProcessed: firstParam(params, "paymentProcessed"),
@@ -258,20 +441,24 @@ export function auditLogQueryFromSearchParams(
     direction: directionValue === "asc" ? "asc" : "desc",
     page: numberParam(params, "page", 1),
     pageSize: auditLogPageSizes.includes(pageSizeValue) ? pageSizeValue : 50,
+    includeSystemEvents:
+      firstParam(params, "includeSystemEvents") === "true" ||
+      Boolean(settings?.includeSystemEventsByDefault),
   };
 }
 
 export function auditLogQueryToSearchParams(
   query: AuditLogQuery,
-  overrides: Partial<Record<keyof AuditLogFilters | "sort" | "direction" | "page" | "pageSize", string | number | undefined>> = {},
+  overrides: Partial<Record<keyof AuditLogFilters | "sort" | "direction" | "page" | "pageSize" | "includeSystemEvents", string | number | boolean | undefined>> = {},
 ) {
   const params = new URLSearchParams();
-  const values: Record<string, string | number | undefined> = {
+  const values: Record<string, string | number | boolean | undefined> = {
     ...query.filters,
     sort: query.sort,
     direction: query.direction,
     page: query.page,
     pageSize: query.pageSize,
+    includeSystemEvents: query.includeSystemEvents ? "true" : undefined,
     ...overrides,
   };
   for (const [key, value] of Object.entries(values)) {
@@ -301,6 +488,39 @@ function lower(value: string | undefined) {
 
 function dateOnly(value: string | undefined) {
   return (value || "").slice(0, 10);
+}
+
+export function auditEventCategory(event: Pick<AuditEvent, "category" | "type" | "actor">): AuditEventCategory {
+  if (event.category) return event.category;
+  if (staffActionTypes.has(event.type)) return "staff_action";
+  if (setupChangeTypes.has(event.type)) return "setup_change";
+  if (securityEventTypes.has(event.type)) return "security_event";
+  if (businessEventTypes.has(event.type)) return "business_event";
+  if (diagnosticEventTypes.has(event.type)) return "diagnostic_event";
+  if (systemEventTypes.has(event.type)) return "system_event";
+  if (event.actor === "System") return "system_event";
+  return "business_event";
+}
+
+export function isSystemAuditEvent(event: Pick<AuditEvent, "category" | "type" | "actor">) {
+  const category = auditEventCategory(event);
+  return category === "system_event" || category === "diagnostic_event";
+}
+
+export function isStaffBusinessAuditEvent(event: Pick<AuditEvent, "category" | "type" | "actor">) {
+  return !isSystemAuditEvent(event);
+}
+
+export function auditEventCategoryLabel(event: Pick<AuditEvent, "category" | "type" | "actor">) {
+  const category = auditEventCategory(event);
+  return auditEventCategoryOptions.find((option) => option.key === category)?.label || "Business Event";
+}
+
+export function auditEventDisplayType(event: Pick<AuditEvent, "type">) {
+  return event.type
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 export function amountToCents(value: string | undefined) {
@@ -333,7 +553,17 @@ function matchesAmountRange(value: string, min: string, max: string) {
   return true;
 }
 
-export function filterAuditEvents(data: AppData, filters: AuditLogFilters) {
+function auditEventCategoryKey(value: string): AuditEventCategory | "" {
+  return auditEventCategoryOptions.some((option) => option.key === value)
+    ? (value as AuditEventCategory)
+    : "";
+}
+
+export function filterAuditEvents(
+  data: AppData,
+  filters: AuditLogFilters,
+  options: { includeSystemEvents?: boolean } = {},
+) {
   const vendor = lower(filters.vendor);
   const vendorNumber = lower(filters.vendorNumber);
   const poNumber = normalizePoNumber(filters.poNumber || "");
@@ -341,8 +571,14 @@ export function filterAuditEvents(data: AppData, filters: AuditLogFilters) {
   const actor = lower(filters.actor);
   const status = lower(filters.status);
   const q = lower(filters.q);
+  const categoryFilter = auditEventCategoryKey(filters.category);
 
   return data.auditEvents.filter((event) => {
+    const category = auditEventCategory(event);
+    if (categoryFilter && category !== categoryFilter) return false;
+    if (!categoryFilter && !options.includeSystemEvents && isSystemAuditEvent(event)) {
+      return false;
+    }
     const invoice = auditEventInvoice(data, event);
     const department = auditEventDepartment(data, invoice);
     const extraction = auditEventExtraction(data, invoice);
@@ -380,6 +616,7 @@ export function filterAuditEvents(data: AppData, filters: AuditLogFilters) {
       const haystack = [
         event.message,
         event.type,
+        auditEventCategoryLabel(event),
         event.actor,
         invoice?.vendorName,
         invoice?.vendorNumber,
@@ -482,7 +719,8 @@ export function auditLogCsv(data: AppData, events: AuditEvent[]) {
   const headers = [
     "Audit Date",
     "Actor",
-    "Type",
+    "Category",
+    "Action",
     "Department",
     "Vendor",
     "Vendor Number",
@@ -501,7 +739,8 @@ export function auditLogCsv(data: AppData, events: AuditEvent[]) {
     return [
       event.createdAt,
       event.actor,
-      event.type,
+      auditEventCategoryLabel(event),
+      auditEventDisplayType(event),
       department?.name || "",
       invoice?.vendorName || "",
       invoice?.vendorNumber || "",

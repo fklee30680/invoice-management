@@ -42,6 +42,7 @@ import {
 } from "./payment-file";
 import { normalizeInvoiceDuplicateState } from "./duplicate-invoices";
 import {
+  auditEventCategory,
   defaultAuditLogSettings,
   normalizeAuditLogSettings,
 } from "./audit-log";
@@ -975,8 +976,10 @@ export function addAudit(
   data: AppData,
   input: Omit<AuditEvent, "id" | "createdAt">,
 ) {
+  const category = auditEventCategory(input);
   data.auditEvents.unshift({
     ...input,
+    category,
     id: createId("audit"),
     createdAt: new Date().toISOString(),
   });

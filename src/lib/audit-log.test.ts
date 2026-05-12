@@ -2,10 +2,14 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   auditLogQueryFromSearchParams,
+  auditEventCategory,
+  auditEventCategoryLabel,
   auditLogCsv,
   defaultAuditLogFilterFields,
   defaultAuditLogSettings,
   filterAuditEvents,
+  isStaffBusinessAuditEvent,
+  isSystemAuditEvent,
   normalizeAuditLogSettings,
   paginateAuditEvents,
   sortAuditEvents,
@@ -173,6 +177,7 @@ const emptyFilters = {
   ocrProvider: "",
   apAttention: "",
   paymentProcessed: "",
+  category: "",
   q: "",
 };
 
@@ -194,7 +199,7 @@ describe("audit log helpers", () => {
       ["audit-2"],
     );
     assert.deepEqual(
-      filterAuditEvents(source, { ...emptyFilters, actor: "system", type: "settings_updated" }).map(
+      filterAuditEvents(source, { ...emptyFilters, actor: "system", type: "settings_updated" }, { includeSystemEvents: true }).map(
         (item) => item.id,
       ),
       ["audit-3"],
@@ -232,7 +237,7 @@ describe("audit log helpers", () => {
   it("exports filtered CSV with escaped values", () => {
     const source = data();
     const csv = auditLogCsv(source, [source.auditEvents[1]]);
-    assert.match(csv, /Audit Date,Actor,Type/);
+    assert.match(csv, /Audit Date,Actor,Category,Action/);
     assert.match(csv, /Brightline Services/);
     assert.match(csv, /"Routed invoice, with comma\nand newline"/);
     assert.doesNotMatch(csv, /Northstar Supply/);
@@ -254,6 +259,7 @@ describe("audit log helpers", () => {
       retainInvoiceEventsPermanently: false,
       retainSetupEventsPermanently: true,
       allowManualPurge: false,
+      includeSystemEventsByDefault: false,
       enabledFilterFields: defaultAuditLogFilterFields,
     });
   });
@@ -269,5 +275,52 @@ describe("audit log helpers", () => {
     assert.equal(query.filters.actor, "AP");
     assert.equal(query.filters.vendor, "");
     assert.equal(query.filters.q, "");
+  });
+
+  it("classifies audit events for staff and business traceability", () => {
+    assert.equal(auditEventCategory(event({ type: "vendor_updated" })), "staff_action");
+    assert.equal(auditEventCategory(event({ type: "status_updated" })), "setup_change");
+    assert.equal(auditEventCategory(event({ type: "user_role_changed" })), "security_event");
+    assert.equal(auditEventCategory(event({ actor: "System", type: "ocr_failed" })), "system_event");
+    assert.equal(
+      auditEventCategory(event({ actor: "System", type: "filename_fallback_used" })),
+      "diagnostic_event",
+    );
+    assert.equal(auditEventCategory(event({ actor: "System", type: "notification_sent" })), "business_event");
+    assert.equal(auditEventCategoryLabel(event({ type: "vendor_updated" })), "Staff Action");
+  });
+
+  it("excludes system and diagnostic events by default", () => {
+    const source = data();
+    source.auditEvents = [
+      event({ id: "staff", actor: "AP", type: "vendor_updated" }),
+      event({ id: "business-system", actor: "System", type: "notification_sent" }),
+      event({ id: "system", actor: "System", type: "ocr_failed" }),
+      event({ id: "diagnostic", actor: "System", type: "filename_fallback_used" }),
+    ];
+
+    assert.deepEqual(
+      filterAuditEvents(source, emptyFilters).map((item) => item.id),
+      ["staff", "business-system"],
+    );
+    assert.deepEqual(
+      filterAuditEvents(source, emptyFilters, { includeSystemEvents: true }).map((item) => item.id),
+      ["staff", "business-system", "system", "diagnostic"],
+    );
+    assert.equal(isStaffBusinessAuditEvent(source.auditEvents[0]), true);
+    assert.equal(isSystemAuditEvent(source.auditEvents[2]), true);
+  });
+
+  it("allows category filters to include system categories explicitly", () => {
+    const source = data();
+    source.auditEvents = [
+      event({ id: "staff", actor: "AP", type: "vendor_updated" }),
+      event({ id: "system", actor: "System", type: "ocr_failed" }),
+    ];
+
+    assert.deepEqual(
+      filterAuditEvents(source, { ...emptyFilters, category: "system_event" }).map((item) => item.id),
+      ["system"],
+    );
   });
 });

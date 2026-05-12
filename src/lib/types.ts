@@ -491,13 +491,23 @@ export type AuditEvent = {
   actor: string;
   type: string;
   message: string;
+  category?: AuditEventCategory;
   createdAt: string;
 };
+
+export type AuditEventCategory =
+  | "staff_action"
+  | "business_event"
+  | "security_event"
+  | "setup_change"
+  | "system_event"
+  | "diagnostic_event";
 
 export type AuditLogFilterField =
   | "auditDate"
   | "actor"
   | "eventType"
+  | "category"
   | "department"
   | "vendor"
   | "vendorNumber"
@@ -517,6 +527,7 @@ export type AuditLogSettings = {
   retainInvoiceEventsPermanently: boolean;
   retainSetupEventsPermanently: boolean;
   allowManualPurge: boolean;
+  includeSystemEventsByDefault: boolean;
   enabledFilterFields: AuditLogFilterField[];
 };
 

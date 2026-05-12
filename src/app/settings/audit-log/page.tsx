@@ -169,6 +169,24 @@ export default async function AuditLogSetupPage({
                   </span>
                 </span>
               </label>
+
+              <label className="flex items-start gap-3 text-sm">
+                <input
+                  className="mt-1 h-4 w-4 accent-[var(--accent)]"
+                  defaultChecked={settings.includeSystemEventsByDefault}
+                  name="includeSystemEventsByDefault"
+                  type="checkbox"
+                />
+                <span>
+                  <span className="block font-semibold">
+                    Show System/Diagnostic Events By Default
+                  </span>
+                  <span className="text-[var(--muted)]">
+                    Recommended off. The Audit Log is intended for staff and business traceability;
+                    diagnostics can be included from the Audit Log page when troubleshooting.
+                  </span>
+                </span>
+              </label>
             </div>
           </section>
 

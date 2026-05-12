@@ -15,7 +15,9 @@ export async function GET(request: NextRequest) {
   await requireApUser();
   const data = await readData();
   const query = auditLogQueryFromSearchParams(request.nextUrl.searchParams, data.auditLogSettings);
-  const filteredEvents = filterAuditEvents(data, query.filters);
+  const filteredEvents = filterAuditEvents(data, query.filters, {
+    includeSystemEvents: query.includeSystemEvents,
+  });
   const sortedEvents = sortAuditEvents(data, filteredEvents, query.sort, query.direction);
   const csv = auditLogCsv(data, sortedEvents);
   const today = new Date().toISOString().slice(0, 10);

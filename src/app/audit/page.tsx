@@ -1,7 +1,10 @@
 import Link from "next/link";
 import {
   auditEventDepartment,
+  auditEventCategoryLabel,
+  auditEventDisplayType,
   auditEventInvoice,
+  auditEventCategoryOptions,
   auditLogFilterEnabled,
   auditLogPageSizes,
   auditLogQueryFromSearchParams,
@@ -32,7 +35,7 @@ const filterLabelClass = "text-xs font-semibold uppercase text-[var(--muted)]";
 const sortableColumns: Array<{ key: AuditLogSortKey; label: string }> = [
   { key: "auditDate", label: "Audit Date" },
   { key: "actor", label: "Actor" },
-  { key: "type", label: "Type" },
+  { key: "type", label: "Action" },
   { key: "department", label: "Department" },
   { key: "vendor", label: "Vendor" },
   { key: "invoiceNumber", label: "Invoice #" },
@@ -116,6 +119,10 @@ function RetentionSummary({ data }: { data: AppData }) {
             {settings.retainSetupEventsPermanently ? "retained permanently" : "standard retention"}
           </span>
           <span>Manual purge: {settings.allowManualPurge ? "allowed" : "disabled"}</span>
+          <span>
+            System diagnostics default:{" "}
+            {settings.includeSystemEventsByDefault ? "shown" : "hidden"}
+          </span>
         </div>
       </div>
     </section>
@@ -127,7 +134,9 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
   const data = await readData();
   const settings = data.auditLogSettings;
   const query = auditLogQueryFromSearchParams((await searchParams) || {}, settings);
-  const filteredEvents = filterAuditEvents(data, query.filters);
+  const filteredEvents = filterAuditEvents(data, query.filters, {
+    includeSystemEvents: query.includeSystemEvents,
+  });
   const sortedEvents = sortAuditEvents(data, filteredEvents, query.sort, query.direction);
   const page = paginateAuditEvents(sortedEvents, query.page, query.pageSize);
   const actorOptions = uniqueSorted(data.auditEvents.map((event) => event.actor));
@@ -135,7 +144,9 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
   const statusOptions = uniqueSorted(data.invoices.map((invoice) => invoice.status));
   const hasFilter = (field: Parameters<typeof auditLogFilterEnabled>[1]) =>
     auditLogFilterEnabled(settings, field);
-  const activeFilterCount = Object.values(query.filters).filter(Boolean).length;
+  const activeFilterCount =
+    Object.values(query.filters).filter(Boolean).length +
+    (query.includeSystemEvents ? 1 : 0);
 
   return (
     <main className="min-h-screen px-4 py-6 sm:px-6 lg:px-8">
@@ -144,8 +155,9 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
           <div>
             <h1 className="text-3xl font-semibold tracking-normal">Audit Log</h1>
             <p className="mt-2 max-w-3xl text-sm text-[var(--muted)]">
-              Review invoice uploads, routing changes, department decisions, notifications, setup
-              changes, and deletion activity.
+              Review staff actions and business-significant activity, including invoice updates,
+              routing, department decisions, notifications, setup changes, payment processing, and
+              deletion activity.
             </p>
           </div>
           <Link
@@ -174,7 +186,8 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
             <div className="border-t border-[var(--line)] p-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <p className="text-sm text-[var(--muted)]">
-                  Filter audit events by audit details and related invoice fields.
+                  Filter staff and business audit events by audit details and related invoice
+                  fields. System and diagnostic events are hidden unless explicitly included.
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <Link
@@ -195,6 +208,21 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
               <form action="/audit" className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <input name="sort" type="hidden" value={query.sort} />
             <input name="direction" type="hidden" value={query.direction} />
+            <label className="flex items-start gap-3 text-sm md:col-span-2 xl:col-span-4">
+              <input
+                className="mt-1 h-4 w-4 accent-[var(--accent)]"
+                defaultChecked={query.includeSystemEvents}
+                name="includeSystemEvents"
+                type="checkbox"
+                value="true"
+              />
+              <span>
+                <span className="block font-semibold">Include system/diagnostic events</span>
+                <span className="text-[var(--muted)]">
+                  Use this for troubleshooting OCR, storage, email, and processing diagnostics.
+                </span>
+              </span>
+            </label>
             {hasFilter("department") ? (
               <label className={filterLabelClass}>
                 Department
@@ -339,12 +367,25 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
             ) : null}
             {hasFilter("eventType") ? (
               <label className={filterLabelClass}>
-                Event Type
+                Action
                 <select className={filterInputClass} defaultValue={query.filters.type} name="type">
-                  <option value="">All types</option>
+                  <option value="">All actions</option>
                   {typeOptions.map((type) => (
                     <option key={type} value={type}>
-                      {type}
+                      {auditEventDisplayType({ type })}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            {hasFilter("category") ? (
+              <label className={filterLabelClass}>
+                Category
+                <select className={filterInputClass} defaultValue={query.filters.category} name="category">
+                  <option value="">All staff/business categories</option>
+                  {auditEventCategoryOptions.map((category) => (
+                    <option key={category.key} value={category.key}>
+                      {category.label}
                     </option>
                   ))}
                 </select>
@@ -444,10 +485,11 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
             <thead className="bg-[var(--panel-strong)] text-xs uppercase text-[var(--muted)]">
               <tr>
                 {sortableColumns.map((column) => (
-                  <th className="border-b border-[var(--line)] px-3 py-3" key={column.key}>
-                    <SortHeader label={column.label} query={query} sortKey={column.key} />
-                  </th>
-                ))}
+                <th className="border-b border-[var(--line)] px-3 py-3" key={column.key}>
+                  <SortHeader label={column.label} query={query} sortKey={column.key} />
+                </th>
+              ))}
+                <th className="border-b border-[var(--line)] px-3 py-3">Category</th>
                 <th className="border-b border-[var(--line)] px-3 py-3">Message</th>
               </tr>
             </thead>
@@ -463,7 +505,7 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
                     </td>
                     <td className="border-b border-[var(--line)] px-3 py-3">{event.actor}</td>
                     <td className="border-b border-[var(--line)] px-3 py-3 font-mono text-xs uppercase text-[var(--muted)]">
-                      {event.type}
+                      {auditEventDisplayType(event)}
                     </td>
                     <td className="border-b border-[var(--line)] px-3 py-3">
                       {department?.name || (
@@ -494,13 +536,18 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
                     <td className="border-b border-[var(--line)] px-3 py-3">
                       {invoice?.poNumber || <span className="text-[var(--muted)]">Not set</span>}
                     </td>
+                    <td className="border-b border-[var(--line)] px-3 py-3">
+                      <span className="inline-flex border border-[var(--line)] bg-white px-2 py-1 text-xs font-semibold">
+                        {auditEventCategoryLabel(event)}
+                      </span>
+                    </td>
                     <td className="border-b border-[var(--line)] px-3 py-3">{event.message}</td>
                   </tr>
                 );
               })}
               {page.items.length === 0 ? (
                 <tr>
-                  <td className="px-3 py-8 text-center text-[var(--muted)]" colSpan={10}>
+                  <td className="px-3 py-8 text-center text-[var(--muted)]" colSpan={11}>
                     No audit events match the current filters.
                   </td>
                 </tr>

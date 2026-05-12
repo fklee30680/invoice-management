@@ -3826,6 +3826,7 @@ export async function updateAuditLogSettings(formData: FormData) {
     retainInvoiceEventsPermanently: checkbox(formData, "retainInvoiceEventsPermanently"),
     retainSetupEventsPermanently: checkbox(formData, "retainSetupEventsPermanently"),
     allowManualPurge: checkbox(formData, "allowManualPurge"),
+    includeSystemEventsByDefault: checkbox(formData, "includeSystemEventsByDefault"),
     enabledFilterFields,
   });
 
