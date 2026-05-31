@@ -10,8 +10,24 @@ type DecisionOption = {
   requirePoNumber: boolean;
 };
 
+const decisionErrorMessages: Record<string, string> = {
+  "comment-required":
+    "A comment is required when sending the invoice back as not your department.",
+  "po-required":
+    "PO number is required for this decision. Please enter the PO number before submitting.",
+  "po-not-found":
+    "PO number was not found in the PO list. This invoice cannot move forward until a valid PO number is entered.",
+  "po-vendor-mismatch":
+    "Vendor mismatch must be resolved before this invoice can move forward.",
+  "po-vendor-not-found":
+    "The PO vendor was not found in the vendor file. Select a vendor from the vendor file before this invoice can move forward.",
+  "vendor-required":
+    "Select a valid vendor from the vendor file before submitting this decision.",
+};
+
 export function DepartmentDecisionForm({
   currentDecision,
+  decisionError,
   decisionOptions,
   initialDecision,
   invoiceId,
@@ -19,6 +35,7 @@ export function DepartmentDecisionForm({
   poNumberEnabled,
 }: {
   currentDecision: string;
+  decisionError?: string;
   decisionOptions: DecisionOption[];
   initialDecision: string;
   invoiceId: string;
@@ -32,6 +49,16 @@ export function DepartmentDecisionForm({
     [decision, decisionOptions],
   );
   const showPoInput = poNumberEnabled && requiresPo && !hasPoNumber;
+  const decisionErrorMessage = decisionError ? decisionErrorMessages[decisionError] : undefined;
+  const decisionStatusLabel =
+    decision && decision === currentDecision ? "Decision submitted" : "Selected decision";
+  const decisionStatusClass = decision
+    ? "border-[var(--accent)] bg-white text-[var(--accent)]"
+    : "border-[var(--line)] bg-white text-[var(--muted)]";
+  const decisionErrorClass =
+    decisionError === "po-required"
+      ? "border-amber-300 bg-amber-50 text-amber-900"
+      : "border-red-300 bg-red-50 text-red-800";
 
   useEffect(() => {
     if (showPoInput) {
@@ -46,6 +73,24 @@ export function DepartmentDecisionForm({
     >
       <input type="hidden" name="invoiceId" value={invoiceId} />
       <h2 className="font-semibold">Decision</h2>
+      <div className="mt-4 space-y-2" aria-live="polite">
+        <div>
+          <div className="text-xs font-semibold uppercase text-[var(--muted)]">
+            Decision Status
+          </div>
+          <div className={`mt-1 border px-3 py-2 text-sm font-semibold ${decisionStatusClass}`}>
+            {decision ? `${decisionStatusLabel}: ${decision}` : "No decision selected."}
+          </div>
+        </div>
+        {decisionErrorMessage ? (
+          <div
+            className={`border px-3 py-2 text-sm font-semibold ${decisionErrorClass}`}
+            role="alert"
+          >
+            {decisionErrorMessage}
+          </div>
+        ) : null}
+      </div>
       <label className="mt-4 block text-xs font-semibold uppercase text-[var(--muted)]">
         Decision Type
         <select

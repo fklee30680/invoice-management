@@ -521,6 +521,7 @@ export default async function ReviewPage({
             {user.role === "DEPARTMENT" ? (
               <DepartmentDecisionForm
                 currentDecision={invoice.departmentDecision}
+                decisionError={error}
                 decisionOptions={decisionOptions}
                 hasPoNumber={Boolean(invoice.poNumber.trim())}
                 initialDecision={selectedDecision || invoice.departmentDecision}
